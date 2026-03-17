@@ -22,9 +22,9 @@ cd out/bin
 
 busybox --install -s ./
 
+[[ ! -d util-mdl ]]; git clone https://gitlab.com/mtos-v2/util-mdl && cd util-mdl
+
 cargo build --release --target $(uname -m)-unknown-linux-musl
 
-[[ ! -d util-mdl ]]; git clone https://
-
-cp target/release/{act,upd}man out/bin
+cp target/release/{act,upd}man out/bin || cp target/release/{act,upd}man ../out/bin
 
