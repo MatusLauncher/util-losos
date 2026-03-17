@@ -1,0 +1,12 @@
+[package]
+name = "actman"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+miette.workspace = true
+rustix = { version = "1.1.4", features = ["system"] }
+strum = { version = "0.28.0", features = ["derive"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+walkdir = "2.5.0"
