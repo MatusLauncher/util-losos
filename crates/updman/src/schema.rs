@@ -1,5 +1,6 @@
 use std::process::Command;
 
+use actman::cmdline::CmdLineOptions;
 use miette::IntoDiagnostic;
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -8,11 +9,13 @@ use tracing::info;
 pub struct UpdMan {
     base_url: String,
     image_tag: String,
+    hash: String
 }
 
 impl UpdMan {
     pub fn update(&self) -> miette::Result<()> {
-        info!("Downloading new image");
+        let params = CmdLineOptions::new()?.opts();
+        info!("Downloading new MDL tarball...");
         let out = String::from_utf8(
             Command::new("nerdctl")
                 .arg("pull")
@@ -23,7 +26,7 @@ impl UpdMan {
         )
         .into_diagnostic()?;
         let hash = out.lines().last().unwrap();
-        
+        // if params.get("tb_hash").unwrap().contains(hash)
         Ok(())
     }
 }

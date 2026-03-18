@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+actman = { version = "0.1.0", path = "../actman" }
 fetch-data = "0.2.0"
 miette.workspace = true
 serde = { version = "1.0.228", features = ["derive"] }

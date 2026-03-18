@@ -1,15 +1,12 @@
-use crate::{preboot::Preboot, reboot::RebootCMD};
+use actman::{preboot::Preboot, reboot::RebootCMD};
+use strum::IntoEnumIterator;
 use std::process::Command;
 
 use miette::IntoDiagnostic;
 use rustix::system::reboot;
-use strum::IntoEnumIterator;
 use tracing::info;
 use tracing_subscriber::fmt;
 use walkdir::WalkDir;
-mod cmdline;
-mod preboot;
-mod reboot;
 #[allow(trivial_bounds)]
 fn main() -> miette::Result<()> {
     fmt().init();
