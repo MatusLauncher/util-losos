@@ -1,23 +1,23 @@
 use std::process::Command;
 
 use miette::IntoDiagnostic;
-use walkdir::{Error, WalkDir};
-#[derive(Debug, Clone, Copy)]
+use tracing::info;
+use walkdir::WalkDir;
+
+use crate::cmdline::CmdLineOptions;
+#[derive(Debug, Clone)]
 pub struct Preboot {
     mounts: Vec<String>,
 }
 #[allow(trivial_bounds)]
-impl Default for Preboot
-{
+impl Default for Preboot {
     fn default() -> Self {
-        const SKIP: &[&str] = &["etc", "home", "bin", "sbin"];
-    
         Self {
             mounts: WalkDir::new("/")
                 .into_iter()
                 .filter_entry(|e| {
                     let name = e.file_name().to_string_lossy();
-                    !SKIP.contains(&name.as_ref())
+                    name != "home" || name != "etc" || name != "bin" || name != "sbin"
                 })
                 .filter_map(|e| e.ok())
                 .map(|e| e.path().display().to_string())
@@ -28,16 +28,19 @@ impl Default for Preboot
 
 #[allow(trivial_bounds)]
 impl Preboot {
-    pub const fn new() -> Self
-    {
+    pub fn new() -> Self {
         Self::default()
     }
     pub fn mount(&self) -> miette::Result<()> {
+        let binding = CmdLineOptions::new()?;
+        let params = binding.opts();
+        params.get("data").unwrap();
         Ok(self
             .mounts
             .iter()
             .try_for_each(|mount| -> miette::Result<()> {
                 Ok({
+                    info!("Mounting {mount} to /{mount}");
                     Command::new("mount")
                         .arg("-t")
                         .arg(mount)

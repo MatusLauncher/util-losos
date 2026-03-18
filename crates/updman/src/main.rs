@@ -1,3 +1,15 @@
-use std::process::Command;
+use std::fs::read_to_string;
+
+use miette::IntoDiagnostic;
+use tracing_subscriber::fmt;
+
+use crate::schema::UpdMan;
+
 mod schema;
-fn main() {}
+fn main() -> miette::Result<()> {
+    fmt().init();
+    let cfg: UpdMan = serde_json::from_str(&read_to_string("/etc/update.json").into_diagnostic()?)
+        .into_diagnostic()?;
+    cfg.update()?;
+    Ok(())
+}
