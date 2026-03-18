@@ -3,6 +3,6 @@ resolver = "3"
 members = ["crates/actman", "crates/updman"]
 
 [workspace.dependencies]
-miette = {version = "*", features = ["fancy"] }
+miette = {version = "*", features = ["fancy"]}
 tracing = "*"
 tracing-subscriber = "*"
