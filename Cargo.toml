@@ -6,3 +6,4 @@ members = ["crates/actman", "crates/updman"]
 miette = {version = "*", features = ["fancy"]}
 tracing = "*"
 tracing-subscriber = "*"
+walkdir = "*"

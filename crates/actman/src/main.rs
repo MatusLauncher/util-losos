@@ -1,6 +1,6 @@
 use actman::{preboot::Preboot, reboot::RebootCMD};
-use strum::IntoEnumIterator;
 use std::process::Command;
+use strum::IntoEnumIterator;
 
 use miette::IntoDiagnostic;
 use rustix::system::reboot;
