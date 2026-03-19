@@ -4,7 +4,6 @@ use std::{
     process::Command,
 };
 
-use actman::cmdline::CmdLineOptions;
 use miette::IntoDiagnostic;
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -19,7 +18,6 @@ pub struct UpdMan {
 
 impl UpdMan {
     pub fn update(&self) -> miette::Result<()> {
-        let params = CmdLineOptions::new()?.opts();
         info!("Downloading new MDL tarball...");
         let out = String::from_utf8(
             Command::new("nerdctl")
@@ -59,6 +57,8 @@ impl UpdMan {
             .into_diagnostic()?;
         info!("Moving the initramfs image to the boot partition...");
         rename(temp_dir().join("out").join("os.initramfs.tar.gz"), temp_dir().join("mnt").join("os.initramfs.tar.gz")).into_diagnostic()?;
+        info!("Finishing up");
+        Command::new("umount").arg("-R").arg("mnt");
         Ok(())
     }
 }
