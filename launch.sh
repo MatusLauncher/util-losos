@@ -8,7 +8,7 @@ CPUS="${CPUS:-2}"
 
 build_initramfs() {
     echo "==> Building initramfs..."
-    podman build -t util-mdl-build .
+    podman build --no-cache -t util-mdl-build .
     podman create --name util-mdl-export util-mdl-build
     podman cp util-mdl-export:/"$INITRAMFS" "$INITRAMFS"
     podman rm util-mdl-export
