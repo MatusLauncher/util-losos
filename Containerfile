@@ -40,7 +40,8 @@ RUN cd out && ln -sf bin/nerdctl bin/docker
 RUN cd out && ln -sf bin/nerdctl bin/podman
 RUN cd out && ln -sf bin/init bin/poweroff
 RUN cd out && ln -sf bin/init bin/reboot
-RUN cd out && tar -czvf ../os.tar.gz *
+RUN cd out && ln -sf bin/init ../init
+RUN cd out && find . | cpio -o -H newc | gzip > ../os.tar.gz
 
 FROM scratch
 COPY --from=stage1 os.tar.gz os.initramfs.tar.gz

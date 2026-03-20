@@ -31,7 +31,11 @@ impl UpdMan {
         write("dl.tar", out).into_diagnostic()?;
         create_dir_all(temp_dir().join("out")).into_diagnostic()?;
         create_dir_all(temp_dir().join("mnt")).into_diagnostic()?;
-        Command::new("mount").arg("/dev/disk/by-label/BOOT").arg(temp_dir().join("mnt")).output().into_diagnostic()?;
+        Command::new("mount")
+            .arg("/dev/disk/by-label/BOOT")
+            .arg(temp_dir().join("mnt"))
+            .output()
+            .into_diagnostic()?;
         Command::new("tar")
             .arg("-xvf")
             .arg("dl.tar")
@@ -43,20 +47,30 @@ impl UpdMan {
         info!("Extracting the initramfs image...");
         Command::new("tar")
             .arg("-xvf")
-            .arg(WalkDir::new(
-                temp_dir()
-                    .join("out"))
+            .arg(
+                WalkDir::new(temp_dir().join("out"))
                     .into_iter()
                     .filter(|fname| {
-                        fname.as_ref().unwrap().file_name().display().to_string().ends_with(".tar")
+                        fname
+                            .as_ref()
+                            .unwrap()
+                            .file_name()
+                            .display()
+                            .to_string()
+                            .ends_with(".tar")
                     })
                     .map(|v| v.unwrap().file_name().display().to_string())
-                    .collect::<Vec<_>>()[0].clone(),
+                    .collect::<Vec<_>>()[0]
+                    .clone(),
             )
             .output()
             .into_diagnostic()?;
         info!("Moving the initramfs image to the boot partition...");
-        rename(temp_dir().join("out").join("os.initramfs.tar.gz"), temp_dir().join("mnt").join("os.initramfs.tar.gz")).into_diagnostic()?;
+        rename(
+            temp_dir().join("out").join("os.initramfs.tar.gz"),
+            temp_dir().join("mnt").join("os.initramfs.tar.gz"),
+        )
+        .into_diagnostic()?;
         info!("Finishing up");
         Command::new("umount").arg("-R").arg("mnt");
         Ok(())
