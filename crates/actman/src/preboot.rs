@@ -17,7 +17,7 @@ impl Default for Preboot {
                 .into_iter()
                 .filter_entry(|e| {
                     let name = e.file_name().to_string_lossy();
-                    name != "home" || name != "etc" || name != "bin" || name != "sbin"
+                    name != "home" && name != "etc" && name != "bin" && name != "sbin"
                 })
                 .filter_map(|e| e.ok())
                 .map(|e| e.path().display().to_string())

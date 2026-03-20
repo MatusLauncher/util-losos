@@ -10,7 +10,11 @@ pub enum RebootCMD {
 
 impl<'a> From<&'a String> for RebootCMD {
     fn from(value: &'a String) -> Self {
-        match value.as_str() {
+        let basename = std::path::Path::new(value)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(value.as_str());
+        match basename {
             "init" => Self::Init,
             "poweroff" => Self::PowerOff,
             "reboot" => Self::Reboot,
