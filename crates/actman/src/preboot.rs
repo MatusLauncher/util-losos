@@ -55,15 +55,34 @@ impl Preboot {
     /// Mounts each discovered path by running `mount -t <path> /<path>`.
     ///
     /// Iterates over `self.mounts` and spawns a `mount` process for each
-    /// entry. Returns the first error encountered, if any.
+    /// entry. If the normal mount fails, retries with the `*fs` suffix
+    /// (e.g., `procfs`, `sysfs`). For `tmpfs`, uses `devtmpfs` instead.
+    /// Returns the first error encountered, if any.
     pub fn mount(&self) -> miette::Result<()> {
+
         self.mounts
             .iter()
             .try_for_each(|mount| -> miette::Result<()> {
-                Ok({
-                    info!("Mounting {mount} to /{mount}");
-                    Command::new("mount").arg("-t").arg(mount).arg(mount).arg(format!("/{mount}")).status().into_diagnostic()?;
-                })
+                info!("Mounting {mount} to /{mount}");
+
+                // Special case: tmpfs → devtmpfs
+                let fstype = if mount == "tmpfs" { "devtmpfs" } else { mount };
+                let result = Command::new("mount").arg("-t").arg(fstype).arg(mount).arg(format!("/{mount}")).status();
+
+                if result.into_diagnostic()?.success() {
+                    return Ok(());
+                }
+
+                // Fallback: try with *fs suffix
+                let fs_suffix = format!("{mount}fs");
+                info!("Mounting {mount} failed, retrying with {fs_suffix}");
+                let result = Command::new("mount").arg("-t").arg(&fs_suffix).arg(mount).arg(format!("/{mount}")).status();
+
+                if !result.into_diagnostic()?.success() {
+                    return Err(miette!("Failed to mount {mount} (tried {mount} and {fs_suffix})"));
+                }
+
+                Ok(())
             })
     }
 }
