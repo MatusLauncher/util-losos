@@ -1,0 +1,4 @@
+target/
+os.initramfs.tar.gz
+.git/
+.claude/

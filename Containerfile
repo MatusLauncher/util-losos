@@ -20,10 +20,7 @@ RUN cd out/bin && /out/bin/busybox --install -s ./
 
 # init + package manager
 FROM rust:alpine as util
-RUN apk add git
-RUN git clone https://gitlab.com/mtos-v2/util-mdl /mdl
-RUN rustup default nightly
-RUN rustup target add x86_64-unknown-linux-musl
+COPY . /mdl
 RUN cd /mdl && cargo build --release --target x86_64-unknown-linux-musl
 
 # packaging
