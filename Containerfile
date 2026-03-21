@@ -27,13 +27,17 @@ RUN cd out/bin && for applet in $(/out/bin/busybox --list); do ln -sf busybox "$
 # init + package manager
 FROM rust:alpine as util
 COPY . /mdl
-RUN cd /mdl && cargo build --release --target x86_64-unknown-linux-musl
+RUN cd /mdl \
+    && cargo build --release --target x86_64-unknown-linux-musl \
+    && cp target/x86_64-unknown-linux-musl/release/actman /actman \
+    && cp target/x86_64-unknown-linux-musl/release/updman /updman \
+    && rm -rf target /root/.cargo/registry
 
 # packaging
 FROM alpine:latest as stage1
 COPY --from=stage0 out out
-COPY --from=util /mdl/target/x86_64-unknown-linux-musl/release/actman out/bin/init
-COPY --from=util /mdl/target/x86_64-unknown-linux-musl/release/updman out/bin/updman
+COPY --from=util /actman out/bin/init
+COPY --from=util /updman out/bin/updman
 RUN cd out && ln -sf bin sbin
 RUN printf '#!/bin/sh\n[ "$1" = "bound" ] || [ "$1" = "renew" ] || exit 0\nifconfig "$interface" "$ip" netmask "$subnet"\n[ -n "$router" ] && route add default gw "$router"\nfor ns in $dns; do echo "nameserver $ns"; done > /etc/resolv.conf\n' > out/bin/udhcpc-script \
     && chmod +x out/bin/udhcpc-script
@@ -49,6 +53,6 @@ RUN cd out && ln -sf init bin/reboot
 RUN cd out && ln -sf bin/init init
 RUN apk add fakeroot
 RUN fakeroot sh -c 'mknod out/dev/console c 5 1 && cd out && find . | cpio -o -H newc | gzip > ../os.tar.gz'
-
+# final
 FROM scratch
 COPY --from=stage1 os.tar.gz os.initramfs.tar.gz
