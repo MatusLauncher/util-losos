@@ -1,45 +1,43 @@
 //! Pre-boot filesystem mounting.
 //!
-//! Walks the root filesystem and mounts each discovered path as a filesystem
-//! type of the same name (e.g. `proc` → `mount -t proc /proc`). Directories
-//! used for persistent data (`/home`, `/etc`, `/bin`, `/sbin`) are skipped so
-//! that the in-memory initramfs copies remain in place.
+//! Mounts the standard virtual filesystems needed before userspace starts.
+//! Each entry in [`VIRTUAL_FS`] maps a mountpoint name to its filesystem type;
+//! entries are only attempted if the corresponding directory exists under `/`.
 
-use std::process::Command;
-
-use miette::{IntoDiagnostic, miette};
+use miette::IntoDiagnostic;
+use rustix::ffi::CStr;
+use rustix::mount::{MountFlags, mount};
 use tracing::info;
-use walkdir::WalkDir;
+
+/// `(directory_name, filesystem_type)` pairs for the standard virtual
+/// filesystems that must be mounted in the early boot environment.
+const VIRTUAL_FS: &[(&str, &str)] = &[
+    ("dev", "devtmpfs"),
+    ("proc", "proc"),
+    ("sys", "sysfs"),
+    ("run", "tmpfs"),
+    ("tmp", "tmpfs"),
+];
 
 /// Filesystem mounter for the early boot environment.
 ///
-/// On construction, [`Preboot`] discovers the mountable paths by walking `/`
-/// and filtering out directories that should not be shadowed by a mount.
-/// Calling [`mount`](Preboot::mount) then issues one `mount -t <name> /<name>`
-/// command per discovered path.
+/// On construction, [`Preboot`] builds the list of virtual filesystems to
+/// mount by intersecting [`VIRTUAL_FS`] with the directories that actually
+/// exist under `/`.  Calling [`mount`](Preboot::mount) then issues one
+/// `mount(2)` syscall per entry.
 #[derive(Debug, Clone)]
 pub struct Preboot {
-    /// Paths to mount, collected during [`Default::default`].
-    mounts: Vec<String>,
+    mounts: Vec<(&'static str, &'static str)>,
 }
 
 #[allow(trivial_bounds)]
 impl Default for Preboot {
-    /// Walks `/`, excluding `home`, `etc`, `bin`, and `sbin`, and collects
-    /// the remaining paths as mount targets.
     fn default() -> Self {
         Self {
-            mounts: WalkDir::new("/")
-                .max_depth(1)
-                .min_depth(1)
-                .into_iter()
-                .filter_entry(|e| {
-                    let name = e.file_name().to_string_lossy();
-                    name != "home" && name != "etc" && name != "bin" && name != "sbin"
-                })
-                .filter_map(|e| e.ok())
-                .filter(|e| e.file_type().is_dir())
-                .map(|e| e.file_name().to_string_lossy().into_owned())
+            mounts: VIRTUAL_FS
+                .iter()
+                .copied()
+                .filter(|(name, _)| std::path::Path::new("/").join(name).is_dir())
                 .collect(),
         }
     }
@@ -47,42 +45,19 @@ impl Default for Preboot {
 
 #[allow(trivial_bounds)]
 impl Preboot {
-    /// Creates a new [`Preboot`] by walking the root filesystem.
+    /// Creates a new [`Preboot`] by checking which virtual fs directories exist.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Mounts each discovered path by running `mount -t <path> /<path>`.
-    ///
-    /// Iterates over `self.mounts` and spawns a `mount` process for each
-    /// entry. If the normal mount fails, retries with the `*fs` suffix
-    /// (e.g., `procfs`, `sysfs`). For `tmpfs`, uses `devtmpfs` instead.
-    /// Returns the first error encountered, if any.
+    /// Mounts each discovered virtual filesystem via `mount(2)`.
     pub fn mount(&self) -> miette::Result<()> {
-
         self.mounts
             .iter()
-            .try_for_each(|mount| -> miette::Result<()> {
-                info!("Mounting {mount} to /{mount}");
-
-                // Special case: tmpfs → devtmpfs
-                let fstype = if mount == "tmpfs" { "devtmpfs" } else { mount };
-                let result = Command::new("mount").arg("-t").arg(fstype).arg(mount).arg(format!("/{mount}")).status();
-
-                if result.into_diagnostic()?.success() {
-                    return Ok(());
-                }
-
-                // Fallback: try with *fs suffix
-                let fs_suffix = format!("{mount}fs");
-                info!("Mounting {mount} failed, retrying with {fs_suffix}");
-                let result = Command::new("mount").arg("-t").arg(&fs_suffix).arg(mount).arg(format!("/{mount}")).status();
-
-                if !result.into_diagnostic()?.success() {
-                    return Err(miette!("Failed to mount {mount} (tried {mount} and {fs_suffix})"));
-                }
-
-                Ok(())
+            .try_for_each(|(name, fstype)| -> miette::Result<()> {
+                info!("Mounting {fstype} to /{name}");
+                mount(*name, format!("/{name}").as_str(), *fstype, MountFlags::empty(), None::<&CStr>)
+                    .into_diagnostic()
             })
     }
 }

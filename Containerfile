@@ -22,7 +22,7 @@ RUN tar -xpf nerdctl*.tar.gz -C out/ \
     bin/buildkitd \
     bin/runc \
     libexec/cni/
-RUN cd out/bin && /out/bin/busybox --install -s ./
+RUN cd out/bin && for applet in $(/out/bin/busybox --list); do ln -sf busybox "$applet"; done
 
 # init + package manager
 FROM rust:alpine as util
@@ -35,14 +35,14 @@ COPY --from=stage0 out out
 COPY --from=util /mdl/target/x86_64-unknown-linux-musl/release/actman out/bin/init
 COPY --from=util /mdl/target/x86_64-unknown-linux-musl/release/updman out/bin/updman
 RUN cd out && ln -sf bin sbin
-RUN cd out && ln -sf bin/udhcpc etc/init/start/udhcpc
-RUN cd out && ln -sf bin/buildkitd etc/init/start/buildkitd
-RUN cd out && ln -sf bin/containerd etc/init/start/containerd
-RUN cd out && ln -sf bin/sh etc/init/start/sh
-RUN cd out && ln -sf bin/nerdctl bin/docker
-RUN cd out && ln -sf bin/nerdctl bin/podman
-RUN cd out && ln -sf bin/init bin/poweroff
-RUN cd out && ln -sf bin/init bin/reboot
+RUN cd out && ln -sf /bin/udhcpc etc/init/start/udhcpc
+RUN cd out && ln -sf /bin/buildkitd etc/init/start/buildkitd
+RUN cd out && ln -sf /bin/containerd etc/init/start/containerd
+RUN cd out && ln -sf /bin/sh etc/init/start/sh
+RUN cd out && ln -sf nerdctl bin/docker
+RUN cd out && ln -sf nerdctl bin/podman
+RUN cd out && ln -sf init bin/poweroff
+RUN cd out && ln -sf init bin/reboot
 RUN cd out && ln -sf bin/init init
 RUN apk add fakeroot
 RUN fakeroot sh -c 'mknod out/dev/console c 5 1 && cd out && find . | cpio -o -H newc | gzip > ../os.tar.gz'
