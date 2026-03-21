@@ -83,8 +83,6 @@ echo ""
 exec qemu-system-x86_64 \
     -kernel "$KERNEL" \
     -initrd "$INITRAMFS" \
-    -append "console=ttyS0 earlyprintk=ttyS0" \
-    -nographic \
     -m "$MEMORY" \
     -smp "$CPUS" \
     -enable-kvm

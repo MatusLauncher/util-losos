@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 miette.workspace = true
-rustix = { version = "1.1.4", features = ["system", "mount"] }
+rustix = { version = "1.1.4", features = ["system", "mount", "process"] }
 strum = { version = "0.28.0", features = ["derive"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

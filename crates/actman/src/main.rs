@@ -7,6 +7,7 @@ mod cmdline;
 mod preboot;
 mod reboot;
 use miette::IntoDiagnostic;
+use rustix::process::{WaitOptions, waitpid};
 use rustix::system::reboot;
 use tracing::info;
 use tracing_subscriber::fmt;
@@ -23,6 +24,10 @@ fn main() -> miette::Result<()> {
                 let script = dir_entry.path();
                 info!("Spawning {}.", script.display());
                 Command::new(script).spawn().into_diagnostic()?;
+            }
+            // PID 1 must never exit — reap zombie children forever.
+            loop {
+                let _ = waitpid(None, WaitOptions::empty());
             }
         }
         RebootCMD::PowerOff | RebootCMD::Reboot => {
