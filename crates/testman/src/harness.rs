@@ -38,7 +38,10 @@ impl TestHarness {
         let mut cmd = Command::new("qemu-system-x86_64");
         cmd.args([
             "-kernel",
-            config.kernel.to_str().ok_or_else(|| miette!("kernel path is not valid UTF-8"))?,
+            config
+                .kernel
+                .to_str()
+                .ok_or_else(|| miette!("kernel path is not valid UTF-8"))?,
             "-initrd",
             config
                 .initramfs
@@ -63,8 +66,14 @@ impl TestHarness {
 
         let mut process = cmd.spawn().into_diagnostic()?;
 
-        let stdin = process.stdin.take().ok_or_else(|| miette!("failed to open QEMU stdin"))?;
-        let stdout = process.stdout.take().ok_or_else(|| miette!("failed to open QEMU stdout"))?;
+        let stdin = process
+            .stdin
+            .take()
+            .ok_or_else(|| miette!("failed to open QEMU stdin"))?;
+        let stdout = process
+            .stdout
+            .take()
+            .ok_or_else(|| miette!("failed to open QEMU stdout"))?;
 
         let (tx, rx) = mpsc::channel();
 
@@ -108,7 +117,7 @@ impl TestHarness {
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => return Ok(false),
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    return Err(miette!("QEMU stdout closed unexpectedly"))
+                    return Err(miette!("QEMU stdout closed unexpectedly"));
                 }
             }
         }

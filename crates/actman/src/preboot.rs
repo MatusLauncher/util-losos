@@ -57,8 +57,7 @@ impl Preboot {
     /// Iterates over `self.mounts` and spawns a `mount` process for each
     /// entry. Returns the first error encountered, if any.
     pub fn mount(&self) -> miette::Result<()> {
-        self
-            .mounts
+        self.mounts
             .iter()
             .try_for_each(|mount| -> miette::Result<()> {
                 Ok({

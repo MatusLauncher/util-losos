@@ -67,7 +67,11 @@ impl TestReport {
                 TestResult::Timeout => println!("  TIMEOUT  {}", name),
             }
         }
-        let passed = self.results.iter().filter(|(_, r)| matches!(r, TestResult::Pass)).count();
+        let passed = self
+            .results
+            .iter()
+            .filter(|(_, r)| matches!(r, TestResult::Pass))
+            .count();
         let total = self.results.len();
         println!("--- {}/{} passed ---\n", passed, total);
     }
