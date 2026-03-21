@@ -15,7 +15,13 @@ RUN mkdir -p \
 RUN cp /bin/busybox.static out/bin/busybox
 RUN apk add curl tar
 RUN curl -LO $(curl -s https://api.github.com/repos/containerd/nerdctl/releases/latest | grep full | grep browser_download_url | head -n1 | awk '{print $2}' | cut -d '"' -f2)
-RUN tar -xpvf nerdctl* -C out/
+RUN tar -xpf nerdctl*.tar.gz -C out/ \
+    bin/nerdctl \
+    bin/containerd \
+    bin/containerd-shim-runc-v2 \
+    bin/buildkitd \
+    bin/runc \
+    libexec/cni/
 RUN cd out/bin && /out/bin/busybox --install -s ./
 
 # init + package manager
