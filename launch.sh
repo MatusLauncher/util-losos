@@ -83,6 +83,9 @@ echo ""
 exec qemu-system-x86_64 \
     -kernel "$KERNEL" \
     -initrd "$INITRAMFS" \
+    -append "quiet net.ifnames=0 biosdevname=0" \
     -m "$MEMORY" \
     -smp "$CPUS" \
+    -net nic \
+    -net user \
     -enable-kvm

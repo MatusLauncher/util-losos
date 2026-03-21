@@ -4,10 +4,15 @@
 //! Each entry in [`VIRTUAL_FS`] maps a mountpoint name to its filesystem type;
 //! entries are only attempted if the corresponding directory exists under `/`.
 
+use std::fs::create_dir_all;
+use std::path::Path;
+
 use miette::IntoDiagnostic;
 use rustix::ffi::CStr;
 use rustix::mount::{MountFlags, mount};
-use tracing::info;
+use tracing::{info, warn};
+
+use crate::cmdline::CmdLineOptions;
 
 /// `(directory_name, filesystem_type)` pairs for the standard virtual
 /// filesystems that must be mounted in the early boot environment.
@@ -51,6 +56,17 @@ impl Preboot {
 
     /// Mounts each discovered virtual filesystem via `mount(2)`.
     pub fn mount(&self) -> miette::Result<()> {
+        let opts = CmdLineOptions::new();
+        let mut drive = String::new();
+        match opts?.opts().get("data_drive") {
+           Some(param) => drive.push_str(param),
+           None => warn!("The data drive drive not found. This isn't an issue if you're just trying out MDL, however as the entire operating system is running entirely in RAM, it's highly recommended to format one and add it to the kernel options.")
+       };
+       if !drive.is_empty() {
+           info!("Mounting the data drive to /data");
+           create_dir_all("/data").into_diagnostic()?;
+           mount(drive, Path::new("/data"), String::new(), MountFlags::all(), None).into_diagnostic()?;
+       }
         self.mounts
             .iter()
             .try_for_each(|(name, fstype)| -> miette::Result<()> {
