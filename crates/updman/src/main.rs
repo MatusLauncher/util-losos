@@ -1,3 +1,5 @@
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/updman.md"))]
+
 use std::fs::read_to_string;
 
 use miette::IntoDiagnostic;

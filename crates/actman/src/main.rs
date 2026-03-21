@@ -1,3 +1,5 @@
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/actman.md"))]
+
 use crate::{preboot::Preboot, reboot::RebootCMD};
 use std::process::Command;
 use strum::IntoEnumIterator;

@@ -1,3 +1,8 @@
+//! Update configuration schema and orchestration.
+//!
+//! Defines [`UpdMan`], which is deserialised from `/etc/update.json` and
+//! drives the full update sequence via [`UpdMan::update`].
+
 use std::{
     env::{set_current_dir, temp_dir},
     fs::{create_dir_all, rename, write},
@@ -9,14 +14,48 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use walkdir::WalkDir;
 
+/// Update configuration, deserialised from `/etc/update.json`.
+///
+/// # Example `/etc/update.json`
+///
+/// ```json
+/// {
+///   "base_url":  "registry.example.com/mtos-v2",
+///   "image_tag": "util-mdl:latest",
+///   "hash":      "sha256:abc123"
+/// }
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct UpdMan {
+    /// Container registry prefix, e.g. `"registry.example.com/mtos-v2"`.
+    /// Combined with [`image_tag`](UpdMan::image_tag) as `<base_url>/<image_tag>`
+    /// when calling `nerdctl save`.
     base_url: String,
+
+    /// Image name and tag, e.g. `"util-mdl:latest"`.
     image_tag: String,
+
+    /// Reserved for future integrity verification. Not currently validated.
     hash: String,
 }
 
 impl UpdMan {
+    /// Pulls the new OS image and installs it onto the `BOOT` partition.
+    ///
+    /// # Steps
+    ///
+    /// 1. `nerdctl save <base_url>/<image_tag>` — exports the image tarball to `dl.tar`.
+    /// 2. `tar -xvf dl.tar -C $TMPDIR/out/` — extracts the OCI layer tarballs.
+    /// 3. Locates the first `.tar` layer file inside `$TMPDIR/out/`.
+    /// 4. `tar -xvf <layer>.tar` — extracts `os.initramfs.tar.gz` from the layer.
+    /// 5. Mounts `/dev/disk/by-label/BOOT` at `$TMPDIR/mnt/`.
+    /// 6. Moves `os.initramfs.tar.gz` onto the boot partition.
+    /// 7. Unmounts the boot partition.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`miette::Report`] if any subprocess fails or a filesystem
+    /// operation cannot be completed.
     pub fn update(&self) -> miette::Result<()> {
         info!("Downloading new MDL tarball...");
         let out = String::from_utf8(
