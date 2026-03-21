@@ -30,13 +30,16 @@ impl Default for Preboot {
     fn default() -> Self {
         Self {
             mounts: WalkDir::new("/")
+                .max_depth(1)
+                .min_depth(1)
                 .into_iter()
                 .filter_entry(|e| {
                     let name = e.file_name().to_string_lossy();
                     name != "home" && name != "etc" && name != "bin" && name != "sbin"
                 })
                 .filter_map(|e| e.ok())
-                .map(|e| e.path().display().to_string())
+                .filter(|e| e.file_type().is_dir())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
                 .collect(),
         }
     }
@@ -62,6 +65,7 @@ impl Preboot {
                     info!("Mounting {mount} to /{mount}");
                     Command::new("mount")
                         .arg("-t")
+                        .arg(mount)
                         .arg(mount)
                         .arg(format!("/{mount}"))
                         .spawn()

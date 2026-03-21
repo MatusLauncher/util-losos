@@ -18,7 +18,7 @@ fn main() -> miette::Result<()> {
     match RebootCMD::from(&args[0]) {
         RebootCMD::Init => {
             Preboot::new().mount()?;
-            for scripts in WalkDir::new("/etc/init/start") {
+            for scripts in WalkDir::new("/etc/init/start").min_depth(1) {
                 let dir_entry = scripts.into_diagnostic()?;
                 let script = dir_entry.path();
                 info!("Spawning {}.", script.display());
@@ -27,7 +27,7 @@ fn main() -> miette::Result<()> {
         }
         RebootCMD::PowerOff | RebootCMD::Reboot => {
             info!("Powering off");
-            for scripts in WalkDir::new("/etc/init/stop") {
+            for scripts in WalkDir::new("/etc/init/stop").min_depth(1) {
                 let dir_entry = scripts.into_diagnostic()?;
                 let script = dir_entry.path();
                 info!("Shutting down {}.", script.display());

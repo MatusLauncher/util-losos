@@ -38,6 +38,7 @@ RUN cd out && ln -sf bin/nerdctl bin/podman
 RUN cd out && ln -sf bin/init bin/poweroff
 RUN cd out && ln -sf bin/init bin/reboot
 RUN cd out && ln -sf bin/init init
+RUN mknod out/dev/console c 5 1
 RUN cd out && find . | cpio -o -H newc | gzip > ../os.tar.gz
 
 FROM scratch
