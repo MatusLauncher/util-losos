@@ -7,3 +7,7 @@ miette = {version = "*", features = ["fancy"]}
 tracing = "*"
 tracing-subscriber = "*"
 walkdir = "*"
+
+[profile.release]
+lto = true
+codegen-units = 1

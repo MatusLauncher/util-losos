@@ -7,7 +7,7 @@
 
 use std::process::Command;
 
-use miette::IntoDiagnostic;
+use miette::{IntoDiagnostic, miette};
 use tracing::info;
 use walkdir::WalkDir;
 
@@ -62,13 +62,7 @@ impl Preboot {
             .try_for_each(|mount| -> miette::Result<()> {
                 Ok({
                     info!("Mounting {mount} to /{mount}");
-                    Command::new("mount")
-                        .arg("-t")
-                        .arg(mount)
-                        .arg(mount)
-                        .arg(format!("/{mount}"))
-                        .spawn()
-                        .into_diagnostic()?;
+                    Command::new("mount").arg("-t").arg(mount).arg(mount).arg(format!("/{mount}")).status().into_diagnostic()?;
                 })
             })
     }
