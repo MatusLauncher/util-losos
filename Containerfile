@@ -35,7 +35,7 @@ COPY --from=stage0 out out
 COPY --from=util /mdl/target/x86_64-unknown-linux-musl/release/actman out/bin/init
 COPY --from=util /mdl/target/x86_64-unknown-linux-musl/release/updman out/bin/updman
 RUN cd out && ln -sf bin sbin
-RUN cd out && ln -sf /bin/udhcpc etc/init/start/udhcpc
+# RUN cd out && ln -sf /bin/udhcpc etc/init/start/udhcpc
 RUN cd out && ln -sf /bin/buildkitd etc/init/start/buildkitd
 RUN cd out && ln -sf /bin/containerd etc/init/start/containerd
 RUN cd out && ln -sf /bin/sh etc/init/start/sh

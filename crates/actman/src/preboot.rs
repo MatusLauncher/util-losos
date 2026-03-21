@@ -15,7 +15,6 @@ const VIRTUAL_FS: &[(&str, &str)] = &[
     ("dev", "devtmpfs"),
     ("proc", "proc"),
     ("sys", "sysfs"),
-    ("run", "tmpfs"),
     ("tmp", "tmpfs"),
 ];
 
