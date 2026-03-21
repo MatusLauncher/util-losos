@@ -32,14 +32,14 @@ impl Preboot {
         Self::default()
     }
     pub fn mount(&self) -> miette::Result<()> {
-        let binding = CmdLineOptions::new()?;
-        let params = binding.opts();
-        let data_part = params.get("data").unwrap();
-        Command::new("mount")
-            .arg(data_part)
-            .arg("/data")
-            .output()
-            .into_diagnostic()?;
+        // let binding = CmdLineOptions::new()?;
+        // let params = binding.opts();
+        // let data_part = params.get("data").unwrap();
+        // Command::new("mount")
+        //     .arg(data_part)
+        //     .arg("/data")
+        //     .output()
+        //     .into_diagnostic()?;
         Ok(self
             .mounts
             .iter()
