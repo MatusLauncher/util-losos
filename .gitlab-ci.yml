@@ -1,5 +1,6 @@
 stages:
   - build
+  - assemble
   - test
   - publish
 
@@ -8,114 +9,120 @@ variables:
   ISO: os.iso
   # cluman mode embedded in the initramfs image: client | server | controller
   MODE: client
-  # Full image ref pushed to the registry
+  # Full image refs pushed to the registry
   IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   IMAGE_LATEST: $CI_REGISTRY_IMAGE:latest
 
-# ── Build ──────────────────────────────────────────────────────────────────────
+# ── compile ────────────────────────────────────────────────────────────────────
 #
-# Compiles isoman, then uses it to:
-#   1. Run `podman build --build-arg MODE=$MODE` (Containerfile → initramfs).
-#   2. Clone Limine, assemble a hybrid BIOS+UEFI ISO via xorriso.
+# Builds the isoman binary on the Fedora-based Podman image.
+# Runs in parallel with the initramfs job (same stage).
 #
-# Both the initramfs archive and the ISO are kept as artifacts:
-#   - os.initramfs.tar.gz  → consumed by test-boot
-#   - os.iso               → ready-to-flash bootable image
-#
-# Image: quay.io/podman/stable (Fedora-based) gives us rootless podman out of
-# the box.  We install the ISO toolchain (git, make, xorriso) and bootstrap
-# Rust via rustup.
-#
-# Set the CI/CD variable KERNEL to a specific vmlinuz path; if unset the
-# runner's own kernel is used as a best-effort fallback.
+# gcc/g++ are required because transitive Rust dependencies (e.g. ring) compile
+# C sources via cc-rs.  The previous zig-cc shim broke those builds because zig
+# does not accept LLVM-style target triples like x86_64-unknown-linux-gnu.
 
-build:
+compile:
+  stage: build
+  image: quay.io/podman/stable
+  before_script:
+    - dnf install -y --setopt=install_weak_deps=False gcc g++
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+    - source "$HOME/.cargo/env"
+  script:
+    - cargo build -p isoman
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_SLUG"
+    paths:
+      - target/debug/isoman
+    expire_in: 1 day
+
+# ── initramfs ──────────────────────────────────────────────────────────────────
+#
+# Runs `podman build` against the project Containerfile and extracts the
+# os.initramfs.tar.gz artifact that the final stage1 layer writes to /.
+# Runs in parallel with the compile job (same stage).
+
+initramfs:
   stage: build
   image: quay.io/podman/stable
   variables:
     STORAGE_DRIVER: vfs
-  before_script:
-    - podman info
-    - dnf install -y --setopt=install_weak_deps=False git make xorriso zig bash gcc g++
-    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
-      sh -s -- -y --default-toolchain stable --profile minimal
-    - source "$HOME/.cargo/env"
   script:
-    - cargo build -p isoman
-    - |
-      if [ -z "$KERNEL" ]; then
-        KERNEL=$(ls /boot/vmlinuz-* 2>/dev/null | head -n1)
-        echo "KERNEL not set — using runner kernel: ${KERNEL:-<none found>}"
-      fi
-    - |
-      KERNEL_ARG=""
-      [ -n "$KERNEL" ] && KERNEL_ARG="--kernel $KERNEL"
-      ./target/debug/isoman \
-        --build \
-        --mode "$MODE" \
-        --initramfs-out "$INITRAMFS" \
-        --output "$ISO" \
-        $KERNEL_ARG
+    - podman build --no-cache --build-arg "MODE=$MODE" -t initramfs-build .
+    - podman create --name initramfs-ctr initramfs-build
+    - podman cp initramfs-ctr:/os.initramfs.tar.gz "$INITRAMFS"
+    - podman rm initramfs-ctr
   artifacts:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_SLUG"
     paths:
       - $INITRAMFS
-      - $ISO
     expire_in: 1 day
 
-# ── Test ───────────────────────────────────────────────────────────────────────
+# ── iso ────────────────────────────────────────────────────────────────────────
 #
-# Requires a GitLab runner with:
-#   - qemu-system-x86_64 installed on the host
-#   - a kernel image available at $KERNEL
-#   - nested virtualisation enabled for KVM (or set KVM=0 for software emulation)
+# Uses the isoman binary (from compile) and the initramfs artifact to clone
+# Limine and assemble a hybrid BIOS+UEFI ISO via xorriso.
 #
-# Mark as manual on shared runners that lack QEMU; remove `when: manual` on
-# dedicated bare-metal runners.
+# Requires $KERNEL to be set as a CI/CD project variable pointing to a vmlinuz
+# file accessible inside the job container.  Skipped when $KERNEL is unset —
+# this intentionally avoids the exit-code bug caused by `ls /boot/vmlinuz-*`
+# returning 1 when no kernel is present on shared runners.
+
+iso:
+  stage: assemble
+  needs: [compile, initramfs]
+  image: quay.io/podman/stable
+  before_script:
+    - dnf install -y --setopt=install_weak_deps=False git make xorriso
+  script:
+    - ./target/debug/isoman --kernel "$KERNEL" --initramfs "$INITRAMFS" --output "$ISO"
+  artifacts:
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_SLUG"
+    paths:
+      - $ISO
+    expire_in: 1 day
+  rules:
+    - if: $KERNEL
+
+# ── test-boot ──────────────────────────────────────────────────────────────────
+#
+# Boots the initramfs in QEMU via testman and asserts expected log output.
+# Starts as soon as the initramfs artifact is ready (does not wait for iso).
+#
+# Requires:
+#   - $KERNEL set as a CI/CD variable
+#   - qemu-system-x86_64 on the runner host (or KVM=0 for software emulation)
+#
+# Mark as manual on shared runners; remove `when: manual` on dedicated
+# bare-metal runners that have QEMU available.
 
 test-boot:
   stage: test
-  needs: [build]
+  needs: [initramfs]
   image: rust:slim
   variables:
     KVM: "0"
     MEMORY: "512M"
     CPUS: "1"
   before_script:
-    - apt-get update -qq && apt-get install -y -qq qemu-system-x86 2>/dev/null
-    - |
-      if [ -z "$KERNEL" ]; then
-        KERNEL=$(ls /boot/vmlinuz-* 2>/dev/null | head -n1)
-        echo "KERNEL not set, using: $KERNEL"
-      fi
+    - apt-get update -qq
+    - apt-get install -y -qq qemu-system-x86
     - cargo build -p testman
   script:
-    - |
-      KERNEL="$KERNEL" \
-      INITRAMFS="$INITRAMFS" \
-      MEMORY="$MEMORY" \
-      CPUS="$CPUS" \
-      KVM="$KVM" \
-      cargo run -p testman
-  when: manual
-  allow_failure: false
+    - KERNEL="$KERNEL" INITRAMFS="$INITRAMFS" MEMORY="$MEMORY" CPUS="$CPUS" KVM="$KVM" cargo run -p testman
+  rules:
+    - if: $KERNEL
+      when: manual
+      allow_failure: false
 
-# ── Publish ────────────────────────────────────────────────────────────────────
+# ── publish ────────────────────────────────────────────────────────────────────
 #
-# Pushes the scratch image (containing os.initramfs.tar.gz) to the GitLab
-# container registry.  The image itself IS the delivery artifact — pull it and
-# copy /os.initramfs.tar.gz out to deploy.
-#
-# The same MODE used in the build job is forwarded as a build-arg so the
-# published image embeds the same cluman mode.
-#
-# Tagged as:
-#   <registry>/<project>:<branch-slug>   — for every branch push
-#   <registry>/<project>:latest          — only on the default branch
+# Builds the final container image and pushes it to the GitLab registry tagged
+# as <branch-slug>.  Runs on every branch push.
 
 publish:
   stage: publish
-  needs: [build]
   image: quay.io/podman/stable
   variables:
     STORAGE_DRIVER: vfs
@@ -124,10 +131,25 @@ publish:
   script:
     - podman build --no-cache --build-arg "MODE=$MODE" -t "$IMAGE" .
     - podman push "$IMAGE"
-    - |
-      if [ "$CI_COMMIT_REF_NAME" = "$CI_DEFAULT_BRANCH" ]; then
-        podman tag "$IMAGE" "$IMAGE_LATEST"
-        podman push "$IMAGE_LATEST"
-      fi
   rules:
     - if: $CI_COMMIT_BRANCH
+
+# ── publish-latest ─────────────────────────────────────────────────────────────
+#
+# Pulls the already-pushed branch image and re-tags it as :latest.  Runs only
+# on the default branch, after `publish` has completed successfully.
+
+publish-latest:
+  stage: publish
+  needs: [publish]
+  image: quay.io/podman/stable
+  variables:
+    STORAGE_DRIVER: vfs
+  before_script:
+    - podman login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - podman pull "$IMAGE"
+    - podman tag "$IMAGE" "$IMAGE_LATEST"
+    - podman push "$IMAGE_LATEST"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
