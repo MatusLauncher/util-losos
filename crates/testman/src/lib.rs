@@ -23,6 +23,7 @@ mod tests {
 
     #[test]
     #[serial]
+    #[ignore = "requires QEMU, a kernel, and initramfs — run via launch.sh --test"]
     fn test_01_kernel_boots() {
         let mut h = harness().lock().unwrap();
         assert!(
@@ -35,6 +36,7 @@ mod tests {
 
     #[test]
     #[serial]
+    #[ignore = "requires QEMU, a kernel, and initramfs — run via launch.sh --test"]
     fn test_02_init_starts() {
         let mut h = harness().lock().unwrap();
         assert!(
@@ -47,6 +49,7 @@ mod tests {
 
     #[test]
     #[serial]
+    #[ignore = "requires QEMU, a kernel, and initramfs — run via launch.sh --test"]
     fn test_03_filesystems_mounted() {
         let mut h = harness().lock().unwrap();
         assert!(
@@ -59,6 +62,7 @@ mod tests {
 
     #[test]
     #[serial]
+    #[ignore = "requires QEMU, a kernel, and initramfs — run via launch.sh --test"]
     fn test_04_startup_scripts_run() {
         let mut h = harness().lock().unwrap();
         assert!(
@@ -71,6 +75,7 @@ mod tests {
 
     #[test]
     #[serial]
+    #[ignore = "requires QEMU, a kernel, and initramfs — run via launch.sh --test"]
     fn test_05_dhcp_configured_eth0() {
         let mut h = harness().lock().unwrap();
         assert!(

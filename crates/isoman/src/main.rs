@@ -53,7 +53,6 @@ struct Args {
     #[arg(
         short,
         long,
-        env = "MODE",
         default_value = "client",
         value_parser = parse_mode
     )]
@@ -71,6 +70,13 @@ struct Args {
     /// Only meaningful when `--build` is set.
     #[arg(long, env = "BUILD_CONTEXT")]
     build_context: Option<PathBuf>,
+
+    /// When `--build` is set, also copy the produced initramfs archive to
+    /// this path so it can be kept as a CI artifact independently of the ISO.
+    ///
+    /// Only meaningful when `--build` is set.
+    #[arg(long, env = "INITRAMFS_OUT")]
+    initramfs_out: Option<PathBuf>,
 }
 
 fn parse_mode(s: &str) -> Result<Mode, String> {
@@ -126,6 +132,13 @@ fn main() -> miette::Result<()> {
         );
 
         container::build_initramfs(&containerfile, &build_context, &args.mode, &initramfs_out)?;
+
+        // Optionally persist the initramfs outside the staging dir so callers
+        // (e.g. CI pipelines) can keep it as a standalone artifact.
+        if let Some(ref persist) = args.initramfs_out {
+            std::fs::copy(&initramfs_out, persist).into_diagnostic()?;
+            info!(path = %persist.display(), "Initramfs persisted to --initramfs-out");
+        }
 
         initramfs_out
     } else {

@@ -66,8 +66,6 @@ RUN set -e; \
     server) \
     cd out && ln -sf cluman bin/server \
     && ln -sf /bin/server etc/init/start/cluman ;; \
-    controller) \
-    cd out && ln -sf cluman bin/controller ;; \
     *) echo "Unknown MODE: $MODE (expected client, server, or controller)" >&2; exit 1 ;; \
     esac
 RUN apk add fakeroot

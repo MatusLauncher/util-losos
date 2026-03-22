@@ -326,3 +326,483 @@ impl ClientState {
         Self { server_url, own_ip }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── IpRange ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn ip_range_parses_single_address() {
+        let r: IpRange = "10.0.0.1".parse().unwrap();
+        assert!(matches!(r, IpRange::Single(_)));
+        assert_eq!(r.hosts(), vec!["10.0.0.1".parse::<Ipv4Addr>().unwrap()]);
+    }
+
+    #[test]
+    fn ip_range_single_hosts_returns_one_element() {
+        let r: IpRange = "192.168.1.99".parse().unwrap();
+        assert_eq!(r.hosts().len(), 1);
+    }
+
+    #[test]
+    fn ip_range_parses_cidr_slash30() {
+        // /30 yields exactly 2 host addresses (.1 and .2)
+        let r: IpRange = "10.0.0.0/30".parse().unwrap();
+        assert!(matches!(r, IpRange::Cidr(_)));
+        let hosts = r.hosts();
+        assert_eq!(hosts.len(), 2);
+        assert_eq!(hosts[0], "10.0.0.1".parse::<Ipv4Addr>().unwrap());
+        assert_eq!(hosts[1], "10.0.0.2".parse::<Ipv4Addr>().unwrap());
+    }
+
+    #[test]
+    fn ip_range_cidr_slash32_yields_one_host() {
+        // /32 is a single-host route — ipnet's Ipv4Net::hosts() returns the
+        // address itself as the sole host (no broadcast/network exclusion at
+        // prefix length 32).
+        let r: IpRange = "10.0.0.1/32".parse().unwrap();
+        let hosts = r.hosts();
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0], "10.0.0.1".parse::<Ipv4Addr>().unwrap());
+    }
+
+    #[test]
+    fn ip_range_cidr_slash24_yields_254_hosts() {
+        let r: IpRange = "10.0.0.0/24".parse().unwrap();
+        assert_eq!(r.hosts().len(), 254);
+    }
+
+    #[test]
+    fn ip_range_parses_dash_range() {
+        let r: IpRange = "10.0.0.1-10.0.0.3".parse().unwrap();
+        assert!(matches!(r, IpRange::DashRange(_, _)));
+        let hosts = r.hosts();
+        assert_eq!(hosts.len(), 3);
+        assert_eq!(hosts[0], "10.0.0.1".parse::<Ipv4Addr>().unwrap());
+        assert_eq!(hosts[1], "10.0.0.2".parse::<Ipv4Addr>().unwrap());
+        assert_eq!(hosts[2], "10.0.0.3".parse::<Ipv4Addr>().unwrap());
+    }
+
+    #[test]
+    fn ip_range_dash_range_same_start_and_end() {
+        let r: IpRange = "192.168.1.5-192.168.1.5".parse().unwrap();
+        assert_eq!(r.hosts().len(), 1);
+        assert_eq!(r.hosts()[0], "192.168.1.5".parse::<Ipv4Addr>().unwrap());
+    }
+
+    #[test]
+    fn ip_range_dash_range_hosts_are_ordered() {
+        let r: IpRange = "10.0.0.10-10.0.0.15".parse().unwrap();
+        let hosts = r.hosts();
+        let sorted = {
+            let mut v = hosts.clone();
+            v.sort();
+            v
+        };
+        assert_eq!(hosts, sorted);
+    }
+
+    #[test]
+    fn ip_range_rejects_reversed_dash_range() {
+        let err = "10.0.0.10-10.0.0.1".parse::<IpRange>();
+        assert!(err.is_err());
+        assert!(
+            err.unwrap_err()
+                .to_string()
+                .contains("must not be greater than")
+        );
+    }
+
+    #[test]
+    fn ip_range_rejects_invalid_single_address() {
+        assert!("not-an-ip".parse::<IpRange>().is_err());
+    }
+
+    #[test]
+    fn ip_range_rejects_invalid_cidr_prefix() {
+        assert!("10.0.0.0/99".parse::<IpRange>().is_err());
+    }
+
+    #[test]
+    fn ip_range_rejects_invalid_dash_start() {
+        assert!("garbage-10.0.0.1".parse::<IpRange>().is_err());
+    }
+
+    #[test]
+    fn ip_range_rejects_invalid_dash_end() {
+        assert!("10.0.0.1-garbage".parse::<IpRange>().is_err());
+    }
+
+    // ── Mode ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn mode_default_is_client() {
+        assert_eq!(Mode::default(), Mode::Client);
+    }
+
+    #[test]
+    fn mode_from_str_client() {
+        assert_eq!("client".parse::<Mode>().unwrap(), Mode::Client);
+    }
+
+    #[test]
+    fn mode_from_str_server() {
+        assert_eq!("server".parse::<Mode>().unwrap(), Mode::Server);
+    }
+
+    #[test]
+    fn mode_from_str_controller() {
+        assert_eq!("controller".parse::<Mode>().unwrap(), Mode::Controller);
+    }
+
+    #[test]
+    fn mode_from_str_cluman_is_alias_for_controller() {
+        // "cluman" is the binary name — accepted as an alias for Controller
+        assert_eq!("cluman".parse::<Mode>().unwrap(), Mode::Controller);
+    }
+
+    #[test]
+    fn mode_from_str_rejects_unknown_value() {
+        let err = "worker".parse::<Mode>();
+        assert!(err.is_err());
+        let msg = err.unwrap_err().to_string();
+        assert!(msg.contains("worker"));
+        // Error message must list all valid variants
+        assert!(msg.contains("client"));
+        assert!(msg.contains("server"));
+        assert!(msg.contains("controller"));
+    }
+
+    #[test]
+    fn mode_to_string_client() {
+        assert_eq!(Mode::Client.to_string(), "client");
+    }
+
+    #[test]
+    fn mode_to_string_server() {
+        assert_eq!(Mode::Server.to_string(), "server");
+    }
+
+    #[test]
+    fn mode_to_string_controller() {
+        assert_eq!(Mode::Controller.to_string(), "controller");
+    }
+
+    #[test]
+    fn mode_to_string_roundtrip() {
+        for mode in [Mode::Client, Mode::Server, Mode::Controller] {
+            let restored: Mode = mode.to_string().parse().unwrap();
+            assert_eq!(restored, mode);
+        }
+    }
+
+    #[test]
+    fn mode_ordering_client_lt_server_lt_controller() {
+        // Ord is derived in field-declaration order
+        assert!(Mode::Client < Mode::Server);
+        assert!(Mode::Server < Mode::Controller);
+        assert!(Mode::Client < Mode::Controller);
+    }
+
+    // ── CluManSchema ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn cluman_schema_default_has_empty_left_registry() {
+        let s = CluManSchema::default();
+        assert_eq!(s.mode, Mode::Client);
+        assert!(s.registry().unwrap().is_empty());
+        assert!(s.peer().is_none());
+    }
+
+    #[test]
+    fn cluman_schema_registration_stores_peer_as_right() {
+        let ip: Ipv4Addr = "10.0.0.1".parse().unwrap();
+        let s = CluManSchema::registration(ip, Mode::Client);
+        assert_eq!(s.peer(), Some((ip, Mode::Client)));
+        assert!(s.registry().is_none());
+    }
+
+    #[test]
+    fn cluman_schema_registration_sets_mode_field() {
+        let ip: Ipv4Addr = "10.0.0.2".parse().unwrap();
+        let s = CluManSchema::registration(ip, Mode::Server);
+        assert_eq!(s.mode, Mode::Server);
+    }
+
+    #[test]
+    fn cluman_schema_add_inserts_into_empty_left() {
+        let mut s = CluManSchema::default();
+        let ip: Ipv4Addr = "10.0.0.5".parse().unwrap();
+        s.add(ip, Mode::Client);
+        let reg = s.registry().unwrap();
+        assert_eq!(reg.len(), 1);
+        assert_eq!(reg.get(&ip), Some(&Mode::Client));
+    }
+
+    #[test]
+    fn cluman_schema_add_accumulates_multiple_entries() {
+        let mut s = CluManSchema::default();
+        let ip1: Ipv4Addr = "10.0.0.1".parse().unwrap();
+        let ip2: Ipv4Addr = "10.0.0.2".parse().unwrap();
+        s.add(ip1, Mode::Client);
+        s.add(ip2, Mode::Server);
+        let reg = s.registry().unwrap();
+        assert_eq!(reg.len(), 2);
+        assert_eq!(reg.get(&ip1), Some(&Mode::Client));
+        assert_eq!(reg.get(&ip2), Some(&Mode::Server));
+    }
+
+    #[test]
+    fn cluman_schema_add_promotes_right_to_left() {
+        let ip1: Ipv4Addr = "10.0.0.1".parse().unwrap();
+        let ip2: Ipv4Addr = "10.0.0.2".parse().unwrap();
+        // Start as a Right (registration request)
+        let mut s = CluManSchema::registration(ip1, Mode::Client);
+        assert!(s.peer().is_some());
+        // Adding a second peer must promote to Left and preserve the first entry
+        s.add(ip2, Mode::Server);
+        assert!(s.peer().is_none(), "should no longer be Right after add");
+        let reg = s.registry().unwrap();
+        assert_eq!(reg.len(), 2);
+        assert_eq!(reg.get(&ip1), Some(&Mode::Client));
+        assert_eq!(reg.get(&ip2), Some(&Mode::Server));
+    }
+
+    #[test]
+    fn cluman_schema_roundtrip_json_right_variant() {
+        let ip: Ipv4Addr = "192.168.0.1".parse().unwrap();
+        let original = CluManSchema::registration(ip, Mode::Server);
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: CluManSchema = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.peer(), Some((ip, Mode::Server)));
+    }
+
+    #[test]
+    fn cluman_schema_roundtrip_json_left_variant() {
+        let mut original = CluManSchema::default();
+        let ip: Ipv4Addr = "10.1.2.3".parse().unwrap();
+        original.add(ip, Mode::Client);
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: CluManSchema = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.registry().unwrap().get(&ip), Some(&Mode::Client));
+    }
+
+    // ── Task ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn task_new_stores_filename_and_content() {
+        let t = Task::new("compose.yml", "version: '3'");
+        assert_eq!(t.filename, "compose.yml");
+        assert_eq!(t.content, "version: '3'");
+    }
+
+    #[test]
+    fn task_new_accepts_owned_strings() {
+        let t = Task::new(String::from("a.yml"), String::from("data"));
+        assert_eq!(t.filename, "a.yml");
+    }
+
+    #[test]
+    fn task_roundtrip_json() {
+        let original = Task::new("test.yml", "some: yaml\n");
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: Task = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.filename, original.filename);
+        assert_eq!(restored.content, original.content);
+    }
+
+    // ── Tasks ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn tasks_default_is_empty() {
+        let t = Tasks::default();
+        assert!(t.is_empty());
+        assert_eq!(t.len(), 0);
+        assert_eq!(t.tasks().len(), 0);
+    }
+
+    #[test]
+    fn tasks_push_increases_len() {
+        let mut t = Tasks::default();
+        t.push(Task::new("a.yml", ""));
+        assert_eq!(t.len(), 1);
+        assert!(!t.is_empty());
+    }
+
+    #[test]
+    fn tasks_pop_returns_none_when_empty() {
+        let mut t = Tasks::default();
+        assert!(t.pop().is_none());
+    }
+
+    #[test]
+    fn tasks_pop_is_fifo() {
+        let mut t = Tasks::default();
+        t.push(Task::new("first.yml", "a"));
+        t.push(Task::new("second.yml", "b"));
+        t.push(Task::new("third.yml", "c"));
+        assert_eq!(t.pop().unwrap().filename, "first.yml");
+        assert_eq!(t.pop().unwrap().filename, "second.yml");
+        assert_eq!(t.pop().unwrap().filename, "third.yml");
+        assert!(t.pop().is_none());
+    }
+
+    #[test]
+    fn tasks_pop_decrements_len() {
+        let mut t = Tasks::default();
+        t.push(Task::new("a.yml", ""));
+        t.push(Task::new("b.yml", ""));
+        assert_eq!(t.len(), 2);
+        t.pop();
+        assert_eq!(t.len(), 1);
+        t.pop();
+        assert_eq!(t.len(), 0);
+        assert!(t.is_empty());
+    }
+
+    #[test]
+    fn tasks_preserves_content_through_pop() {
+        let content = "services:\n  web:\n    image: nginx\n";
+        let mut t = Tasks::default();
+        t.push(Task::new("docker-compose.yml", content));
+        let got = t.pop().unwrap();
+        assert_eq!(got.filename, "docker-compose.yml");
+        assert_eq!(got.content, content);
+    }
+
+    #[test]
+    fn tasks_new_initialises_from_vec() {
+        let t = Tasks::new(vec![Task::new("a.yml", ""), Task::new("b.yml", "")]);
+        assert_eq!(t.len(), 2);
+    }
+
+    #[test]
+    fn tasks_roundtrip_json() {
+        let original = Tasks::new(vec![
+            Task::new("a.yml", "content-a"),
+            Task::new("b.yml", "content-b"),
+        ]);
+        let json = serde_json::to_string(&original).unwrap();
+        let mut restored: Tasks = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.len(), 2);
+        assert_eq!(restored.pop().unwrap().filename, "a.yml");
+        assert_eq!(restored.pop().unwrap().filename, "b.yml");
+    }
+
+    // ── ServerState ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn server_state_new_starts_empty() {
+        let s = ServerState::new();
+        assert_eq!(s.pending_count(), 0);
+        assert!(s.client_addrs().is_empty());
+    }
+
+    #[test]
+    fn server_state_register_client_adds_address() {
+        let s = ServerState::new();
+        let ip: Ipv4Addr = "10.0.0.1".parse().unwrap();
+        s.register_client(ip);
+        let addrs = s.client_addrs();
+        assert_eq!(addrs.len(), 1);
+        assert!(addrs.contains(&ip));
+    }
+
+    #[test]
+    fn server_state_register_same_client_twice_is_idempotent() {
+        let s = ServerState::new();
+        let ip: Ipv4Addr = "10.0.0.1".parse().unwrap();
+        s.register_client(ip);
+        s.register_client(ip);
+        assert_eq!(s.client_addrs().len(), 1);
+    }
+
+    #[test]
+    fn server_state_registers_multiple_distinct_clients() {
+        let s = ServerState::new();
+        let ip1: Ipv4Addr = "10.0.0.1".parse().unwrap();
+        let ip2: Ipv4Addr = "10.0.0.2".parse().unwrap();
+        s.register_client(ip1);
+        s.register_client(ip2);
+        assert_eq!(s.client_addrs().len(), 2);
+    }
+
+    #[test]
+    fn server_state_push_task_increments_pending_count() {
+        let s = ServerState::new();
+        s.push_task(Task::new("a.yml", ""));
+        assert_eq!(s.pending_count(), 1);
+        s.push_task(Task::new("b.yml", ""));
+        assert_eq!(s.pending_count(), 2);
+    }
+
+    #[test]
+    fn server_state_claim_task_is_fifo() {
+        let s = ServerState::new();
+        s.push_task(Task::new("first.yml", ""));
+        s.push_task(Task::new("second.yml", ""));
+        assert_eq!(s.claim_task().unwrap().filename, "first.yml");
+        assert_eq!(s.claim_task().unwrap().filename, "second.yml");
+        assert!(s.claim_task().is_none());
+    }
+
+    #[test]
+    fn server_state_claim_task_decrements_pending_count() {
+        let s = ServerState::new();
+        s.push_task(Task::new("a.yml", ""));
+        assert_eq!(s.pending_count(), 1);
+        s.claim_task();
+        assert_eq!(s.pending_count(), 0);
+    }
+
+    #[test]
+    fn server_state_claim_task_returns_none_when_empty() {
+        let s = ServerState::new();
+        assert!(s.claim_task().is_none());
+    }
+
+    #[test]
+    fn server_state_claim_task_preserves_content() {
+        let s = ServerState::new();
+        let content = "services:\n  db:\n    image: postgres\n";
+        s.push_task(Task::new("db.yml", content));
+        let task = s.claim_task().unwrap();
+        assert_eq!(task.filename, "db.yml");
+        assert_eq!(task.content, content);
+    }
+
+    #[test]
+    fn server_state_clone_shares_task_queue() {
+        let s1 = ServerState::new();
+        let s2 = s1.clone();
+        // A task pushed via s1 must be visible through s2
+        s1.push_task(Task::new("shared.yml", ""));
+        assert_eq!(s2.pending_count(), 1);
+        // Claiming via s2 removes it from s1's view as well
+        s2.claim_task();
+        assert_eq!(s1.pending_count(), 0);
+    }
+
+    #[test]
+    fn server_state_clone_shares_client_registry() {
+        let s1 = ServerState::new();
+        let s2 = s1.clone();
+        let ip: Ipv4Addr = "10.0.0.1".parse().unwrap();
+        s2.register_client(ip);
+        assert!(s1.client_addrs().contains(&ip));
+    }
+
+    #[test]
+    fn server_state_pending_count_matches_push_minus_claims() {
+        let s = ServerState::new();
+        for i in 0..5u8 {
+            s.push_task(Task::new(format!("{i}.yml"), ""));
+        }
+        assert_eq!(s.pending_count(), 5);
+        s.claim_task();
+        s.claim_task();
+        assert_eq!(s.pending_count(), 3);
+    }
+}

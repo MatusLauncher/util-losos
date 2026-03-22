@@ -5,29 +5,62 @@ stages:
 
 variables:
   INITRAMFS: os.initramfs.tar.gz
-  # Full image ref, e.g. registry.gitlab.com/mtos-v2/util-mdl:main
+  ISO: os.iso
+  # cluman mode embedded in the initramfs image: client | server | controller
+  MODE: client
+  # Full image ref pushed to the registry
   IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   IMAGE_LATEST: $CI_REGISTRY_IMAGE:latest
 
 # ── Build ──────────────────────────────────────────────────────────────────────
+#
+# Compiles isoman, then uses it to:
+#   1. Run `podman build --build-arg MODE=$MODE` (Containerfile → initramfs).
+#   2. Clone Limine, assemble a hybrid BIOS+UEFI ISO via xorriso.
+#
+# Both the initramfs archive and the ISO are kept as artifacts:
+#   - os.initramfs.tar.gz  → consumed by test-boot
+#   - os.iso               → ready-to-flash bootable image
+#
+# Image: quay.io/podman/stable (Fedora-based) gives us rootless podman out of
+# the box.  We install the ISO toolchain (git, make, xorriso) and bootstrap
+# Rust via rustup.
+#
+# Set the CI/CD variable KERNEL to a specific vmlinuz path; if unset the
+# runner's own kernel is used as a best-effort fallback.
 
-build-initramfs:
+build:
   stage: build
   image: quay.io/podman/stable
   variables:
-    # Allow podman to run unprivileged inside the GitLab runner container.
     STORAGE_DRIVER: vfs
   before_script:
     - podman info
+    - dnf install -y --setopt=install_weak_deps=False git make xorriso
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+      sh -s -- -y --default-toolchain stable --profile minimal
+    - source "$HOME/.cargo/env"
   script:
-    - podman build --no-cache -t util-mdl-build .
-    - podman create --name util-mdl-export util-mdl-build
-    - podman cp util-mdl-export:/$INITRAMFS $INITRAMFS
-    - podman rm util-mdl-export
+    - cargo build -p isoman
+    - |
+      if [ -z "$KERNEL" ]; then
+        KERNEL=$(ls /boot/vmlinuz-* 2>/dev/null | head -n1)
+        echo "KERNEL not set — using runner kernel: ${KERNEL:-<none found>}"
+      fi
+    - |
+      KERNEL_ARG=""
+      [ -n "$KERNEL" ] && KERNEL_ARG="--kernel $KERNEL"
+      ./target/debug/isoman \
+        --build \
+        --mode "$MODE" \
+        --initramfs-out "$INITRAMFS" \
+        --output "$ISO" \
+        $KERNEL_ARG
   artifacts:
-    name: initramfs
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_SLUG"
     paths:
       - $INITRAMFS
+      - $ISO
     expire_in: 1 day
 
 # ── Test ───────────────────────────────────────────────────────────────────────
@@ -35,16 +68,14 @@ build-initramfs:
 # Requires a GitLab runner with:
 #   - qemu-system-x86_64 installed on the host
 #   - a kernel image available at $KERNEL
-#   - nested virtualisation enabled for KVM (or set KVM=0 for slow software emulation)
+#   - nested virtualisation enabled for KVM (or set KVM=0 for software emulation)
 #
 # Mark as manual on shared runners that lack QEMU; remove `when: manual` on
 # dedicated bare-metal runners.
 
 test-boot:
   stage: test
-  needs: [build-initramfs]
-  # Install Rust toolchain and QEMU on the runner host, or use a custom image
-  # that has both pre-installed.
+  needs: [build]
   image: rust:slim
   variables:
     KVM: "0"
@@ -54,7 +85,6 @@ test-boot:
     - apt-get update -qq && apt-get install -y -qq qemu-system-x86 2>/dev/null
     - |
       if [ -z "$KERNEL" ]; then
-        # Use the runner host kernel as a fallback; may not match the initramfs ABI.
         KERNEL=$(ls /boot/vmlinuz-* 2>/dev/null | head -n1)
         echo "KERNEL not set, using: $KERNEL"
       fi
@@ -76,20 +106,23 @@ test-boot:
 # container registry.  The image itself IS the delivery artifact — pull it and
 # copy /os.initramfs.tar.gz out to deploy.
 #
+# The same MODE used in the build job is forwarded as a build-arg so the
+# published image embeds the same cluman mode.
+#
 # Tagged as:
-#   <registry>/<project>:<branch-slug>   — for every branch
+#   <registry>/<project>:<branch-slug>   — for every branch push
 #   <registry>/<project>:latest          — only on the default branch
 
 publish:
   stage: publish
-  needs: [build-initramfs]
+  needs: [build]
   image: quay.io/podman/stable
   variables:
     STORAGE_DRIVER: vfs
   before_script:
     - podman login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
   script:
-    - podman build --no-cache -t "$IMAGE" .
+    - podman build --no-cache --build-arg "MODE=$MODE" -t "$IMAGE" .
     - podman push "$IMAGE"
     - |
       if [ "$CI_COMMIT_REF_NAME" = "$CI_DEFAULT_BRANCH" ]; then

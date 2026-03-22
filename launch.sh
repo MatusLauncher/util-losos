@@ -118,7 +118,7 @@ if [[ "$TEST" -eq 1 ]]; then
         MEMORY="$MEMORY" \
         CPUS="$CPUS" \
         KVM="${KVM:-1}" \
-        cargo test -p testman -- --test-threads=1
+        cargo test -p testman -- --test-threads=1 --include-ignored
 fi
 
 if [[ "$ISO" -eq 1 ]]; then
