@@ -6,9 +6,88 @@ use std::{
 };
 
 use either::Either;
+use ipnet::Ipv4Net;
 use miette::miette;
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
+
+// ── IpRange ───────────────────────────────────────────────────────────────────
+
+/// An IPv4 address range accepted in three notations:
+///
+/// | Notation     | Example                  | Meaning                            |
+/// |--------------|--------------------------|------------------------------------|
+/// | Single       | `10.0.0.1`               | Exactly one host                   |
+/// | CIDR         | `10.0.0.0/24`            | All host addresses in the subnet   |
+/// | Dash range   | `10.0.0.1-10.0.0.20`     | All addresses from start to end    |
+///
+/// Use [`IpRange::hosts`] to expand any variant into a flat `Vec<Ipv4Addr>`.
+#[derive(Debug, Clone)]
+pub enum IpRange {
+    Single(Ipv4Addr),
+    Cidr(Ipv4Net),
+    DashRange(Ipv4Addr, Ipv4Addr),
+}
+
+impl IpRange {
+    /// Expand into an ordered list of host addresses.
+    ///
+    /// * `Single` → one-element vec.
+    /// * `Cidr`   → every host address in the subnet (network and broadcast
+    ///               addresses are excluded, matching [`Ipv4Net::hosts`]).
+    /// * `DashRange` → every address from `start` to `end`, inclusive.
+    pub fn hosts(&self) -> Vec<Ipv4Addr> {
+        match self {
+            IpRange::Single(addr) => vec![*addr],
+            IpRange::Cidr(net) => net.hosts().collect(),
+            IpRange::DashRange(start, end) => {
+                let start_n = u32::from(*start);
+                let end_n = u32::from(*end);
+                (start_n..=end_n).map(Ipv4Addr::from).collect()
+            }
+        }
+    }
+}
+
+impl FromStr for IpRange {
+    type Err = miette::Error;
+
+    /// Parse an `IpRange` from a string.
+    ///
+    /// Precedence:
+    /// 1. Contains `/`  → attempt CIDR parse via [`Ipv4Net`].
+    /// 2. Contains `-`  → split on the *first* `-` and parse two [`Ipv4Addr`]s.
+    /// 3. Otherwise     → parse a single [`Ipv4Addr`].
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.contains('/') {
+            return s
+                .parse::<Ipv4Net>()
+                .map(IpRange::Cidr)
+                .map_err(|e| miette!("Invalid CIDR range '{}': {}", s, e));
+        }
+
+        if let Some((start_s, end_s)) = s.split_once('-') {
+            let start = start_s
+                .parse::<Ipv4Addr>()
+                .map_err(|e| miette!("Invalid start address '{}': {}", start_s, e))?;
+            let end = end_s
+                .parse::<Ipv4Addr>()
+                .map_err(|e| miette!("Invalid end address '{}': {}", end_s, e))?;
+            if u32::from(start) > u32::from(end) {
+                return Err(miette!(
+                    "Range start '{}' must not be greater than end '{}'",
+                    start,
+                    end
+                ));
+            }
+            return Ok(IpRange::DashRange(start, end));
+        }
+
+        s.parse::<Ipv4Addr>()
+            .map(IpRange::Single)
+            .map_err(|e| miette!("Invalid IP address or range '{}': {}", s, e))
+    }
+}
 
 // ── Mode ──────────────────────────────────────────────────────────────────────
 

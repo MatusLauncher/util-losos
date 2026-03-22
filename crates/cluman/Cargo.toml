@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 actman = { version = "0.1.0", path = "../actman" }
 clap = { version = "4.6.0", features = ["derive", "env"] }
+ipnet = { version = "2.12.0", features = ["serde"] }
 either = { version = "1.15.0", features = ["serde"] }
 miette.workspace = true
 minreq = "2.14.1"
