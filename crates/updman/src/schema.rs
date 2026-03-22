@@ -9,10 +9,10 @@ use std::{
     process::Command,
 };
 
+use actman::cmdline::CmdLineOptions;
 use miette::IntoDiagnostic;
 use tracing::info;
 use walkdir::WalkDir;
-use actman::cmdline::CmdLineOptions;
 pub struct UpdMan {
     /// Container registry prefix, e.g. `"registry.example.com/mtos-v2"`.
     /// Combined with [`image_tag`](UpdMan::image_tag) as `<base_url>/<image_tag>`
@@ -30,11 +30,26 @@ impl Default for UpdMan {
     fn default() -> Self {
         let cmdline: CmdLineOptions = CmdLineOptions::new().unwrap();
         let opts = cmdline.opts();
-        Self { base_url: opts.get("base_url").unwrap().to_owned(), image_tag: opts.get("tag").unwrap().to_owned(), hash: opts.get("hash").unwrap().to_owned() }
+        Self {
+            base_url: opts.get("base_url").unwrap().to_owned(),
+            image_tag: opts.get("tag").unwrap().to_owned(),
+            hash: opts.get("hash").unwrap().to_owned(),
+        }
     }
 }
 
 impl UpdMan {
+    /// Constructs an [`UpdMan`] directly from the given field values.
+    /// Useful in tests and when the values are known without reading the kernel
+    /// command line.
+    pub fn new(base_url: String, image_tag: String, hash: String) -> Self {
+        Self {
+            base_url,
+            image_tag,
+            hash,
+        }
+    }
+
     /// Returns the fully-qualified image reference used when calling
     /// `nerdctl pull` / `nerdctl save`.
     ///
