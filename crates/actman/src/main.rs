@@ -1,13 +1,11 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/actman.md"))]
 
-use crate::{preboot::Preboot, reboot::RebootCMD};
-use std::process::Command;
-use strum::IntoEnumIterator;
-mod preboot;
-mod reboot;
+use actman::{preboot::Preboot, reboot::RebootCMD};
 use miette::IntoDiagnostic;
 use rustix::process::{WaitOptions, waitpid};
 use rustix::system::reboot;
+use std::process::Command;
+use strum::IntoEnumIterator;
 use tracing::info;
 use tracing_subscriber::fmt;
 use walkdir::WalkDir;

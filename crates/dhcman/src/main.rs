@@ -11,33 +11,10 @@
 
 use std::time::{Duration, Instant};
 
+use dhcman::{dhcp, netconf, parse_iface};
 use miette::IntoDiagnostic;
 use tracing::info;
 use tracing_subscriber::fmt;
-
-mod dhcp;
-mod netconf;
-
-/// Derive the network interface name from `argv[0]`.
-///
-/// 1. Takes the basename of the path (strips any directory prefix).
-/// 2. If the basename starts with an all-digit segment followed by `-`
-///    (e.g. `"01-eth0"`), the numeric ordering prefix is stripped and the
-///    remainder (`"eth0"`) is returned.
-/// 3. Otherwise the bare basename is returned as-is.
-/// 4. Falls back to `"dhcman"` when the basename cannot be determined.
-pub(crate) fn parse_iface(argv0: &str) -> &str {
-    let base = std::path::Path::new(argv0)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("dhcman");
-    // Strip optional numeric ordering prefix so that symlinking as
-    // "01-eth0" configures the "eth0" interface.
-    match base.split_once('-') {
-        Some((prefix, rest)) if prefix.chars().all(|c| c.is_ascii_digit()) => rest,
-        _ => base,
-    }
-}
 
 fn main() -> miette::Result<()> {
     fmt().init();
@@ -90,55 +67,4 @@ fn main() -> miette::Result<()> {
 
     info!("{iface} configured via DHCP");
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_iface;
-
-    #[test]
-    fn plain_interface_name_is_returned_unchanged() {
-        assert_eq!(parse_iface("eth0"), "eth0");
-    }
-
-    #[test]
-    fn numeric_prefix_is_stripped() {
-        assert_eq!(parse_iface("01-eth0"), "eth0");
-    }
-
-    #[test]
-    fn multi_digit_numeric_prefix_is_stripped() {
-        assert_eq!(parse_iface("99-wlan0"), "wlan0");
-    }
-
-    #[test]
-    fn deeper_path_with_numeric_prefix_is_stripped() {
-        assert_eq!(parse_iface("/etc/init/start/01-eth0"), "eth0");
-    }
-
-    #[test]
-    fn dhcman_basename_stays_as_dhcman() {
-        assert_eq!(parse_iface("dhcman"), "dhcman");
-    }
-
-    #[test]
-    fn full_path_to_dhcman_stays_as_dhcman() {
-        assert_eq!(parse_iface("/bin/dhcman"), "dhcman");
-    }
-
-    #[test]
-    fn non_numeric_prefix_is_not_stripped() {
-        // "abc" is not all-digits, so the whole basename is kept.
-        assert_eq!(parse_iface("abc-eth0"), "abc-eth0");
-    }
-
-    #[test]
-    fn non_numeric_prefix_in_full_path_is_not_stripped() {
-        assert_eq!(parse_iface("/etc/init/start/abc-eth0"), "abc-eth0");
-    }
-
-    #[test]
-    fn interface_with_no_dash_in_full_path() {
-        assert_eq!(parse_iface("/etc/init/start/enp3s0"), "enp3s0");
-    }
 }

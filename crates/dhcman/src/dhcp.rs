@@ -45,7 +45,7 @@ fn read_mac(iface: &str) -> Result<[u8; 6]> {
 }
 
 /// Derive a transaction ID from the current time.
-pub(crate) fn new_xid() -> u32 {
+pub fn new_xid() -> u32 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.subsec_nanos())
@@ -126,13 +126,13 @@ fn dhcp_socket(iface: &str) -> Result<UdpSocket> {
     Ok(udp)
 }
 
-pub(crate) fn encode(msg: &Message) -> Result<Vec<u8>> {
+pub fn encode(msg: &Message) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     msg.encode(&mut Encoder::new(&mut buf)).into_diagnostic()?;
     Ok(buf)
 }
 
-pub(crate) fn decode(buf: &[u8]) -> Result<Message> {
+pub fn decode(buf: &[u8]) -> Result<Message> {
     Message::decode(&mut Decoder::new(buf)).into_diagnostic()
 }
 
@@ -156,7 +156,7 @@ fn recv_reply(sock: &UdpSocket, buf: &mut [u8], xid: u32) -> Result<Message> {
 }
 
 /// Build a DHCPDISCOVER message.
-pub(crate) fn discover(xid: u32, mac: &[u8; 6]) -> Message {
+pub fn discover(xid: u32, mac: &[u8; 6]) -> Message {
     let mut msg = Message::default();
     msg.set_opcode(Opcode::BootRequest)
         .set_htype(HType::Unknown(1))
@@ -174,7 +174,7 @@ pub(crate) fn discover(xid: u32, mac: &[u8; 6]) -> Message {
 }
 
 /// Build a DHCPREQUEST after receiving an offer.
-pub(crate) fn request(xid: u32, mac: &[u8; 6], offered: Ipv4Addr, server: Ipv4Addr) -> Message {
+pub fn request(xid: u32, mac: &[u8; 6], offered: Ipv4Addr, server: Ipv4Addr) -> Message {
     let mut msg = Message::default();
     msg.set_opcode(Opcode::BootRequest)
         .set_htype(HType::Unknown(1))
@@ -195,7 +195,7 @@ pub(crate) fn request(xid: u32, mac: &[u8; 6], offered: Ipv4Addr, server: Ipv4Ad
 }
 
 /// Parse subnet mask → prefix length.
-pub(crate) fn mask_to_prefix(mask: Ipv4Addr) -> u8 {
+pub fn mask_to_prefix(mask: Ipv4Addr) -> u8 {
     u32::from(mask).leading_ones() as u8
 }
 
@@ -274,119 +274,4 @@ pub fn acquire(iface: &str) -> Result<DhcpLease> {
         }
     }
     Err(last_err)
-}
-
-#[cfg(test)]
-mod tests {
-    use std::net::Ipv4Addr;
-
-    use dhcproto::v4::{DhcpOption, MessageType, OptionCode};
-
-    use super::{decode, discover, encode, mask_to_prefix, new_xid, request};
-
-    const DUMMY_MAC: [u8; 6] = [0xde, 0xad, 0xbe, 0xef, 0x00, 0x01];
-
-    // ── mask_to_prefix ────────────────────────────────────────────────────────
-
-    #[test]
-    fn mask_to_prefix_slash0() {
-        assert_eq!(mask_to_prefix(Ipv4Addr::new(0, 0, 0, 0)), 0);
-    }
-
-    #[test]
-    fn mask_to_prefix_slash8() {
-        assert_eq!(mask_to_prefix(Ipv4Addr::new(255, 0, 0, 0)), 8);
-    }
-
-    #[test]
-    fn mask_to_prefix_slash16() {
-        assert_eq!(mask_to_prefix(Ipv4Addr::new(255, 255, 0, 0)), 16);
-    }
-
-    #[test]
-    fn mask_to_prefix_slash24() {
-        assert_eq!(mask_to_prefix(Ipv4Addr::new(255, 255, 255, 0)), 24);
-    }
-
-    #[test]
-    fn mask_to_prefix_slash32() {
-        assert_eq!(mask_to_prefix(Ipv4Addr::new(255, 255, 255, 255)), 32);
-    }
-
-    // ── new_xid ───────────────────────────────────────────────────────────────
-
-    #[test]
-    fn new_xid_is_in_u32_range() {
-        // u32 is always >= 0 by definition; call twice to confirm no panic.
-        let x1 = new_xid();
-        let x2 = new_xid();
-        // Both values are valid u32s (the type system guarantees this, but we
-        // also assert the range explicitly to make the intent clear).
-        assert!(x1 <= u32::MAX);
-        assert!(x2 <= u32::MAX);
-    }
-
-    // ── encode + decode round-trip on DISCOVER ────────────────────────────────
-
-    #[test]
-    fn discover_round_trip_preserves_xid() {
-        let xid = 0x1234_5678u32;
-        let msg = discover(xid, &DUMMY_MAC);
-        let bytes = encode(&msg).expect("encode failed");
-        let restored = decode(&bytes).expect("decode failed");
-        assert_eq!(restored.xid(), xid);
-    }
-
-    #[test]
-    fn discover_round_trip_preserves_message_type() {
-        let xid = 0xdead_beefu32;
-        let msg = discover(xid, &DUMMY_MAC);
-        let bytes = encode(&msg).expect("encode failed");
-        let restored = decode(&bytes).expect("decode failed");
-        match restored.opts().get(OptionCode::MessageType) {
-            Some(DhcpOption::MessageType(MessageType::Discover)) => {}
-            other => panic!("expected Discover, got {other:?}"),
-        }
-    }
-
-    // ── encode + decode round-trip on REQUEST ─────────────────────────────────
-
-    #[test]
-    fn request_round_trip_preserves_xid() {
-        let xid = 0xabcd_ef01u32;
-        let offered = Ipv4Addr::new(192, 168, 1, 100);
-        let server = Ipv4Addr::new(192, 168, 1, 1);
-        let msg = request(xid, &DUMMY_MAC, offered, server);
-        let bytes = encode(&msg).expect("encode failed");
-        let restored = decode(&bytes).expect("decode failed");
-        assert_eq!(restored.xid(), xid);
-    }
-
-    #[test]
-    fn request_round_trip_preserves_offered_ip() {
-        let xid = 0x0000_0001u32;
-        let offered = Ipv4Addr::new(10, 0, 0, 42);
-        let server = Ipv4Addr::new(10, 0, 0, 1);
-        let msg = request(xid, &DUMMY_MAC, offered, server);
-        let bytes = encode(&msg).expect("encode failed");
-        let restored = decode(&bytes).expect("decode failed");
-        match restored.opts().get(OptionCode::RequestedIpAddress) {
-            Some(DhcpOption::RequestedIpAddress(ip)) => assert_eq!(*ip, offered),
-            other => panic!("expected RequestedIpAddress, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn request_round_trip_preserves_message_type() {
-        let xid = 0x0000_0002u32;
-        let offered = Ipv4Addr::new(172, 16, 0, 5);
-        let server = Ipv4Addr::new(172, 16, 0, 1);
-        let msg = request(xid, &DUMMY_MAC, offered, server);
-        let bytes = encode(&msg).expect("encode failed");
-        let restored = decode(&bytes).expect("decode failed");
-        match restored.opts().get(OptionCode::MessageType) {
-            Some(DhcpOption::MessageType(MessageType::Request)) => {}
-            other => panic!("expected Request, got {other:?}"),
-        }
-    }
 }
