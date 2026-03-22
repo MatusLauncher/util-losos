@@ -5,14 +5,14 @@
 
 use std::{
     env::{set_current_dir, temp_dir},
-    fs::{create_dir_all, rename, write},
-    process::Command,
+    fs::{self, create_dir_all, rename},
+    io,
+    process::{Command, Stdio},
 };
 
 use actman::cmdline::CmdLineOptions;
-use miette::IntoDiagnostic;
+use miette::{IntoDiagnostic, bail};
 use tracing::info;
-use walkdir::WalkDir;
 pub struct UpdMan {
     /// Container registry prefix, e.g. `"registry.example.com/mtos-v2"`.
     /// Combined with [`image_tag`](UpdMan::image_tag) as `<base_url>/<image_tag>`
@@ -90,16 +90,25 @@ impl UpdMan {
             .output()
             .into_diagnostic()?;
         info!("Downloading new MDL tarball...");
-        let out = String::from_utf8(
-            Command::new("nerdctl")
-                .arg("save")
-                .arg(self.image_ref())
-                .output()
-                .into_diagnostic()?
-                .stdout,
+        // Stream nerdctl-save stdout directly into dl.tar so the entire
+        // tarball (potentially several GiB) is never buffered in RAM.
+        let mut nerdctl = Command::new("nerdctl")
+            .arg("save")
+            .arg(self.image_ref())
+            .stdout(Stdio::piped())
+            .spawn()
+            .into_diagnostic()?;
+        let mut dl_file = fs::File::create("dl.tar").into_diagnostic()?;
+        io::copy(
+            nerdctl.stdout.as_mut().expect("stdout is piped"),
+            &mut dl_file,
         )
         .into_diagnostic()?;
-        write("dl.tar", out).into_diagnostic()?;
+        let status = nerdctl.wait().into_diagnostic()?;
+        if !status.success() {
+            bail!("nerdctl save failed (exit {})", status);
+        }
+        drop(dl_file);
         create_dir_all(temp_dir().join("out")).into_diagnostic()?;
         create_dir_all(temp_dir().join("mnt")).into_diagnostic()?;
         Command::new("mount")
@@ -116,24 +125,17 @@ impl UpdMan {
             .into_diagnostic()?;
         set_current_dir(temp_dir().join("out")).into_diagnostic()?;
         info!("Extracting the initramfs image...");
+        // Find the first *.tar layer file with a plain read_dir — no
+        // recursive walk needed since OCI layers sit directly in the out/ dir.
+        let layer_tar = fs::read_dir(temp_dir().join("out"))
+            .into_diagnostic()?
+            .filter_map(|entry| entry.ok())
+            .find(|entry| entry.file_name().to_string_lossy().ends_with(".tar"))
+            .map(|entry| entry.path())
+            .ok_or_else(|| miette::miette!("no .tar layer found in extraction directory"))?;
         Command::new("tar")
             .arg("-xvf")
-            .arg(
-                WalkDir::new(temp_dir().join("out"))
-                    .into_iter()
-                    .filter(|fname| {
-                        fname
-                            .as_ref()
-                            .unwrap()
-                            .file_name()
-                            .display()
-                            .to_string()
-                            .ends_with(".tar")
-                    })
-                    .map(|v| v.unwrap().file_name().display().to_string())
-                    .collect::<Vec<_>>()[0]
-                    .clone(),
-            )
+            .arg(&layer_tar)
             .output()
             .into_diagnostic()?;
         info!("Moving the initramfs image to the boot partition...");

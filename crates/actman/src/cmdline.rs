@@ -43,7 +43,7 @@ impl CmdLineOptions {
 
     /// Splits `f` on whitespace, then on `=`, collecting into a map.
     /// Entries without a `=` separator are discarded.
-    pub(crate) fn param_search(f: String) -> HashMap<String, String> {
+    pub fn param_search(f: String) -> HashMap<String, String> {
         f.split_whitespace()
             .filter_map(|kv| {
                 kv.split_once('=')

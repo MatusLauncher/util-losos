@@ -27,7 +27,7 @@ fn main() -> miette::Result<()> {
                 let _ = waitpid(None, WaitOptions::empty());
             }
         }
-        RebootCMD::PowerOff | RebootCMD::Reboot => {
+        cmd @ (RebootCMD::PowerOff | RebootCMD::Reboot) => {
             info!("Powering off");
             for scripts in WalkDir::new("/etc/init/stop").min_depth(1) {
                 let dir_entry = scripts.into_diagnostic()?;
@@ -35,7 +35,7 @@ fn main() -> miette::Result<()> {
                 info!("Shutting down {}.", script.display());
                 Command::new(script).spawn().into_diagnostic()?;
             }
-            reboot(RebootCMD::from(&args[0]).into()).into_diagnostic()?;
+            reboot(cmd.into()).into_diagnostic()?;
         }
         _ => info!(
             "You've called the wrong binary. Make a symbolic link from this binary to one of these: {:?} to use it properly.",

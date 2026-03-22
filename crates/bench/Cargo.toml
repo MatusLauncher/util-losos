@@ -1,0 +1,31 @@
+[package]
+name = "bench"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dev-dependencies]
+actman      = { version = "0.1.0", path = "../actman" }
+rustix      = { version = "1.1.4", features = ["system"] }
+cluman      = { version = "0.1.0", path = "../cluman" }
+dhcman      = { version = "0.1.0", path = "../dhcman" }
+updman      = { version = "0.1.0", path = "../updman" }
+criterion.workspace = true
+fastrand.workspace  = true
+serde_json  = "1"
+
+[[bench]]
+name = "actman"
+harness = false
+
+[[bench]]
+name = "cluman"
+harness = false
+
+[[bench]]
+name = "dhcman"
+harness = false
+
+[[bench]]
+name = "updman"
+harness = false

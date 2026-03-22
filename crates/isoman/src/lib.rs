@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub const LIMINE_REPO: &str = "https://github.com/limine-bootloader/limine.git";
 pub const LIMINE_BRANCH: &str = "v10.x-binary";
@@ -19,13 +19,13 @@ default_entry: 1
     module_path: boot():/boot/initramfs.gz
 "#;
 
-pub fn resolve_output(base: &PathBuf, raw: &str) -> PathBuf {
+pub fn resolve_output(base: &Path, raw: &str) -> PathBuf {
     let p = PathBuf::from(raw);
     if p.is_absolute() { p } else { base.join(p) }
 }
 
-pub fn scopeguard(path: &PathBuf) -> impl Drop + use<'_> {
-    struct Guard<'a>(&'a PathBuf);
+pub fn scopeguard(path: &Path) -> impl Drop + use<'_> {
+    struct Guard<'a>(&'a Path);
     impl Drop for Guard<'_> {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(self.0);

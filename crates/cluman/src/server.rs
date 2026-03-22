@@ -60,7 +60,7 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
         let st = st.clone();
         async move {
             match req.json::<CluManSchema>() {
-                Ok(schema) if schema.peer().map_or(false, |(_, m)| m == Mode::Client) => {
+                Ok(schema) if schema.peer().is_some_and(|(_, m)| m == Mode::Client) => {
                     let (ip, _) = schema.peer().unwrap();
                     st.register_client(ip);
                     info!(%ip, "Client registered");

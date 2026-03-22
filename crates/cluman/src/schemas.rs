@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     net::Ipv4Addr,
     str::FromStr,
     sync::{Arc, Mutex},
@@ -34,7 +34,7 @@ impl IpRange {
     ///
     /// * `Single` → one-element vec.
     /// * `Cidr`   → every host address in the subnet (network and broadcast
-    ///               addresses are excluded, matching [`Ipv4Net::hosts`]).
+    ///   addresses are excluded, matching [`Ipv4Net::hosts`]).
     /// * `DashRange` → every address from `start` to `end`, inclusive.
     pub fn hosts(&self) -> Vec<Ipv4Addr> {
         match self {
@@ -105,13 +105,13 @@ pub enum Mode {
     Controller,
 }
 
-impl ToString for Mode {
-    fn to_string(&self) -> String {
-        match self {
-            Mode::Client => "client".into(),
-            Mode::Server => "server".into(),
-            Mode::Controller => "controller".into(),
-        }
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Mode::Client => "client",
+            Mode::Server => "server",
+            Mode::Controller => "controller",
+        })
     }
 }
 
@@ -172,19 +172,17 @@ impl CluManSchema {
     /// If `self.ips` is currently `Right`, it is first promoted into a `Left`
     /// map containing that single entry before the new one is added.
     pub fn add(&mut self, ip: Ipv4Addr, mode: Mode) {
-        let map = match &self.ips {
-            Either::Left(m) => {
-                let mut m = m.clone();
-                m.insert(ip, mode);
-                m
-            }
+        // Move out of self.ips without cloning the whole map.
+        let current = std::mem::replace(&mut self.ips, Either::Left(HashMap::new()));
+        let mut map = match current {
+            Either::Left(m) => m,
             Either::Right((existing_ip, existing_mode)) => {
-                let mut m = HashMap::new();
-                m.insert(*existing_ip, *existing_mode);
-                m.insert(ip, mode);
+                let mut m = HashMap::with_capacity(2);
+                m.insert(existing_ip, existing_mode);
                 m
             }
         };
+        map.insert(ip, mode);
         self.ips = Either::Left(map);
     }
 
@@ -229,31 +227,29 @@ impl Task {
 /// An ordered queue of [`Task`]s waiting to be claimed by a client.
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct Tasks {
-    tasks: Vec<Task>,
+    tasks: VecDeque<Task>,
 }
 
 #[allow(dead_code)]
 impl Tasks {
     pub fn new(tasks: Vec<Task>) -> Self {
-        Self { tasks }
+        Self {
+            tasks: VecDeque::from(tasks),
+        }
     }
 
-    pub fn tasks(&self) -> &[Task] {
-        &self.tasks
+    pub fn tasks(&self) -> impl ExactSizeIterator<Item = &Task> {
+        self.tasks.iter()
     }
 
     /// Append a task to the back of the queue.
     pub fn push(&mut self, task: Task) {
-        self.tasks.push(task);
+        self.tasks.push_back(task);
     }
 
-    /// Remove and return the next pending task (FIFO), if any.
+    /// Remove and return the next pending task (FIFO) in O(1).
     pub fn pop(&mut self) -> Option<Task> {
-        if self.tasks.is_empty() {
-            None
-        } else {
-            Some(self.tasks.remove(0))
-        }
+        self.tasks.pop_front()
     }
 
     pub fn is_empty(&self) -> bool {

@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 use tracing_subscriber::fmt;
 
 use updman::UpdMan;
-static mut UPDMAN: LazyLock<UpdMan> = LazyLock::new(|| UpdMan::default());
+static mut UPDMAN: LazyLock<UpdMan> = LazyLock::new(UpdMan::default);
 fn main() -> miette::Result<()> {
     fmt().init();
     #[allow(static_mut_refs)]

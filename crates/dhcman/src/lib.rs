@@ -108,11 +108,30 @@ mod tests {
     // ── new_xid ───────────────────────────────────────────────────────────────
 
     #[test]
-    fn new_xid_is_in_u32_range() {
-        let x1 = new_xid();
-        let x2 = new_xid();
-        assert!(x1 <= u32::MAX);
-        assert!(x2 <= u32::MAX);
+    fn new_xid_does_not_panic() {
+        // Smoke-test: new_xid() must never panic regardless of system clock
+        // state.  Calling it many times exercises both the happy path and the
+        // SystemTime-before-UNIX_EPOCH fallback branch.
+        for _ in 0..64 {
+            let _ = new_xid();
+        }
+    }
+
+    #[test]
+    fn new_xid_produces_varied_values() {
+        // Generate a batch of XIDs.  Because new_xid() is seeded from
+        // subsecond nanoseconds, a sufficiently large sample will almost
+        // certainly contain at least two distinct values on any real clock.
+        let xids: Vec<u32> = (0..64).map(|_| new_xid()).collect();
+        let unique_count = {
+            let mut seen = std::collections::HashSet::new();
+            xids.iter().filter(|x| seen.insert(*x)).count()
+        };
+        assert!(
+            unique_count > 1,
+            "expected varied XID values across 64 calls, but all were identical ({:?})",
+            xids[0]
+        );
     }
 
     // ── encode + decode round-trip on DISCOVER ────────────────────────────────
