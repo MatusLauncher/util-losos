@@ -346,6 +346,7 @@ name = "cluman"
 version = "0.1.0"
 dependencies = [
  "actman",
+ "clap",
  "either",
  "miette",
  "minreq",
