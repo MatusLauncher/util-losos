@@ -2,7 +2,7 @@ use std::{
     env::args,
     fs,
     net::Ipv4Addr,
-    path::Path,
+    path::{Path, PathBuf},
     process::{self, Command},
     str::FromStr,
     thread,
@@ -10,6 +10,7 @@ use std::{
 };
 
 use actman::cmdline::CmdLineOptions;
+use clap::Parser;
 use miette::{IntoDiagnostic, bail, miette};
 use rustyx::RustyX;
 use serde_json::json;
@@ -22,6 +23,32 @@ mod schemas;
 
 const PORT: u16 = 9999;
 
+// ── Controller CLI args ───────────────────────────────────────────────────────
+
+/// Push Docker Compose files to cluster servers.
+///
+/// Reads each compose file from disk and forwards its full contents to every
+/// listed server.  The controller exits once all pushes have completed.
+#[derive(Debug, Parser)]
+#[command(version, about)]
+struct ControllerArgs {
+    /// One or more Docker Compose files to push to the servers.
+    #[arg(required = true)]
+    compose_files: Vec<PathBuf>,
+
+    /// Comma-separated server base-URLs to push tasks to.
+    ///
+    /// Example: `http://10.0.0.1:9999,http://10.0.0.2:9999`
+    #[arg(
+        short,
+        long,
+        env = "SERVER_URLS",
+        value_delimiter = ',',
+        required = true
+    )]
+    servers: Vec<String>,
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 #[tokio::main]
@@ -30,11 +57,7 @@ async fn main() -> miette::Result<()> {
 
     // argv[0] determines the mode — the binary should be symlinked (or copied)
     // to `client`, `server`, or `controller` / `cluman`.
-    let mut argv = args();
-    let argv0 = argv.next().unwrap_or_default();
-    // Remaining args are forwarded to the controller as compose file paths.
-    let rest: Vec<String> = argv.collect();
-
+    let argv0 = args().next().unwrap_or_default();
     let mode = Mode::from_str(
         Path::new(&argv0)
             .file_name()
@@ -43,12 +66,18 @@ async fn main() -> miette::Result<()> {
             .as_ref(),
     )?;
 
-    let cmdline = CmdLineOptions::new()?;
-
     match mode {
-        Mode::Controller => run_controller(&cmdline, &rest).await,
-        Mode::Server => run_server(&cmdline).await,
-        Mode::Client => run_client(&cmdline).await,
+        // Controller is a one-shot CLI tool — configured entirely via clap.
+        Mode::Controller => run_controller(ControllerArgs::parse()).await,
+        // Server and client are boot-time daemons — configured via /proc/cmdline.
+        Mode::Server => {
+            let cmdline = CmdLineOptions::new()?;
+            run_server(&cmdline).await
+        }
+        Mode::Client => {
+            let cmdline = CmdLineOptions::new()?;
+            run_client(&cmdline).await
+        }
     }
 }
 
@@ -57,61 +86,27 @@ async fn main() -> miette::Result<()> {
 // One-shot: reads compose files from disk, pushes their full contents to every
 // listed server as Task objects, then exits.  It does NOT run a server.
 //
-// /proc/cmdline keys:
-//   server_urls=http://HOST:PORT,...   (required — comma-separated)
-//
-// Compose files are taken from the remaining process arguments (argv[1..]).
-// If none are provided, falls back to:
-//   compose_files=/path/a.yml,...      (comma-separated in /proc/cmdline)
+// All configuration comes from clap (see ControllerArgs above).
 
-async fn run_controller(cmdline: &CmdLineOptions, compose_args: &[String]) -> miette::Result<()> {
-    let server_urls: Vec<String> = cmdline
-        .opts()
-        .get("server_urls")
-        .map(|s| s.split(',').map(str::to_string).collect())
-        .unwrap_or_default();
-
-    if server_urls.is_empty() {
-        bail!("No server URLs in /proc/cmdline — add server_urls=http://HOST:PORT,...");
-    }
-
-    // Compose files: prefer process argv, fall back to /proc/cmdline key.
-    let compose_paths: Vec<String> = if !compose_args.is_empty() {
-        compose_args.to_vec()
-    } else {
-        cmdline
-            .opts()
-            .get("compose_files")
-            .map(|s| s.split(',').map(str::to_string).collect())
-            .unwrap_or_default()
-    };
-
-    if compose_paths.is_empty() {
-        bail!(
-            "No compose files specified. \
-             Pass them as arguments or set compose_files=... in /proc/cmdline."
-        );
-    }
-
+async fn run_controller(args: ControllerArgs) -> miette::Result<()> {
     info!(
-        servers = server_urls.len(),
-        files = compose_paths.len(),
+        servers = args.servers.len(),
+        files = args.compose_files.len(),
         "Controller pushing tasks"
     );
 
     let mut errors: usize = 0;
 
-    for path_str in &compose_paths {
-        let file_path = Path::new(path_str);
+    for file_path in &args.compose_files {
         let filename = file_path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| path_str.clone());
+            .unwrap_or_else(|| file_path.to_string_lossy().into_owned());
 
         let content = match fs::read_to_string(file_path) {
             Ok(c) => c,
             Err(e) => {
-                error!(path = path_str, error = %e, "Failed to read compose file — skipping");
+                error!(path = %file_path.display(), error = %e, "Failed to read compose file — skipping");
                 errors += 1;
                 continue;
             }
@@ -120,7 +115,7 @@ async fn run_controller(cmdline: &CmdLineOptions, compose_args: &[String]) -> mi
         let task = Task::new(filename.clone(), content);
         let body = serde_json::to_string(&task).into_diagnostic()?;
 
-        for url in &server_urls {
+        for url in &args.servers {
             match minreq::post(format!("{url}/api/push-task"))
                 .with_header("Content-Type", "application/json")
                 .with_body(body.clone())
