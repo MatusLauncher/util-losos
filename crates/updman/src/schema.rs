@@ -23,6 +23,7 @@ pub struct UpdMan {
     image_tag: String,
 
     /// Reserved for future integrity verification. Not currently validated.
+    #[allow(dead_code)]
     hash: String,
 }
 

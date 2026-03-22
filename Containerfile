@@ -32,14 +32,17 @@ RUN cd /mdl \
     && cp target/x86_64-unknown-linux-musl/release/actman /actman \
     && cp target/x86_64-unknown-linux-musl/release/updman /updman \
     && cp target/x86_64-unknown-linux-musl/release/dhcman /dhcman \
+    && cp target/x86_64-unknown-linux-musl/release/cluman /cluman \
     && rm -rf target /root/.cargo/registry
 
 # packaging
 FROM alpine:latest as stage1
+ARG MODE=client
 COPY --from=stage0 out out
 COPY --from=util /actman out/bin/init
 COPY --from=util /updman out/bin/updman
 COPY --from=util /dhcman out/bin/dhcman
+COPY --from=util /cluman out/bin/cluman
 RUN cd out && ln -sf bin sbin
 RUN printf '#!/bin/sh\nip link set lo up && ip addr add 127.0.0.1/8 dev lo\n' > out/etc/init/start/00-loopback \
     && chmod +x out/etc/init/start/00-loopback
@@ -52,6 +55,21 @@ RUN cd out && ln -sf nerdctl bin/podman
 RUN cd out && ln -sf init bin/poweroff
 RUN cd out && ln -sf init bin/reboot
 RUN cd out && ln -sf bin/init init
+# cluman mode — the binary dispatches on argv[0], so symlink it to the mode name.
+# client/server are boot-time daemons started by init; controller is a one-shot
+# CLI tool and is only installed as a named symlink without an init entry.
+RUN set -e; \
+    case "$MODE" in \
+    client) \
+    cd out && ln -sf cluman bin/client \
+    && ln -sf /bin/client etc/init/start/cluman ;; \
+    server) \
+    cd out && ln -sf cluman bin/server \
+    && ln -sf /bin/server etc/init/start/cluman ;; \
+    controller) \
+    cd out && ln -sf cluman bin/controller ;; \
+    *) echo "Unknown MODE: $MODE (expected client, server, or controller)" >&2; exit 1 ;; \
+    esac
 RUN apk add fakeroot
 RUN fakeroot sh -c 'mknod out/dev/console c 5 1 && cd out && find . | cpio -o -H newc | gzip > ../os.tar.gz'
 # final

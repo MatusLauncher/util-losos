@@ -1,10 +1,14 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, str::FromStr};
 
 use clap::Parser;
 use miette::{IntoDiagnostic, bail};
 use tracing::{error, info};
 
 use crate::schemas::{IpRange, Task};
+
+fn parse_ip_range(s: &str) -> Result<IpRange, String> {
+    IpRange::from_str(s).map_err(|e| e.to_string())
+}
 
 // ── Controller CLI args ───────────────────────────────────────────────────────
 
@@ -30,6 +34,7 @@ pub(crate) struct ControllerArgs {
         long,
         env = "SERVER_IPS",
         value_delimiter = ',',
+        value_parser = parse_ip_range,
         required = true
     )]
     servers: Vec<IpRange>,

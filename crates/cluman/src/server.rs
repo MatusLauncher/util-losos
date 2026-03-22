@@ -91,7 +91,11 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
     server.get("/clients", move |_req, res| {
         let st = st.clone();
         async move {
-            let addrs: Vec<String> = st.client_addrs().iter().map(|a| a.to_string()).collect();
+            let addrs: Vec<String> = st
+                .client_addrs()
+                .iter()
+                .map(|a: &std::net::Ipv4Addr| a.to_string())
+                .collect();
             res.json(json!({ "clients": addrs }))
         }
     });

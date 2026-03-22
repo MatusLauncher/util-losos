@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use cluman::schemas::Mode;
 use isoman::{LIMINE_BRANCH, LIMINE_CONF, LIMINE_REPO};
 use miette::{Context, IntoDiagnostic, bail};
 use tracing::info;
@@ -11,6 +12,7 @@ pub(crate) fn build_iso(
     initramfs: &Path,
     output: &Path,
     stage: &Path,
+    _mode: &Mode,
 ) -> miette::Result<()> {
     // ── Clone Limine binary release ───────────────────────────────────────────
 

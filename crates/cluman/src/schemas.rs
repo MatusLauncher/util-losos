@@ -92,7 +92,7 @@ impl FromStr for IpRange {
 // ── Mode ──────────────────────────────────────────────────────────────────────
 
 #[derive(
-    Serialize, Deserialize, Default, EnumIter, Clone, Copy, PartialEq, Eq, PartialOrd, Ord,
+    Debug, Serialize, Deserialize, Default, EnumIter, Clone, Copy, PartialEq, Eq, PartialOrd, Ord,
 )]
 pub enum Mode {
     #[default]

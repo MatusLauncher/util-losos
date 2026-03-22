@@ -1,14 +1,19 @@
 use std::{env::args, path::Path, str::FromStr};
 
+// Re-export the library's schemas module so that `crate::schemas` resolves
+// for the client / server / controller sub-modules declared below.
+mod schemas {
+    pub use cluman::schemas::*;
+}
+
 use actman::cmdline::CmdLineOptions;
 use clap::Parser;
 use tracing_subscriber::fmt;
 
-use crate::schemas::Mode;
+use cluman::schemas::Mode;
 
 mod client;
 mod controller;
-mod schemas;
 mod server;
 
 pub(crate) const PORT: u16 = 9999;
