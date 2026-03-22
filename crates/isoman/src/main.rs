@@ -2,52 +2,61 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-use isoman::{LIMINE_BRANCH, LIMINE_CONF, LIMINE_REPO};
+use clap::Parser;
+use isoman::{LIMINE_BRANCH, LIMINE_CONF, LIMINE_REPO, resolve_output, scopeguard};
 use miette::{Context, IntoDiagnostic, bail};
 use tracing::info;
 
-/// Resolve `raw` to an absolute output path.
-///
-/// * If `raw` is already absolute it is returned as-is.
-/// * Otherwise it is joined to `base` (usually the current working directory).
-pub(crate) fn resolve_output(base: &PathBuf, raw: &str) -> PathBuf {
-    let p = PathBuf::from(raw);
-    if p.is_absolute() { p } else { base.join(p) }
+/// Build a bootable hybrid ISO image using the Limine bootloader.
+#[derive(Debug, Parser)]
+#[command(version, about)]
+struct Args {
+    /// Path to the kernel image.
+    ///
+    /// Defaults to the running kernel (/boot/vmlinuz-<uname -r>) when omitted.
+    #[arg(short, long, env = "KERNEL")]
+    kernel: Option<PathBuf>,
+
+    /// Path to the initramfs archive.
+    #[arg(short, long, env = "INITRAMFS", default_value = "os.initramfs.tar.gz")]
+    initramfs: PathBuf,
+
+    /// Destination path for the produced ISO file.
+    #[arg(short, long, env = "OUTPUT", default_value = "os.iso")]
+    output: String,
+}
+
+fn default_kernel() -> PathBuf {
+    let release = Command::new("uname")
+        .arg("-r")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+    PathBuf::from(format!("/boot/vmlinuz-{release}"))
 }
 
 fn main() -> miette::Result<()> {
     tracing_subscriber::fmt::init();
 
-    let kernel = PathBuf::from(std::env::var("KERNEL").unwrap_or_else(|_| {
-        format!(
-            "/boot/vmlinuz-{}",
-            Command::new("uname")
-                .arg("-r")
-                .output()
-                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                .unwrap_or_default()
-        )
-    }));
+    let args = Args::parse();
 
-    let initramfs = PathBuf::from(
-        std::env::var("INITRAMFS").unwrap_or_else(|_| "os.initramfs.tar.gz".to_string()),
-    );
+    let kernel = args.kernel.unwrap_or_else(default_kernel);
 
     // Resolve output to an absolute path before we enter the staging dir.
     let output = {
-        let raw = std::env::var("OUTPUT").unwrap_or_else(|_| "os.iso".to_string());
         let cwd = std::env::current_dir().into_diagnostic()?;
-        resolve_output(&cwd, &raw)
+        resolve_output(&cwd, &args.output)
     };
 
     info!(
         kernel    = %kernel.display(),
-        initramfs = %initramfs.display(),
+        initramfs = %args.initramfs.display(),
         output    = %output.display(),
         "Starting isoman (Limine)"
     );
 
     let stage = std::env::temp_dir().join(format!("isoman-{}", std::process::id()));
+    let _cleanup = scopeguard(&stage);
 
     // ── Clone Limine binary release ───────────────────────────────────────────
 
@@ -108,7 +117,7 @@ fn main() -> miette::Result<()> {
     fs::copy(&kernel, iso_root.join("boot").join("vmlinuz")).into_diagnostic()?;
 
     info!("Copying initramfs");
-    fs::copy(&initramfs, iso_root.join("boot").join("initramfs.gz")).into_diagnostic()?;
+    fs::copy(&args.initramfs, iso_root.join("boot").join("initramfs.gz")).into_diagnostic()?;
 
     info!("Writing limine.conf");
     fs::write(boot_limine.join("limine.conf"), LIMINE_CONF).into_diagnostic()?;

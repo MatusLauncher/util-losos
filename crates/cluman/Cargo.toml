@@ -1,0 +1,17 @@
+[package]
+name = "cluman"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+actman = { version = "0.1.0", path = "../actman" }
+either = { version = "1.15.0", features = ["serde"] }
+miette.workspace = true
+minreq = "2.14.1"
+rustyx = "0.2.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+strum = { version = "0.28.0", features = ["derive"] }
+tokio = { version = "1.50.0", features = ["macros"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
