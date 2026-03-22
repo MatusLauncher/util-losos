@@ -56,23 +56,31 @@ impl Preboot {
 
     /// Mounts each discovered virtual filesystem via `mount(2)`.
     pub fn mount(&self) -> miette::Result<()> {
-        let opts = CmdLineOptions::new();
-        let mut drive = String::new();
-        match opts?.opts().get("data_drive") {
-           Some(param) => drive.push_str(param),
-           None => warn!("The data drive drive not found. This isn't an issue if you're just trying out MDL, however as the entire operating system is running entirely in RAM, it's highly recommended to format one and add it to the kernel options.")
-       };
-       if !drive.is_empty() {
-           info!("Mounting the data drive to /data");
-           create_dir_all("/data").into_diagnostic()?;
-           mount(drive, Path::new("/data"), String::new(), MountFlags::all(), None).into_diagnostic()?;
-       }
+        // Mount virtual filesystems first — /proc must exist before we can
+        // read /proc/cmdline below.
         self.mounts
             .iter()
             .try_for_each(|(name, fstype)| -> miette::Result<()> {
                 info!("Mounting {fstype} to /{name}");
                 mount(*name, format!("/{name}").as_str(), *fstype, MountFlags::empty(), None::<&CStr>)
                     .into_diagnostic()
-            })
+            })?;
+
+        // Now /proc is mounted; check for an optional data drive.
+        let drive = CmdLineOptions::new()?
+            .opts()
+            .get("data_drive")
+            .cloned();
+        match drive {
+            Some(ref d) => {
+                info!("Mounting the data drive to /data");
+                create_dir_all("/data").into_diagnostic()?;
+                mount(d.as_str(), Path::new("/data"), String::new(), MountFlags::empty(), None::<&CStr>)
+                    .into_diagnostic()?;
+            }
+            None => warn!("No data_drive kernel parameter set. The OS is running entirely in RAM."),
+        }
+
+        Ok(())
     }
 }

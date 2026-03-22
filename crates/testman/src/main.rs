@@ -79,6 +79,13 @@ fn main() -> miette::Result<()> {
                 Ok(false) => TestResult::Timeout,
                 Err(e) => TestResult::Fail(e.to_string()),
             }
+        })
+        .test("dhcp configured eth0", |h| {
+            match h.wait_for("eth0 configured via DHCP", Duration::from_secs(90)) {
+                Ok(true) => TestResult::Pass,
+                Ok(false) => TestResult::Timeout,
+                Err(e) => TestResult::Fail(e.to_string()),
+            }
         });
 
     let report = suite.run(config)?;

@@ -1,0 +1,13 @@
+[package]
+name = "dhcman"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dhcproto = "0.12"
+libc = "0.2"
+netlink-packet-core = "0.8"
+netlink-packet-route = "0.29"
+miette.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

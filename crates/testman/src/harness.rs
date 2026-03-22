@@ -48,12 +48,16 @@ impl TestHarness {
                 .to_str()
                 .ok_or_else(|| miette!("initramfs path is not valid UTF-8"))?,
             "-append",
-            "console=ttyS0 earlyprintk=ttyS0",
+            "console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0",
             "-nographic",
             "-m",
             &config.memory,
             "-smp",
             &config.cpus.to_string(),
+            "-netdev",
+            "user,id=n0",
+            "-device",
+            "virtio-net-pci,netdev=n0",
         ]);
 
         if config.kvm {

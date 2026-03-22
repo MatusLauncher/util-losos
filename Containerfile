@@ -31,6 +31,7 @@ RUN cd /mdl \
     && cargo build --release --target x86_64-unknown-linux-musl \
     && cp target/x86_64-unknown-linux-musl/release/actman /actman \
     && cp target/x86_64-unknown-linux-musl/release/updman /updman \
+    && cp target/x86_64-unknown-linux-musl/release/dhcman /dhcman \
     && rm -rf target /root/.cargo/registry
 
 # packaging
@@ -38,11 +39,11 @@ FROM alpine:latest as stage1
 COPY --from=stage0 out out
 COPY --from=util /actman out/bin/init
 COPY --from=util /updman out/bin/updman
+COPY --from=util /dhcman out/bin/dhcman
 RUN cd out && ln -sf bin sbin
-RUN printf '#!/bin/sh\n[ "$1" = "bound" ] || [ "$1" = "renew" ] || exit 0\nifconfig "$interface" "$ip" netmask "$subnet"\n[ -n "$router" ] && route add default gw "$router"\nfor ns in $dns; do echo "nameserver $ns"; done > /etc/resolv.conf\n' > out/bin/udhcpc-script \
-    && chmod +x out/bin/udhcpc-script
-RUN printf '#!/bin/sh\nifconfig lo 127.0.0.1 netmask 255.0.0.0 up\nifconfig eth0 up\nudhcpc -i eth0 -q -s /bin/udhcpc-script\n' > out/etc/init/start/00-network \
-    && chmod +x out/etc/init/start/00-network
+RUN printf '#!/bin/sh\nip link set lo up && ip addr add 127.0.0.1/8 dev lo\n' > out/etc/init/start/00-loopback \
+    && chmod +x out/etc/init/start/00-loopback
+RUN cd out && ln -sf /bin/dhcman etc/init/start/00-eth0
 RUN cd out && ln -sf /bin/buildkitd etc/init/start/buildkitd
 RUN cd out && ln -sf /bin/containerd etc/init/start/containerd
 RUN cd out && ln -sf /bin/sh etc/init/start/sh

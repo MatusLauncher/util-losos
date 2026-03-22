@@ -58,6 +58,49 @@ if [[ ! -f "$KERNEL" ]]; then
     exit 1
 fi
 
+# Build a supplemental initrd with virtio-net kernel modules so that the NIC
+# driver is available even when the main initramfs has no modules.
+_build_mods_initrd() {
+    local kver="$1"
+    local mods_root
+    mods_root=$(mktemp -d)
+
+    local net_core="$mods_root/lib/modules/$kver/kernel/net/core"
+    local net_drivers="$mods_root/lib/modules/$kver/kernel/drivers/net"
+    mkdir -p "$net_core" "$net_drivers" "$mods_root/etc/init/start"
+
+    # Decompress modules so busybox insmod doesn't need xz support.
+    xz -dk --stdout "/lib/modules/$kver/kernel/net/core/failover.ko.xz" \
+        > "$net_core/failover.ko"
+    xz -dk --stdout "/lib/modules/$kver/kernel/drivers/net/net_failover.ko.xz" \
+        > "$net_drivers/net_failover.ko"
+    xz -dk --stdout "/lib/modules/$kver/kernel/drivers/net/virtio_net.ko.xz" \
+        > "$net_drivers/virtio_net.ko"
+
+    # Startup script (sorts before 00-eth0 so it runs first).
+    cat > "$mods_root/etc/init/start/000-load-virtio" <<EOF
+#!/bin/sh
+insmod /lib/modules/$kver/kernel/net/core/failover.ko
+insmod /lib/modules/$kver/kernel/drivers/net/net_failover.ko
+insmod /lib/modules/$kver/kernel/drivers/net/virtio_net.ko
+EOF
+    chmod +x "$mods_root/etc/init/start/000-load-virtio"
+
+    local out
+    out=$(mktemp)
+    (cd "$mods_root" && find . | cpio -o -H newc 2>/dev/null | gzip > "$out")
+    rm -rf "$mods_root"
+    echo "$out"
+}
+
+KVER=$(uname -r)
+MODS_INITRD=$(_build_mods_initrd "$KVER")
+MERGED_INITRAMFS=$(mktemp --suffix=.initramfs)
+cat "$INITRAMFS" "$MODS_INITRD" > "$MERGED_INITRAMFS"
+rm -f "$MODS_INITRD"
+trap 'rm -f "$MERGED_INITRAMFS"' EXIT
+INITRAMFS="$MERGED_INITRAMFS"
+
 if [[ "$TEST" -eq 1 ]]; then
     echo "==> Running testman integration tests"
     echo "    Kernel:    $KERNEL"
@@ -83,9 +126,10 @@ echo ""
 exec qemu-system-x86_64 \
     -kernel "$KERNEL" \
     -initrd "$INITRAMFS" \
-    -append "quiet net.ifnames=0 biosdevname=0" \
+    -append "quiet net.ifnames=0 biosdevname=0 console=ttyS0" \
+    -nographic \
     -m "$MEMORY" \
     -smp "$CPUS" \
-    -net nic \
-    -net user \
+    -netdev user,id=n0 \
+    -device virtio-net-pci,netdev=n0 \
     -enable-kvm

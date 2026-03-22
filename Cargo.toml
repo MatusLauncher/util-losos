@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/actman", "crates/updman", "crates/testman"]
+members = ["crates/actman", "crates/updman", "crates/dhcman", "crates/testman"]
 
 [workspace.dependencies]
 miette = {version = "*", features = ["fancy"]}
@@ -11,3 +11,4 @@ walkdir = "*"
 [profile.release]
 lto = true
 codegen-units = 1
+strip = true

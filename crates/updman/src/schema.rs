@@ -57,6 +57,12 @@ impl UpdMan {
     /// Returns a [`miette::Report`] if any subprocess fails or a filesystem
     /// operation cannot be completed.
     pub fn update(&self) -> miette::Result<()> {
+        info!("Pulling new MDL image from registry...");
+        Command::new("nerdctl")
+            .arg("pull")
+            .arg(format!("{}/{}", self.base_url, self.image_tag))
+            .output()
+            .into_diagnostic()?;
         info!("Downloading new MDL tarball...");
         let out = String::from_utf8(
             Command::new("nerdctl")
