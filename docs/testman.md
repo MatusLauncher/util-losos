@@ -19,7 +19,7 @@ Exit code is `0` when all tests pass, `1` when any test fails or times out — s
 
 ## How it works
 
-```
+```text
 launch.sh --test
     └─ cargo run -p testman
            ├─ TestSuite::run()         spawns one QEMU process
@@ -57,7 +57,7 @@ Patterns are substring matches against raw serial output lines. The `Mounting` a
 
 ## Output
 
-```
+```text
 --- Test Results ---
   PASS  kernel boots
   PASS  init starts
@@ -74,7 +74,7 @@ On failure the full captured QEMU output is available via `TestHarness::dump_log
 
 Wraps a `Child` QEMU process. A background thread drains stdout into an `mpsc` channel. `wait_for` receives from the channel with a deadline, appending every line to an internal log.
 
-```rust
+```rust,ignore
 pub fn wait_for(&mut self, pattern: &str, timeout: Duration) -> miette::Result<bool>
 pub fn send(&mut self, line: &str) -> miette::Result<()>   // write to serial stdin
 pub fn dump_log(&self) -> &[String]
@@ -87,7 +87,7 @@ pub fn shutdown(self)                                        // kills QEMU
 
 Builder that accumulates test closures and runs them sequentially against one harness.
 
-```rust
+```rust,ignore
 TestSuite::new()
     .test("name", |h| { ... TestResult::Pass })
     .run(config)?
@@ -103,7 +103,7 @@ Reads env vars, constructs `HarnessConfig`, wires up the four built-in test case
 
 Add a `.test()` call in `crates/testman/src/main.rs`:
 
-```rust
+```rust,ignore
 .test("nerdctl available", |h| {
     match h.wait_for("nerdctl", Duration::from_secs(60)) {
         Ok(true) => TestResult::Pass,

@@ -60,6 +60,7 @@ impl UpdMan {
         info!("Pulling new MDL image from registry...");
         Command::new("nerdctl")
             .arg("pull")
+            .arg("--insecure-registry")
             .arg(format!("{}/{}", self.base_url, self.image_tag))
             .output()
             .into_diagnostic()?;

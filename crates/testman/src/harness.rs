@@ -14,6 +14,33 @@ pub struct HarnessConfig {
     pub kvm: bool,
 }
 
+impl HarnessConfig {
+    pub fn from_env() -> Self {
+        let kernel = PathBuf::from(std::env::var("KERNEL").unwrap_or_else(|_| {
+            format!(
+                "/boot/vmlinuz-{}",
+                std::process::Command::new("uname")
+                    .arg("-r")
+                    .output()
+                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                    .unwrap_or_default()
+            )
+        }));
+        let initramfs = PathBuf::from(
+            std::env::var("INITRAMFS").unwrap_or_else(|_| "os.initramfs.tar.gz".to_string()),
+        );
+        let memory = std::env::var("MEMORY").unwrap_or_else(|_| "2G".to_string());
+        let cpus = std::env::var("CPUS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(2u32);
+        let kvm = std::env::var("KVM")
+            .map(|v| v != "0" && v.to_lowercase() != "false")
+            .unwrap_or(true);
+        Self { kernel, initramfs, memory, cpus, kvm }
+    }
+}
+
 impl Default for HarnessConfig {
     fn default() -> Self {
         Self {

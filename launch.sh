@@ -16,11 +16,12 @@ build_initramfs() {
 }
 
 usage() {
-    echo "Usage: $0 [--build] [--test] [--kernel <path>]"
+    echo "Usage: $0 [--build] [--test] [--iso] [--kernel <path>]"
     echo ""
     echo "Options:"
     echo "  --build          Build the initramfs from Containerfile before launching"
     echo "  --test           Run testman integration tests instead of interactive QEMU"
+    echo "  --iso            Create a bootable ISO image from the kernel and initramfs"
     echo "  --kernel <path>  Path to kernel image (default: host kernel)"
     echo ""
     echo "Environment variables:"
@@ -28,15 +29,18 @@ usage() {
     echo "  MEMORY   VM memory (default: 2G)"
     echo "  CPUS     VM CPU count (default: 2)"
     echo "  KVM      Enable KVM acceleration (default: 1, set to 0 for CI)"
+    echo "  OUTPUT   ISO output path for --iso (default: os.iso)"
 }
 
 BUILD=0
 TEST=0
+ISO=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --build) BUILD=1; shift ;;
         --test) TEST=1; shift ;;
+        --iso) ISO=1; shift ;;
         --kernel) KERNEL="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1"; usage; exit 1 ;;
@@ -113,7 +117,21 @@ if [[ "$TEST" -eq 1 ]]; then
         INITRAMFS="$INITRAMFS" \
         MEMORY="$MEMORY" \
         CPUS="$CPUS" \
-        cargo run -p testman
+        KVM="${KVM:-1}" \
+        cargo test -p testman -- --test-threads=1
+fi
+
+if [[ "$ISO" -eq 1 ]]; then
+    echo "==> Creating bootable ISO"
+    echo "    Kernel:    $KERNEL"
+    echo "    Initramfs: $INITRAMFS"
+    echo "    Output:    ${OUTPUT:-os.iso}"
+    echo ""
+    exec env \
+        KERNEL="$KERNEL" \
+        INITRAMFS="$INITRAMFS" \
+        OUTPUT="${OUTPUT:-os.iso}" \
+        cargo run -p isoman
 fi
 
 echo "==> Launching initramfs"
@@ -126,8 +144,7 @@ echo ""
 exec qemu-system-x86_64 \
     -kernel "$KERNEL" \
     -initrd "$INITRAMFS" \
-    -append "quiet net.ifnames=0 biosdevname=0 console=ttyS0" \
-    -nographic \
+    -append "quiet net.ifnames=0 biosdevname=0" \
     -m "$MEMORY" \
     -smp "$CPUS" \
     -netdev user,id=n0 \

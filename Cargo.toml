@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/actman", "crates/updman", "crates/dhcman", "crates/testman"]
+members = ["crates/actman", "crates/updman", "crates/dhcman", "crates/testman", "crates/isoman"]
 
 [workspace.dependencies]
 miette = {version = "*", features = ["fancy"]}
