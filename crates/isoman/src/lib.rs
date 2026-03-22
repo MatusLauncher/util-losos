@@ -6,13 +6,13 @@ pub const LIMINE_BRANCH: &str = "v10.x-binary";
 pub const LIMINE_CONF: &str = r#"timeout: 5
 default_entry: 1
 
-/util-mdl
+/MDL
     protocol: linux
     path: boot():/boot/vmlinuz
     cmdline: quiet net.ifnames=0 biosdevname=0
     module_path: boot():/boot/initramfs.gz
 
-/util-mdl (serial)
+/MDL on the serial port
     protocol: linux
     path: boot():/boot/vmlinuz
     cmdline: console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0
