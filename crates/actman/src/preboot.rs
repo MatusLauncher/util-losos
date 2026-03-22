@@ -12,7 +12,7 @@ use rustix::ffi::CStr;
 use rustix::mount::{MountFlags, mount};
 use tracing::{info, warn};
 
-use crate::cmdline::CmdLineOptions;
+use actman::cmdline::CmdLineOptions;
 
 /// `(directory_name, filesystem_type)` pairs for the standard virtual
 /// filesystems that must be mounted in the early boot environment.

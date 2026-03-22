@@ -3,7 +3,6 @@
 use crate::{preboot::Preboot, reboot::RebootCMD};
 use std::process::Command;
 use strum::IntoEnumIterator;
-mod cmdline;
 mod preboot;
 mod reboot;
 use miette::IntoDiagnostic;

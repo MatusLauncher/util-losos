@@ -5,22 +5,37 @@ use std::process::Command;
 use miette::{Context, IntoDiagnostic, bail};
 use tracing::info;
 
-/// The grub.cfg written into every ISO image produced by isoman.
+/// URL of the Limine binary release repository (GitHub mirror of Codeberg).
+pub(crate) const LIMINE_REPO: &str = "https://github.com/limine-bootloader/limine.git";
+
+/// Git branch to clone for the pre-built binary release.
+pub(crate) const LIMINE_BRANCH: &str = "v10.x-binary";
+
+/// The limine.conf written into every ISO image produced by isoman.
 ///
-/// Contains two menu entries: a silent default boot and a serial-console
+/// Uses the Limine v10.x configuration format:
+/// - `/title` lines open a boot entry.
+/// - `protocol: linux` selects the Linux boot protocol.
+/// - `path:` points to the kernel inside the ISO.
+/// - `cmdline:` passes kernel command-line arguments.
+/// - `module_path:` loads the initramfs.
+///
+/// Two entries are provided: a silent default boot and a serial-console
 /// variant useful for headless debugging.
-pub(crate) const GRUB_CFG: &str = r#"set default=0
-set timeout=5
+pub(crate) const LIMINE_CONF: &str = r#"timeout: 5
+default_entry: 1
 
-menuentry "util-mdl" {
-    linux  /boot/vmlinuz quiet net.ifnames=0 biosdevname=0
-    initrd /boot/initramfs.gz
-}
+/util-mdl
+    protocol: linux
+    path: boot():/boot/vmlinuz
+    cmdline: quiet net.ifnames=0 biosdevname=0
+    module_path: boot():/boot/initramfs.gz
 
-menuentry "util-mdl (serial)" {
-    linux  /boot/vmlinuz console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0
-    initrd /boot/initramfs.gz
-}
+/util-mdl (serial)
+    protocol: linux
+    path: boot():/boot/vmlinuz
+    cmdline: console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0
+    module_path: boot():/boot/initramfs.gz
 "#;
 
 /// Resolve `raw` to an absolute output path.
@@ -33,8 +48,6 @@ pub(crate) fn resolve_output(base: &PathBuf, raw: &str) -> PathBuf {
 }
 
 fn main() -> miette::Result<()> {
-    // NOTE: main() delegates to the extracted helpers above so that the core
-    // logic remains unit-testable without spawning processes.
     tracing_subscriber::fmt::init();
 
     let kernel = PathBuf::from(std::env::var("KERNEL").unwrap_or_else(|_| {
@@ -52,7 +65,7 @@ fn main() -> miette::Result<()> {
         std::env::var("INITRAMFS").unwrap_or_else(|_| "os.initramfs.tar.gz".to_string()),
     );
 
-    // Resolve output to an absolute path before we change context to the staging dir.
+    // Resolve output to an absolute path before we enter the staging dir.
     let output = {
         let raw = std::env::var("OUTPUT").unwrap_or_else(|_| "os.iso".to_string());
         let cwd = std::env::current_dir().into_diagnostic()?;
@@ -60,10 +73,10 @@ fn main() -> miette::Result<()> {
     };
 
     info!(
-        kernel = %kernel.display(),
+        kernel    = %kernel.display(),
         initramfs = %initramfs.display(),
-        output = %output.display(),
-        "Starting isoman"
+        output    = %output.display(),
+        "Starting isoman (Limine)"
     );
 
     let stage = std::env::temp_dir().join(format!("isoman-{}", std::process::id()));
@@ -71,38 +84,147 @@ fn main() -> miette::Result<()> {
     // Clean up staging dir on exit regardless of outcome.
     let _cleanup = scopeguard(&stage);
 
-    let grub_dir = stage.join("boot").join("grub");
-    fs::create_dir_all(&grub_dir).into_diagnostic()?;
+    // ── Clone Limine binary release ───────────────────────────────────────────
 
-    info!("Copying kernel");
-    fs::copy(&kernel, stage.join("boot").join("vmlinuz")).into_diagnostic()?;
+    let limine_dir = stage.join("limine-bin");
 
-    info!("Copying initramfs");
-    fs::copy(&initramfs, stage.join("boot").join("initramfs.gz")).into_diagnostic()?;
-
-    info!("Writing grub.cfg");
-    fs::write(grub_dir.join("grub.cfg"), GRUB_CFG).into_diagnostic()?;
-
-    info!("Running grub-mkrescue");
-    let out = Command::new("grub-mkrescue")
+    info!(branch = LIMINE_BRANCH, "Cloning Limine binary release");
+    let clone_out = Command::new("git")
         .args([
-            "-o",
-            output
+            "clone",
+            "--branch",
+            LIMINE_BRANCH,
+            "--depth",
+            "1",
+            LIMINE_REPO,
+            limine_dir
                 .to_str()
-                .ok_or_else(|| miette::miette!("output path is not valid UTF-8"))?,
-            stage
-                .to_str()
-                .ok_or_else(|| miette::miette!("stage path is not valid UTF-8"))?,
+                .ok_or_else(|| miette::miette!("limine_dir path is not valid UTF-8"))?,
         ])
         .output()
         .into_diagnostic()
-        .wrap_err("grub-mkrescue not found; install grub2-common")?;
+        .wrap_err("git not found; install git")?;
 
-    if !out.status.success() {
+    if !clone_out.status.success() {
         bail!(
-            "grub-mkrescue failed (exit {}): {}",
-            out.status,
-            String::from_utf8_lossy(&out.stderr)
+            "git clone failed (exit {}): {}",
+            clone_out.status,
+            String::from_utf8_lossy(&clone_out.stderr)
+        );
+    }
+
+    // ── Build the limine host utility ─────────────────────────────────────────
+
+    info!("Building limine host tool");
+    let make_out = Command::new("make")
+        .current_dir(&limine_dir)
+        .output()
+        .into_diagnostic()
+        .wrap_err("make not found; install make")?;
+
+    if !make_out.status.success() {
+        bail!(
+            "make failed (exit {}): {}",
+            make_out.status,
+            String::from_utf8_lossy(&make_out.stderr)
+        );
+    }
+
+    // ── Assemble the ISO staging tree ─────────────────────────────────────────
+
+    let iso_root = stage.join("iso-root");
+    let boot_limine = iso_root.join("boot").join("limine");
+    let efi_boot = iso_root.join("EFI").join("BOOT");
+
+    fs::create_dir_all(&boot_limine).into_diagnostic()?;
+    fs::create_dir_all(&efi_boot).into_diagnostic()?;
+
+    info!("Copying kernel");
+    fs::copy(&kernel, iso_root.join("boot").join("vmlinuz")).into_diagnostic()?;
+
+    info!("Copying initramfs");
+    fs::copy(&initramfs, iso_root.join("boot").join("initramfs.gz")).into_diagnostic()?;
+
+    info!("Writing limine.conf");
+    fs::write(boot_limine.join("limine.conf"), LIMINE_CONF).into_diagnostic()?;
+
+    info!("Copying Limine boot files");
+    for filename in &[
+        "limine-bios.sys",
+        "limine-bios-cd.bin",
+        "limine-uefi-cd.bin",
+    ] {
+        fs::copy(limine_dir.join(filename), boot_limine.join(filename))
+            .into_diagnostic()
+            .wrap_err_with(|| format!("failed to copy Limine file: {filename}"))?;
+    }
+
+    fs::copy(limine_dir.join("BOOTX64.EFI"), efi_boot.join("BOOTX64.EFI"))
+        .into_diagnostic()
+        .wrap_err("failed to copy BOOTX64.EFI")?;
+
+    // ── Create the hybrid ISO with xorriso ────────────────────────────────────
+
+    let output_str = output
+        .to_str()
+        .ok_or_else(|| miette::miette!("output path is not valid UTF-8"))?;
+    let iso_root_str = iso_root
+        .to_str()
+        .ok_or_else(|| miette::miette!("iso_root path is not valid UTF-8"))?;
+
+    info!("Running xorriso");
+    let xorriso_out = Command::new("xorriso")
+        .args([
+            "-as",
+            "mkisofs",
+            "-R",
+            "-r",
+            "-J",
+            "-b",
+            "boot/limine/limine-bios-cd.bin",
+            "-no-emul-boot",
+            "-boot-load-size",
+            "4",
+            "-boot-info-table",
+            "-hfsplus",
+            "-apm-block-size",
+            "2048",
+            "--efi-boot",
+            "boot/limine/limine-uefi-cd.bin",
+            "-efi-boot-part",
+            "--efi-boot-image",
+            "--protective-msdos-label",
+            iso_root_str,
+            "-o",
+            output_str,
+        ])
+        .output()
+        .into_diagnostic()
+        .wrap_err("xorriso not found; install xorriso")?;
+
+    if !xorriso_out.status.success() {
+        bail!(
+            "xorriso failed (exit {}): {}",
+            xorriso_out.status,
+            String::from_utf8_lossy(&xorriso_out.stderr)
+        );
+    }
+
+    // ── Install Limine BIOS boot sectors into the ISO ─────────────────────────
+
+    info!("Running limine bios-install");
+    let limine_bin = limine_dir.join("limine");
+    let bios_install_out = Command::new(&limine_bin)
+        .args(["bios-install", output_str])
+        .output()
+        .into_diagnostic()
+        .wrap_err("failed to run limine bios-install")?;
+
+    if !bios_install_out.status.success() {
+        bail!(
+            "limine bios-install failed (exit {}): {}",
+            bios_install_out.status,
+            String::from_utf8_lossy(&bios_install_out.stderr)
         );
     }
 
@@ -130,7 +252,7 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::{GRUB_CFG, resolve_output, scopeguard};
+    use super::{LIMINE_BRANCH, LIMINE_CONF, LIMINE_REPO, resolve_output, scopeguard};
 
     // ── scopeguard ────────────────────────────────────────────────────────────
 
@@ -142,7 +264,6 @@ mod tests {
         assert!(path.is_dir(), "directory should exist before drop");
         {
             let _guard = scopeguard(&path);
-            // guard dropped here
         }
         assert!(!path.exists(), "directory should be removed after drop");
     }
@@ -159,33 +280,110 @@ mod tests {
         assert!(!path.exists());
     }
 
-    // ── GRUB_CFG content ──────────────────────────────────────────────────────
+    // ── LIMINE_CONF content ───────────────────────────────────────────────────
 
     #[test]
-    fn grub_cfg_contains_default_menuentry() {
+    fn limine_conf_contains_default_entry() {
         assert!(
-            GRUB_CFG.contains("menuentry \"util-mdl\""),
-            "GRUB_CFG must contain the default 'util-mdl' menuentry"
+            LIMINE_CONF.contains("/util-mdl\n"),
+            "LIMINE_CONF must contain the default 'util-mdl' entry"
         );
     }
 
     #[test]
-    fn grub_cfg_contains_serial_menuentry() {
+    fn limine_conf_contains_serial_entry() {
         assert!(
-            GRUB_CFG.contains("menuentry \"util-mdl (serial)\""),
-            "GRUB_CFG must contain the serial 'util-mdl (serial)' menuentry"
+            LIMINE_CONF.contains("/util-mdl (serial)\n"),
+            "LIMINE_CONF must contain the 'util-mdl (serial)' entry"
         );
     }
 
     #[test]
-    fn grub_cfg_has_two_menuentry_lines() {
-        let count = GRUB_CFG
+    fn limine_conf_has_two_entries() {
+        let count = LIMINE_CONF
             .lines()
-            .filter(|l| l.starts_with("menuentry"))
+            .filter(|l: &&str| l.starts_with('/'))
+            .count();
+        assert_eq!(count, 2, "expected exactly 2 entry lines, found {count}");
+    }
+
+    #[test]
+    fn limine_conf_uses_linux_protocol_for_all_entries() {
+        let count = LIMINE_CONF
+            .lines()
+            .filter(|l: &&str| l.trim() == "protocol: linux")
             .count();
         assert_eq!(
             count, 2,
-            "expected exactly 2 menuentry lines, found {count}"
+            "expected exactly 2 'protocol: linux' lines, found {count}"
+        );
+    }
+
+    #[test]
+    fn limine_conf_references_kernel_path() {
+        assert!(
+            LIMINE_CONF.contains("path: boot():/boot/vmlinuz"),
+            "LIMINE_CONF must reference the kernel at boot():/boot/vmlinuz"
+        );
+    }
+
+    #[test]
+    fn limine_conf_references_initramfs_path() {
+        assert!(
+            LIMINE_CONF.contains("module_path: boot():/boot/initramfs.gz"),
+            "LIMINE_CONF must reference the initramfs at boot():/boot/initramfs.gz"
+        );
+    }
+
+    #[test]
+    fn limine_conf_serial_entry_has_console_cmdline() {
+        let lines: Vec<&str> = LIMINE_CONF.lines().collect();
+        let serial_pos = lines
+            .iter()
+            .position(|l| *l == "/util-mdl (serial)")
+            .expect("serial entry must exist in LIMINE_CONF");
+        // Collect all lines belonging to the serial entry (until EOF or the
+        // next entry header that is not the serial one).
+        let serial_section: String = lines[serial_pos..]
+            .iter()
+            .take_while(|l| !l.starts_with('/') || l.contains("serial"))
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            serial_section.contains("console=ttyS0"),
+            "serial entry cmdline must contain console=ttyS0"
+        );
+        assert!(
+            serial_section.contains("earlyprintk=ttyS0"),
+            "serial entry cmdline must contain earlyprintk=ttyS0"
+        );
+    }
+
+    #[test]
+    fn limine_conf_has_timeout_setting() {
+        assert!(
+            LIMINE_CONF.lines().any(|l: &str| l.starts_with("timeout:")),
+            "LIMINE_CONF must have a global 'timeout:' option"
+        );
+    }
+
+    // ── Limine repo constants ─────────────────────────────────────────────────
+
+    #[test]
+    fn limine_repo_is_github_https_url() {
+        assert!(
+            LIMINE_REPO.starts_with("https://github.com/"),
+            "LIMINE_REPO must be a GitHub HTTPS URL, got: {LIMINE_REPO}"
+        );
+    }
+
+    #[test]
+    fn limine_branch_is_binary_release() {
+        assert!(
+            LIMINE_BRANCH.ends_with("-binary"),
+            "LIMINE_BRANCH must be a binary release branch (ending with '-binary'), \
+             got: {LIMINE_BRANCH}"
         );
     }
 

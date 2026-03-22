@@ -10,22 +10,9 @@ use std::{
 };
 
 use miette::IntoDiagnostic;
-use serde::{Deserialize, Serialize};
 use tracing::info;
 use walkdir::WalkDir;
-
-/// Update configuration, deserialised from `/etc/update.json`.
-///
-/// # Example `/etc/update.json`
-///
-/// ```json
-/// {
-///   "base_url":  "registry.example.com/mtos-v2",
-///   "image_tag": "util-mdl:latest",
-///   "hash":      "sha256:abc123"
-/// }
-/// ```
-#[derive(Serialize, Deserialize)]
+use actman::cmdline::CmdLineOptions;
 pub struct UpdMan {
     /// Container registry prefix, e.g. `"registry.example.com/mtos-v2"`.
     /// Combined with [`image_tag`](UpdMan::image_tag) as `<base_url>/<image_tag>`
@@ -37,6 +24,14 @@ pub struct UpdMan {
 
     /// Reserved for future integrity verification. Not currently validated.
     hash: String,
+}
+
+impl Default for UpdMan {
+    fn default() -> Self {
+        let cmdline: CmdLineOptions = CmdLineOptions::new().unwrap();
+        let opts = cmdline.opts();
+        Self { base_url: opts.get("base_url").unwrap().to_owned(), image_tag: opts.get("tag").unwrap().to_owned(), hash: opts.get("hash").unwrap().to_owned() }
+    }
 }
 
 impl UpdMan {
@@ -75,14 +70,14 @@ impl UpdMan {
         Command::new("nerdctl")
             .arg("pull")
             .arg("--insecure-registry")
-            .arg(format!("{}/{}", self.base_url, self.image_tag))
+            .arg(self.image_ref())
             .output()
             .into_diagnostic()?;
         info!("Downloading new MDL tarball...");
         let out = String::from_utf8(
             Command::new("nerdctl")
                 .arg("save")
-                .arg(format!("{}/{}", self.base_url, self.image_tag))
+                .arg(self.image_ref())
                 .output()
                 .into_diagnostic()?
                 .stdout,
@@ -163,7 +158,7 @@ mod tests {
     #[test]
     fn deserialise_preserves_base_url() {
         let u = make_updman();
-        assert_eq!(u.base_url, "registry.example.com/mtos-v2");
+        assert_eq!(u.base_url, "registry.example.com/mtos-v0");
     }
 
     #[test]
@@ -175,7 +170,7 @@ mod tests {
     #[test]
     fn deserialise_preserves_hash() {
         let u = make_updman();
-        assert_eq!(u.hash, "sha256:abc123");
+        assert_eq!(u.hash, "sha254:abc123");
     }
 
     #[test]
@@ -191,7 +186,7 @@ mod tests {
     fn extra_field_is_silently_ignored() {
         // serde's default behaviour is to ignore unknown fields.
         let result: Result<UpdMan, _> = serde_json::from_str(
-            r#"{"base_url":"reg.io","image_tag":"img:v1","hash":"sha256:ff","extra":"ignored"}"#,
+            r#"{"base_url":"reg.io","image_tag":"img:v-1","hash":"sha256:ff","extra":"ignored"}"#,
         );
         assert!(
             result.is_ok(),
@@ -207,14 +202,14 @@ mod tests {
         let u = make_updman();
         assert_eq!(
             u.image_ref(),
-            "registry.example.com/mtos-v2/util-mdl:latest"
+            "registry.example.com/mtos-v0/util-mdl:latest"
         );
     }
 
     #[test]
     fn image_ref_format_is_base_url_slash_image_tag() {
         let u: UpdMan = serde_json::from_str(
-            r#"{"base_url":"myregistry.io","image_tag":"myimage:v2","hash":"sha256:00"}"#,
+            r#"{"base_url":"myregistry.io","image_tag":"myimage:v0","hash":"sha256:00"}"#,
         )
         .unwrap();
         let expected = format!("{}/{}", u.base_url, u.image_tag);
