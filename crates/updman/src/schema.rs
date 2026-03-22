@@ -40,6 +40,20 @@ pub struct UpdMan {
 }
 
 impl UpdMan {
+    /// Returns the fully-qualified image reference used when calling
+    /// `nerdctl pull` / `nerdctl save`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// // base_url = "registry.example.com/mtos-v2"
+    /// // image_tag = "util-mdl:latest"
+    /// // → "registry.example.com/mtos-v2/util-mdl:latest"
+    /// ```
+    pub fn image_ref(&self) -> String {
+        format!("{}/{}", self.base_url, self.image_tag)
+    }
+
     /// Pulls the new OS image and installs it onto the `BOOT` partition.
     ///
     /// # Steps
@@ -120,5 +134,90 @@ impl UpdMan {
         info!("Finishing up");
         Command::new("umount").arg("-R").arg("mnt");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UpdMan;
+
+    fn make_updman() -> UpdMan {
+        serde_json::from_str(
+            r#"{"base_url":"registry.example.com/mtos-v2","image_tag":"util-mdl:latest","hash":"sha256:abc123"}"#,
+        )
+        .unwrap()
+    }
+
+    // ── serde round-trip ──────────────────────────────────────────────────────
+
+    #[test]
+    fn round_trip_preserves_all_fields() {
+        let original = make_updman();
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: UpdMan = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.base_url, original.base_url);
+        assert_eq!(restored.image_tag, original.image_tag);
+        assert_eq!(restored.hash, original.hash);
+    }
+
+    #[test]
+    fn deserialise_preserves_base_url() {
+        let u = make_updman();
+        assert_eq!(u.base_url, "registry.example.com/mtos-v2");
+    }
+
+    #[test]
+    fn deserialise_preserves_image_tag() {
+        let u = make_updman();
+        assert_eq!(u.image_tag, "util-mdl:latest");
+    }
+
+    #[test]
+    fn deserialise_preserves_hash() {
+        let u = make_updman();
+        assert_eq!(u.hash, "sha256:abc123");
+    }
+
+    #[test]
+    fn missing_field_is_an_error() {
+        // "hash" is omitted — serde must return an error.
+        let result: Result<UpdMan, _> = serde_json::from_str(
+            r#"{"base_url":"registry.example.com","image_tag":"util-mdl:latest"}"#,
+        );
+        assert!(result.is_err(), "expected error for missing 'hash' field");
+    }
+
+    #[test]
+    fn extra_field_is_silently_ignored() {
+        // serde's default behaviour is to ignore unknown fields.
+        let result: Result<UpdMan, _> = serde_json::from_str(
+            r#"{"base_url":"reg.io","image_tag":"img:v1","hash":"sha256:ff","extra":"ignored"}"#,
+        );
+        assert!(
+            result.is_ok(),
+            "unexpected error when extra field present: {:?}",
+            result.err()
+        );
+    }
+
+    // ── image_ref ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn image_ref_combines_base_url_and_image_tag() {
+        let u = make_updman();
+        assert_eq!(
+            u.image_ref(),
+            "registry.example.com/mtos-v2/util-mdl:latest"
+        );
+    }
+
+    #[test]
+    fn image_ref_format_is_base_url_slash_image_tag() {
+        let u: UpdMan = serde_json::from_str(
+            r#"{"base_url":"myregistry.io","image_tag":"myimage:v2","hash":"sha256:00"}"#,
+        )
+        .unwrap();
+        let expected = format!("{}/{}", u.base_url, u.image_tag);
+        assert_eq!(u.image_ref(), expected);
     }
 }

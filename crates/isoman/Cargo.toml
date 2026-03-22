@@ -7,3 +7,6 @@ edition = "2024"
 miette.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

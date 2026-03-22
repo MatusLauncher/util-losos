@@ -79,3 +79,111 @@ impl From<RebootCMD> for RebootCommand {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rustix::system::RebootCommand;
+
+    use super::RebootCMD;
+
+    // ── From<&String> ────────────────────────────────────────────────────────
+
+    #[test]
+    fn basename_init_maps_to_init() {
+        assert_eq!(RebootCMD::from(&"init".to_string()), RebootCMD::Init);
+    }
+
+    #[test]
+    fn basename_poweroff_maps_to_poweroff() {
+        assert_eq!(
+            RebootCMD::from(&"poweroff".to_string()),
+            RebootCMD::PowerOff
+        );
+    }
+
+    #[test]
+    fn basename_reboot_maps_to_reboot() {
+        assert_eq!(RebootCMD::from(&"reboot".to_string()), RebootCMD::Reboot);
+    }
+
+    #[test]
+    fn unrecognised_basename_maps_to_cadoff() {
+        assert_eq!(RebootCMD::from(&"foobar".to_string()), RebootCMD::CadOff);
+        assert_eq!(RebootCMD::from(&"shutdown".to_string()), RebootCMD::CadOff);
+    }
+
+    #[test]
+    fn path_prefixed_init_resolves_correctly() {
+        assert_eq!(RebootCMD::from(&"/bin/init".to_string()), RebootCMD::Init);
+    }
+
+    #[test]
+    fn path_prefixed_poweroff_resolves_correctly() {
+        assert_eq!(
+            RebootCMD::from(&"/bin/poweroff".to_string()),
+            RebootCMD::PowerOff,
+        );
+    }
+
+    #[test]
+    fn path_prefixed_reboot_resolves_correctly() {
+        assert_eq!(
+            RebootCMD::from(&"/bin/reboot".to_string()),
+            RebootCMD::Reboot,
+        );
+    }
+
+    #[test]
+    fn path_prefixed_unknown_maps_to_cadoff() {
+        assert_eq!(
+            RebootCMD::from(&"/usr/sbin/unknown".to_string()),
+            RebootCMD::CadOff,
+        );
+    }
+
+    // ── RebootCMD → RebootCommand ─────────────────────────────────────────────
+
+    #[test]
+    fn reboot_cmd_reboot_maps_to_restart() {
+        let rc: RebootCommand = RebootCMD::Reboot.into();
+        assert_eq!(rc, RebootCommand::Restart);
+    }
+
+    #[test]
+    fn reboot_cmd_poweroff_maps_to_poweroff() {
+        let rc: RebootCommand = RebootCMD::PowerOff.into();
+        assert_eq!(rc, RebootCommand::PowerOff);
+    }
+
+    #[test]
+    fn reboot_cmd_init_maps_to_cadoff() {
+        let rc: RebootCommand = RebootCMD::Init.into();
+        assert_eq!(rc, RebootCommand::CadOff);
+    }
+
+    #[test]
+    fn reboot_cmd_cadoff_maps_to_cadoff() {
+        let rc: RebootCommand = RebootCMD::CadOff.into();
+        assert_eq!(rc, RebootCommand::CadOff);
+    }
+
+    // ── RebootCommand → RebootCMD ─────────────────────────────────────────────
+
+    #[test]
+    fn reboot_command_restart_maps_to_reboot() {
+        assert_eq!(RebootCMD::from(RebootCommand::Restart), RebootCMD::Reboot);
+    }
+
+    #[test]
+    fn reboot_command_poweroff_maps_to_poweroff() {
+        assert_eq!(
+            RebootCMD::from(RebootCommand::PowerOff),
+            RebootCMD::PowerOff,
+        );
+    }
+
+    #[test]
+    fn reboot_command_cadoff_maps_to_cadoff() {
+        assert_eq!(RebootCMD::from(RebootCommand::CadOff), RebootCMD::CadOff);
+    }
+}
