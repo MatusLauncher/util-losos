@@ -1,9 +1,8 @@
 mod build;
 mod container;
 
-use std::path::PathBuf;
-use std::process::Command;
 use std::str::FromStr;
+use std::{path::PathBuf, process::Command};
 
 use clap::Parser;
 use cluman::schemas::Mode;
@@ -53,6 +52,7 @@ struct Args {
     #[arg(
         short,
         long,
+        env,
         default_value = "client",
         value_parser = parse_mode
     )]

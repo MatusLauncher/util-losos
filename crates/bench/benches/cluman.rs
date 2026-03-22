@@ -16,7 +16,7 @@ use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 use cluman::schemas::{CluManSchema, IpRange, Mode, ServerState, Task, Tasks};
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

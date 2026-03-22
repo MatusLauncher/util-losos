@@ -1,0 +1,89 @@
+# .config/nextest.toml
+#
+# cargo-nextest configuration for util-mdl.
+# Reference: https://nexte.st/book/configuration.html
+#
+# Two profiles are defined:
+#
+#   ci    — full workspace unit + integration tests, used by the `unit-test`
+#           GitLab CI job.  No ignored tests.
+#
+#   boot  — QEMU integration tests from `testman`, used by the `test-boot`
+#           GitLab CI job.  Runs only #[ignore]-d tests in strict serial order.
+#
+# Both profiles emit a JUnit XML report that GitLab CI ingests via the
+# `reports: junit:` artifact key and displays in the pipeline's Tests tab.
+
+# ── ci profile ────────────────────────────────────────────────────────────────
+
+[profile.ci]
+# Collect every failure before exiting so the JUnit report captures them all.
+fail-fast = false
+
+# Always print test output in the CI log, not just on failure.
+# "immediate-final" buffers each test's stdout/stderr and flushes it at the
+# end of the run, keeping the log readable even with many parallel tests.
+success-output = "immediate-final"
+failure-output = "immediate-final"
+
+# Report the result of every test (pass, fail, skip) in the live status line.
+status-level = "all"
+
+# Print the final per-test summary at the end of the run so the CI log has a
+# single scannable block of results.
+final-status-level = "all"
+
+# Mark a test as slow if it exceeds 60 s.  No automatic termination — the
+# slowness warning is enough signal; explicit per-test assertions handle their
+# own deadlines.
+slow-timeout = { period = "60s" }
+
+[profile.ci.junit]
+# GitLab CI reads this path from the `reports: junit:` artifact key in the
+# `unit-test` job.
+path = "target/nextest/ci/junit.xml"
+
+# Name that appears as the <testsuite name="…"> attribute in the XML and in
+# GitLab's Tests tab.
+report-name = "util-mdl — unit & integration tests"
+
+# ── boot profile ─────────────────────────────────────────────────────────────
+#
+# The five QEMU integration tests in `testman` share a single live QEMU
+# process stored in a static OnceLock<Mutex<TestHarness>>.  They are
+# annotated with #[serial] (from the `serial_test` crate) and must execute in
+# the order test_01 → test_05 so that each test observes the QEMU output
+# produced since the previous one ran.
+#
+# nextest does not honour the `serial_test` crate's file-lock mechanism
+# because each test binary is executed in an isolated process.  Setting
+# test-threads = 1 achieves the same guarantee: nextest runs exactly one test
+# process at a time, preserving the sequential ordering required by the tests.
+
+[profile.boot]
+# Crucial: one test at a time so the shared QEMU instance is never raced and
+# #[serial] ordering is respected without relying on serial_test's own locking.
+test-threads = 1
+
+fail-fast = false
+
+# Show all output immediately so QEMU serial logs are visible in the CI log as
+# the tests progress, which is important for diagnosing boot failures.
+success-output = "immediate"
+failure-output = "immediate"
+status-level   = "all"
+final-status-level = "all"
+
+# The longest test (test_05_dhcp_configured_eth0) waits up to 90 s.
+# Emit a slow-test warning after 30 s to surface stalls early, but allow up to
+# 150 s (5 × 30 s) before forcibly terminating the process so a legitimately
+# slow QEMU boot still has room to succeed.
+slow-timeout = { period = "30s", terminate-after = 5 }
+
+[profile.boot.junit]
+# GitLab CI reads this path from the `reports: junit:` artifact key in the
+# `test-boot` job.  Kept separate from the unit-test report so the two suites
+# appear as distinct entries in GitLab's Tests tab.
+path = "target/nextest/boot/junit.xml"
+
+report-name = "util-mdl — QEMU boot integration tests"

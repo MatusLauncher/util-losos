@@ -36,7 +36,11 @@ build:
     STORAGE_DRIVER: vfs
   before_script:
     - podman info
-    - dnf install -y --setopt=install_weak_deps=False git make xorriso
+    - dnf install -y --setopt=install_weak_deps=False git make xorriso zig bash
+    - echo -e "#!/bin/bash\nzig cc \$@" >> /usr/bin/cc
+    - echo -e "#!/bin/bash\nzig c++ \$@" >> /usr/bin/c++
+    - chmod +x /usr/bin/cc
+    - chmod +x /usr/bin/c++
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
       sh -s -- -y --default-toolchain stable --profile minimal
     - source "$HOME/.cargo/env"

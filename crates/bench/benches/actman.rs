@@ -8,7 +8,7 @@
 //! * `Preboot::new` / `Preboot::default` — construction (live sysfs probes).
 
 use actman::{cmdline::CmdLineOptions, preboot::Preboot, reboot::RebootCMD};
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -20,8 +20,7 @@ const CMDLINE_SMALL: &str = "console=ttyS0 earlyprintk=ttyS0 quiet net.ifnames=0
 
 /// A realistic medium-length command line resembling what a real initramfs boot
 /// might see (server_url, tag, hash, data_drive, own_ip, plus common flags).
-const CMDLINE_MEDIUM: &str =
-    "console=ttyS0 earlyprintk=ttyS0 quiet ro net.ifnames=0 biosdevname=0 \
+const CMDLINE_MEDIUM: &str = "console=ttyS0 earlyprintk=ttyS0 quiet ro net.ifnames=0 biosdevname=0 \
      server_url=http://10.0.0.1:9999 own_ip=10.0.0.42 tag=util-mdl:latest \
      hash=sha256:deadbeefcafe data_drive=/dev/sda2 base_url=registry.example.com/mtos";
 

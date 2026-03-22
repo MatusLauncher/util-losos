@@ -15,7 +15,7 @@
 
 use std::net::Ipv4Addr;
 
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use dhcman::{
     dhcp::{decode, discover, encode, mask_to_prefix, new_xid, request},
     parse_iface,
