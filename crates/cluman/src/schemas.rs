@@ -233,9 +233,8 @@ pub struct Tasks {
 #[allow(dead_code)]
 impl Tasks {
     pub fn new(tasks: impl IntoIterator<Item = Task>) -> Self {
-        Self {
-            tasks: tasks.into_iter().collect(),
-        }
+        let v: Vec<Task> = tasks.into_iter().collect();
+        Self { tasks: VecDeque::from(v) }
     }
 
     pub fn tasks(&self) -> impl ExactSizeIterator<Item = &Task> {

@@ -43,38 +43,38 @@ fn bench_param_search(c: &mut Criterion) {
 
     // Empty input — exercises the fast-exit path.
     group.bench_function("empty", |b| {
-        b.iter(|| CmdLineOptions::param_search(String::new()));
+        b.iter(|| CmdLineOptions::param_search(""));
     });
 
     // Only bare flags — every token is filtered out.
     group.bench_function("bare_flags_only", |b| {
-        b.iter(|| CmdLineOptions::param_search(CMDLINE_BARE_FLAGS.to_owned()));
+        b.iter(|| CmdLineOptions::param_search(CMDLINE_BARE_FLAGS));
     });
 
     // Typical small command line.
     group.bench_function("small", |b| {
-        b.iter(|| CmdLineOptions::param_search(CMDLINE_SMALL.to_owned()));
+        b.iter(|| CmdLineOptions::param_search(CMDLINE_SMALL));
     });
 
     // Realistic medium command line (contains all updman/cluman keys).
     group.bench_function("medium", |b| {
-        b.iter(|| CmdLineOptions::param_search(CMDLINE_MEDIUM.to_owned()));
+        b.iter(|| CmdLineOptions::param_search(CMDLINE_MEDIUM));
     });
 
     // Large synthetic line — stresses HashMap growth / reallocation.
     group.bench_function("large_64_pairs", |b| {
         let input = large_cmdline();
-        b.iter(|| CmdLineOptions::param_search(input.clone()));
+        b.iter(|| CmdLineOptions::param_search(&input));
     });
 
     // Values that themselves contain `=` — exercises the split_once fast-path.
     group.bench_function("values_with_equals", |b| {
-        b.iter(|| CmdLineOptions::param_search(CMDLINE_VALUES_WITH_EQUALS.to_owned()));
+        b.iter(|| CmdLineOptions::param_search(CMDLINE_VALUES_WITH_EQUALS));
     });
 
     // Single key=value token — minimum non-empty case.
     group.bench_function("single_pair", |b| {
-        b.iter(|| CmdLineOptions::param_search("console=ttyS0".to_owned()));
+        b.iter(|| CmdLineOptions::param_search("console=ttyS0"));
     });
 
     group.finish();
@@ -93,7 +93,7 @@ fn bench_param_search_scaling(c: &mut Criterion) {
             .join(" ");
 
         group.bench_with_input(BenchmarkId::from_parameter(n), &input, |b, s| {
-            b.iter(|| CmdLineOptions::param_search(s.clone()));
+            b.iter(|| CmdLineOptions::param_search(s.as_str()));
         });
     }
 

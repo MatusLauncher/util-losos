@@ -32,7 +32,7 @@ impl CmdLineOptions {
     /// Reads `/proc/cmdline` and parses it into a [`CmdLineOptions`].
     pub fn new() -> miette::Result<Self> {
         let f = read_to_string("/proc/cmdline").into_diagnostic()?;
-        let base = Self::param_search(f);
+        let base = Self::param_search(&f);
         Ok(Self { opts: base })
     }
 
@@ -60,8 +60,7 @@ impl CmdLineOptions {
 
     /// Splits `f` on whitespace, then on `=`, collecting into a map.
     /// Entries without a `=` separator are discarded.
-    pub fn param_search(f: impl Into<String>) -> HashMap<String, String> {
-        let f = f.into();
+    pub fn param_search(f: &str) -> HashMap<String, String> {
         f.split_whitespace()
             .filter_map(|kv| {
                 kv.split_once('=')
