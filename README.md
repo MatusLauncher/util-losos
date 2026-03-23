@@ -11,6 +11,7 @@
 | [`cluman`](#cluman) | Cluster manager — client, server, and controller modes |
 | [`updman`](#updman) | OTA update manager — pulls a new initramfs from a container registry and swaps it onto the BOOT partition |
 | [`isoman`](#isoman) | ISO builder — generates the Containerfile, builds the initramfs via `podman build`, and assembles a hybrid BIOS+UEFI ISO with Limine |
+| [`pakman`](#pakman) | Package manager — installs, removes, and runs programs packaged as Nix-based container images stored on the data drive |
 | [`testman`](#testman) | Integration test framework — boots the initramfs in QEMU and asserts expected log output |
 | [`bench`](#bench) | Criterion benchmarks for all crates |
 
@@ -175,6 +176,59 @@ Key source files:
 - `crates/isoman/src/container.rs` — `podman build` invocation
 - `crates/isoman/src/build.rs` — Limine ISO assembly
 - `crates/isoman/src/main.rs` — `clap` CLI entry point
+
+### pakman
+
+`pakman` is a minimal package manager that leverages `nerdctl` and a NixOS base image to install arbitrary programs into the running system without modifying the read-only initramfs. Programs are stored as saved container image tarballs on a persistent data drive.
+
+```bash
+# Install one or more programs (builds a NixOS container and saves it to /data/progs)
+pakman --install curl git
+
+# Remove an installed program
+pakman --remove curl
+
+# Load and run an installed program interactively
+pakman --run git
+```
+
+#### Install flow
+
+```
+pakman --install <pkg>
+    ├─ Read kernel cmdline for data_drive= parameter
+    ├─ Mount data_drive → /data  (if not already mounted)
+    ├─ mkdir -p /data/progs
+    └─ For each package (parallel threads):
+           ├─ Write Dockerfile to $TMPDIR/<pkg>
+           │     FROM nixos/nix
+           │     ENTRYPOINT nix-shell -p <pkg> --run <pkg>
+           ├─ nerdctl build -t local/<pkg>
+           └─ nerdctl save local/<pkg> -o /data/progs/<pkg>.tar
+```
+
+#### Run flow
+
+```
+pakman --run <prog>
+    ├─ WalkDir /data/progs — find <prog>.tar
+    ├─ nerdctl load -i /data/progs/<prog>.tar
+    └─ nerdctl run -it localhost/local/<prog>
+```
+
+#### Requirements
+
+- `nerdctl` must be on `$PATH` (provided by the initramfs image).
+- A `data_drive=<device>` entry must be present in `/proc/cmdline` for install/remove operations.
+- The data drive must be a writable block device; it is mounted at `/data` if not already present in `/proc/mounts`.
+
+Key source files:
+
+- `crates/pakman/src/main.rs` — `clap` CLI entry point; dispatches `--install`, `--remove`, `--run`
+- `crates/pakman/src/install.rs` — `PackageInstallation` — mounts the data drive, builds NixOS container images in parallel threads, saves them as tarballs
+- `crates/pakman/src/run.rs` — `ProgRunner` — loads a saved tarball with `nerdctl load` and runs the container interactively
+
+---
 
 ### testman
 

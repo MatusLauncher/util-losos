@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`util-mdl` is a minimal, container-native OS init system and update manager packaged as a bootable initramfs. It contains two Rust crates:
+`util-mdl` is a minimal, container-native OS init system and update manager packaged as a bootable initramfs. It contains several Rust crates:
 
 - **actman** — the init system (PID 1). A single binary that acts as `init`, `poweroff`, or `reboot` depending on its `argv[0]` basename (symlink polymorphism).
 - **updman** — downloads a container image, extracts the nested initramfs tarball, and swaps it onto the BOOT partition for next boot.
+- **pakman** — a package manager that builds Nix-based programs into container images via `nerdctl`, stores them on a persistent data drive, and runs them on demand.
 
 ## Build Commands
 
@@ -82,6 +83,34 @@ Reads `/etc/update.json` (`base_url`, `image_tag`, `hash`) → runs `nerdctl sav
 Key files:
 - `crates/updman/src/main.rs` — entry point
 - `crates/updman/src/schema.rs` — `UpdMan` struct and `update()` orchestration
+
+### pakman — Package Manager
+
+`pakman` is a CLI tool for installing, removing, and running programs inside the initramfs environment. It uses NixOS container images built with `nerdctl` and stores the resulting tarballs on a persistent data drive (mounted from a block device identified by the `data_drive` kernel command-line option).
+
+CLI flags:
+
+| Flag | Argument | Description |
+|------|----------|-------------|
+| `--install` | `<pkg>…` | Build and save one or more packages to `/data/progs/<pkg>.tar` |
+| `--remove` | `<pkg>…` | Delete the saved tarball(s) from `/data/progs/` |
+| `--run` | `<pkg>` | Load the saved tarball and launch the container interactively |
+
+Install flow:
+1. Reads `data_drive` from `/proc/cmdline` via `CmdLineOptions` (re-uses `actman`'s parser).
+2. Mounts the data drive to `/data` if not already mounted.
+3. Ensures `/data/progs/` exists.
+4. For each package, writes a minimal `Dockerfile` (`FROM nixos/nix`, `ENTRYPOINT nix-shell -p <pkg> --run <pkg>`) to a temp file, builds it as `local/<pkg>` with `nerdctl build`, then saves it to `/data/progs/<pkg>.tar` — all in parallel threads.
+
+Run flow:
+1. Walks `/data/progs/` to find the tarball matching the requested program name.
+2. Loads it into `nerdctl` with `nerdctl load -i <tarball>`.
+3. Runs it interactively with `nerdctl run -it localhost/local/<prog>`.
+
+Key files:
+- `crates/pakman/src/main.rs` — `CLIface` (`clap` parser) and top-level dispatch
+- `crates/pakman/src/install.rs` — `PackageInstallation` struct: mount logic, parallel build/save
+- `crates/pakman/src/run.rs` — `ProgRunner` struct: tarball lookup, load, and run
 
 ### Error Handling and Logging
 
