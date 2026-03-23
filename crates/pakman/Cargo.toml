@@ -11,3 +11,7 @@ rustix.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 walkdir.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+walkdir.workspace = true

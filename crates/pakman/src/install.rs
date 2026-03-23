@@ -189,3 +189,276 @@ impl PackageInstallation {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actman::cmdline::CmdLineOptions;
+    use std::collections::HashMap;
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    /// Build a [`CmdLineOptions`] with no keys — simulates a kernel command
+    /// line that omits `data_drive`.
+    fn empty_opts() -> CmdLineOptions {
+        CmdLineOptions::from_map(HashMap::new())
+    }
+
+    /// Build a [`CmdLineOptions`] that sets `data_drive` to `dev`.
+    fn opts_with_drive(dev: &str) -> CmdLineOptions {
+        CmdLineOptions::from_map(
+            [("data_drive".to_owned(), dev.to_owned())]
+                .into_iter()
+                .collect::<HashMap<_, _>>(),
+        )
+    }
+
+    // ── construction ──────────────────────────────────────────────────────────
+
+    /// A freshly-constructed instance must have an empty install queue.
+    #[test]
+    fn new_starts_with_empty_queue() {
+        let pi = PackageInstallation::new();
+        assert!(pi.install_tasks.is_empty());
+    }
+
+    /// `Default` must also produce an empty queue.
+    #[test]
+    fn default_starts_with_empty_queue() {
+        let pi = PackageInstallation::default();
+        assert!(pi.install_tasks.is_empty());
+    }
+
+    /// `new()` and `default()` must produce identical queue contents.
+    #[test]
+    fn new_and_default_have_equivalent_queues() {
+        let a = PackageInstallation::new();
+        let b = PackageInstallation::default();
+        assert_eq!(a.install_tasks, b.install_tasks);
+    }
+
+    // ── add_to_queue ──────────────────────────────────────────────────────────
+
+    /// A single `add_to_queue` call must produce a one-element queue.
+    #[test]
+    fn add_to_queue_appends_single_item() {
+        let mut pi = PackageInstallation::new();
+        pi.add_to_queue("curl");
+        assert_eq!(pi.install_tasks, vec!["curl"]);
+    }
+
+    /// Items must appear in the queue in the order they were enqueued.
+    #[test]
+    fn add_to_queue_preserves_insertion_order() {
+        let mut pi = PackageInstallation::new();
+        pi.add_to_queue("curl");
+        pi.add_to_queue("git");
+        pi.add_to_queue("jq");
+        assert_eq!(pi.install_tasks, vec!["curl", "git", "jq"]);
+    }
+
+    /// Enqueuing the same name twice must produce two separate entries.
+    #[test]
+    fn add_to_queue_accepts_duplicate_names() {
+        let mut pi = PackageInstallation::new();
+        pi.add_to_queue("curl");
+        pi.add_to_queue("curl");
+        assert_eq!(pi.install_tasks.len(), 2);
+        assert_eq!(pi.install_tasks, vec!["curl", "curl"]);
+    }
+
+    /// An empty-string package name must be accepted without panicking.
+    #[test]
+    fn add_to_queue_accepts_empty_string() {
+        let mut pi = PackageInstallation::new();
+        pi.add_to_queue("");
+        assert_eq!(pi.install_tasks, vec![""]);
+    }
+
+    /// Package names that contain hyphens (common in Nix) must be stored
+    /// verbatim.
+    #[test]
+    fn add_to_queue_accepts_hyphenated_package_names() {
+        let mut pi = PackageInstallation::new();
+        pi.add_to_queue("my-package");
+        pi.add_to_queue("pkg-with-multi-hyphens");
+        assert_eq!(
+            pi.install_tasks,
+            vec!["my-package", "pkg-with-multi-hyphens"]
+        );
+    }
+
+    // ── start — data_drive absent ─────────────────────────────────────────────
+
+    /// `start()` must return an error immediately when `data_drive` is not
+    /// present in the kernel command line.
+    #[test]
+    fn start_errors_when_data_drive_absent() {
+        let pi = PackageInstallation {
+            install_tasks: vec!["curl".into()],
+            lineopts: empty_opts(),
+        };
+        assert!(
+            pi.start().is_err(),
+            "start() must fail when data_drive is not in cmdline"
+        );
+    }
+
+    /// The error returned when `data_drive` is absent must name `data_drive` so
+    /// the operator knows which key to add to the kernel command line.
+    #[test]
+    fn start_error_message_mentions_data_drive() {
+        let pi = PackageInstallation {
+            install_tasks: vec!["curl".into()],
+            lineopts: empty_opts(),
+        };
+        let err = pi.start().unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("data_drive"),
+            "error message must mention 'data_drive', got: {msg}"
+        );
+    }
+
+    /// The `data_drive` guard must fire even when the install queue is empty —
+    /// the check must precede any queue processing.
+    #[test]
+    fn start_checks_data_drive_before_processing_queue() {
+        let pi = PackageInstallation {
+            install_tasks: vec![],
+            lineopts: empty_opts(),
+        };
+        assert!(
+            pi.start().is_err(),
+            "data_drive guard must fire regardless of queue length"
+        );
+    }
+
+    // ── start — data_drive present but device absent from /proc/mounts ────────
+    //
+    // When data_drive names a device that has no entry in /proc/mounts,
+    // `start()` collects an empty string from the filter, then panics on the
+    // unconditional `[1]` index of the split-whitespace Vec.
+    //
+    // This test documents that known behaviour.  It is expected to panic; the
+    // fix would be to return a proper `Err` instead.
+
+    /// `start()` panics when the named device is absent from `/proc/mounts`.
+    ///
+    /// This is a known edge case: the `[1]` index into the split-whitespace
+    /// result is unconditional and will panic on an empty input.
+    #[test]
+    fn start_panics_when_data_drive_device_not_in_mounts() {
+        let pi = PackageInstallation {
+            install_tasks: vec!["curl".into()],
+            lineopts: opts_with_drive("/dev/this_device_does_not_exist_xyz_abc"),
+        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pi.start()));
+        assert!(
+            result.is_err(),
+            "start() must panic when the named device is not present in /proc/mounts"
+        );
+    }
+
+    // ── Dockerfile template ───────────────────────────────────────────────────
+
+    /// The generated `Dockerfile` must begin with the NixOS base image.
+    #[test]
+    fn dockerfile_template_starts_with_from_nixos_nix() {
+        let task = "curl";
+        let content =
+            format!("FROM nixos/nix as base\nENTRYPOINT nix-shell -p {task} --run {task}");
+        assert!(
+            content.starts_with("FROM nixos/nix"),
+            "Dockerfile must start with 'FROM nixos/nix', got: {content:?}"
+        );
+    }
+
+    /// The `ENTRYPOINT` must reference the package name in both `-p` and
+    /// `--run`, so that `nix-shell` installs and immediately runs the
+    /// requested program.
+    #[test]
+    fn dockerfile_template_entrypoint_uses_package_name_in_both_positions() {
+        let task = "my-tool";
+        let content =
+            format!("FROM nixos/nix as base\nENTRYPOINT nix-shell -p {task} --run {task}");
+        assert_eq!(
+            content,
+            "FROM nixos/nix as base\nENTRYPOINT nix-shell -p my-tool --run my-tool"
+        );
+    }
+
+    /// Verify the exact Dockerfile rendered for `curl`.
+    #[test]
+    fn dockerfile_template_exact_output_for_curl() {
+        let task = "curl";
+        let content =
+            format!("FROM nixos/nix as base\nENTRYPOINT nix-shell -p {task} --run {task}");
+        assert_eq!(
+            content,
+            "FROM nixos/nix as base\nENTRYPOINT nix-shell -p curl --run curl"
+        );
+    }
+
+    /// Verify the exact Dockerfile rendered for `git`.
+    #[test]
+    fn dockerfile_template_exact_output_for_git() {
+        let task = "git";
+        let content =
+            format!("FROM nixos/nix as base\nENTRYPOINT nix-shell -p {task} --run {task}");
+        assert_eq!(
+            content,
+            "FROM nixos/nix as base\nENTRYPOINT nix-shell -p git --run git"
+        );
+    }
+
+    // ── tarball path derivation ───────────────────────────────────────────────
+
+    /// The computed tarball path for a package must be
+    /// `/data/progs/<pkg>.tar`.
+    #[test]
+    fn tarball_path_resolves_under_data_progs() {
+        let task = "curl";
+        let perm_path = std::path::Path::new("/data")
+            .join("progs")
+            .join(format!("{task}.tar"));
+        assert_eq!(perm_path, std::path::Path::new("/data/progs/curl.tar"));
+    }
+
+    /// The tarball extension must always be `.tar`.
+    #[test]
+    fn tarball_has_tar_extension() {
+        let task = "git";
+        let perm_path = std::path::Path::new("/data")
+            .join("progs")
+            .join(format!("{task}.tar"));
+        assert_eq!(perm_path.extension().and_then(|e| e.to_str()), Some("tar"));
+    }
+
+    /// The tarball file stem must be exactly the package name.
+    #[test]
+    fn tarball_stem_matches_package_name() {
+        let task = "ripgrep";
+        let perm_path = std::path::Path::new("/data")
+            .join("progs")
+            .join(format!("{task}.tar"));
+        assert_eq!(
+            perm_path.file_stem().and_then(|s| s.to_str()),
+            Some("ripgrep")
+        );
+    }
+
+    /// Package names with hyphens must be preserved verbatim in the tarball
+    /// filename — no character substitution must occur.
+    #[test]
+    fn tarball_stem_preserves_hyphens() {
+        let task = "my-hyphenated-pkg";
+        let perm_path = std::path::Path::new("/data")
+            .join("progs")
+            .join(format!("{task}.tar"));
+        assert_eq!(
+            perm_path.file_stem().and_then(|s| s.to_str()),
+            Some("my-hyphenated-pkg")
+        );
+    }
+}

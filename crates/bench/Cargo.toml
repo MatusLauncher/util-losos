@@ -10,9 +10,12 @@ rustix.workspace = true
 cluman      = { version = "0.1.0", path = "../cluman" }
 dhcman      = { version = "0.1.0", path = "../dhcman" }
 updman      = { version = "0.1.0", path = "../updman" }
-criterion.workspace = true
-fastrand.workspace  = true
+pakman      = { version = "0.1.0", path = "../pakman" }
+criterion.workspace  = true
+fastrand.workspace   = true
 serde_json.workspace = true
+tempfile.workspace   = true
+walkdir.workspace    = true
 
 [[bench]]
 name = "actman"
@@ -28,4 +31,8 @@ harness = false
 
 [[bench]]
 name = "updman"
+harness = false
+
+[[bench]]
+name = "pakman"
 harness = false

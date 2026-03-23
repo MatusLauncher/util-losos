@@ -56,10 +56,8 @@ use clap::Parser;
 use tracing::{info, warn};
 use tracing_subscriber::fmt;
 
-use crate::{install::PackageInstallation, run::ProgRunner};
-
-mod install;
-mod run;
+use pakman::install::PackageInstallation;
+use pakman::run::ProgRunner;
 
 /// Command-line interface for `pakman`.
 ///

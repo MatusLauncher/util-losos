@@ -290,9 +290,12 @@ dependencies = [
  "criterion",
  "dhcman",
  "fastrand",
+ "pakman",
  "rustix",
  "serde_json",
+ "tempfile",
  "updman",
+ "walkdir",
 ]
 
 [[package]]
@@ -1871,6 +1874,7 @@ dependencies = [
  "clap",
  "miette",
  "rustix",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
  "walkdir",
