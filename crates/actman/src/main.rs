@@ -38,7 +38,8 @@ fn main() -> miette::Result<()> {
             reboot(cmd.into()).into_diagnostic()?;
         }
         _ => info!(
-            "You've called the wrong binary. Make a symbolic link from this binary to one of these: {:?} to use it properly.",
+            "You've called the wrong binary. Make a symbolic link from this binary to one of \
+             these: {:?} to use it properly.",
             RebootCMD::iter()
                 .filter(|cadoff| *cadoff != RebootCMD::CadOff)
                 .map(|ops| format!("{ops:?}").to_lowercase())

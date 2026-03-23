@@ -36,6 +36,23 @@ impl CmdLineOptions {
         Ok(Self { opts: base })
     }
 
+    /// Construct a [`CmdLineOptions`] directly from an existing map.
+    ///
+    /// Intended for unit and integration tests that need to supply specific
+    /// `key=value` pairs without touching `/proc/cmdline`.
+    ///
+    /// ```rust
+    /// use actman::cmdline::CmdLineOptions;
+    ///
+    /// let opts = CmdLineOptions::from_map(
+    ///     [("server_url".into(), "http://10.0.0.1:9999".into())].into(),
+    /// );
+    /// assert_eq!(opts.opts().get("server_url").map(String::as_str), Some("http://10.0.0.1:9999"));
+    /// ```
+    pub fn from_map(opts: std::collections::HashMap<String, String>) -> Self {
+        Self { opts }
+    }
+
     /// Returns a reference to the parsed key=value map.
     pub fn opts(&self) -> &HashMap<String, String> {
         &self.opts

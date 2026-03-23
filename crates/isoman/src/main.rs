@@ -1,21 +1,21 @@
 mod build;
 mod container;
 
-use std::str::FromStr;
-use std::{path::PathBuf, process::Command};
+use std::{env::current_dir, path::PathBuf, process::Command, str::FromStr};
 
 use clap::Parser;
 use cluman::schemas::Mode;
 use isoman::{resolve_output, scopeguard};
 use miette::IntoDiagnostic;
 use tracing::info;
-
 /// Build a bootable hybrid ISO image using the Limine bootloader.
 ///
-/// When `--build` is supplied the initramfs is first produced by running
-/// `podman build` against the project Containerfile with the chosen `--mode`
-/// baked in as a build-arg.  The resulting `os.initramfs.tar.gz` is then used
-/// as the initramfs for the ISO assembly step.
+/// When `--build` is supplied the initramfs is produced by generating the
+/// Containerfile from the embedded template (see `isoman::schema`), writing it
+/// to a temporary path, and invoking `podman build`.  The chosen `--mode` is
+/// baked into the template before the file is written, so no `--build-arg` is
+/// needed.  The resulting `os.initramfs.tar.gz` is then used as the initramfs
+/// for the ISO assembly step.
 ///
 /// When `--build` is omitted a pre-existing initramfs archive must be supplied
 /// via `--initramfs` (or the `INITRAMFS` env-var).
@@ -40,8 +40,9 @@ struct Args {
     output: String,
 
     /// Build the initramfs from source via `podman build` before assembling
-    /// the ISO.  Requires podman to be installed and the Containerfile to be
-    /// present (see `--containerfile`).
+    /// the ISO.  Requires podman to be installed.  The Containerfile is
+    /// generated from the template embedded in `isoman::schema` — no external
+    /// Containerfile is needed.
     #[arg(long, default_value_t = false)]
     build: bool,
 
@@ -58,12 +59,6 @@ struct Args {
     )]
     mode: Mode,
 
-    /// Path to the Containerfile used to build the initramfs image.
-    ///
-    /// Only meaningful when `--build` is set.
-    #[arg(long, env = "CONTAINERFILE", default_value = "Containerfile")]
-    containerfile: PathBuf,
-
     /// Build context directory passed to `podman build`.
     ///
     /// Defaults to the current working directory when omitted.
@@ -77,6 +72,9 @@ struct Args {
     /// Only meaningful when `--build` is set.
     #[arg(long, env = "INITRAMFS_OUT")]
     initramfs_out: Option<PathBuf>,
+    /// Whether or not cache the final result for faster rebuilds.
+    #[arg(long, default_value_t = true)]
+    with_cache: bool,
 }
 
 fn parse_mode(s: &str) -> Result<Mode, String> {
@@ -112,14 +110,10 @@ fn main() -> miette::Result<()> {
     let _cleanup = scopeguard(&stage);
 
     let initramfs: PathBuf = if args.build {
-        let cwd = std::env::current_dir().into_diagnostic()?;
-        let containerfile = if args.containerfile.is_absolute() {
-            args.containerfile.clone()
-        } else {
-            cwd.join(&args.containerfile)
-        };
-
-        let build_context = args.build_context.clone().unwrap_or_else(|| cwd.clone());
+        let build_context = args
+            .build_context
+            .clone()
+            .unwrap_or_else(|| current_dir().into_diagnostic().unwrap().clone());
 
         std::fs::create_dir_all(&stage).into_diagnostic()?;
         let initramfs_out = stage.join("os.initramfs.tar.gz");
@@ -131,7 +125,7 @@ fn main() -> miette::Result<()> {
             "Building initramfs via podman"
         );
 
-        container::build_initramfs(&containerfile, &build_context, &args.mode, &initramfs_out)?;
+        container::build_initramfs(&build_context, &args.mode, &initramfs_out, args.with_cache)?;
 
         // Optionally persist the initramfs outside the staging dir so callers
         // (e.g. CI pipelines) can keep it as a standalone artifact.

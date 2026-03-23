@@ -1,0 +1,160 @@
+//! Containerfile template and mode-injection for the initramfs image build.
+//!
+//! This module owns the multi-stage [`CONT_F`] Containerfile string that
+//! `isoman` writes to disk before invoking `podman build`.  The file is
+//! parameterised by one runtime value — the `cluman` operating mode — which is
+//! baked in via [`ContMode::return_final_contf`].
+//!
+//! # Build stages
+//!
+//! | Stage | Base image | Purpose |
+//! |-------|-----------|---------|
+//! | `stage0` | `alpine:latest` | Downloads `busybox-static` and the latest `nerdctl` full bundle; creates the target filesystem tree under `out/`. |
+//! | `util`   | `rust:alpine`   | Compiles all workspace binaries (`actman`, `updman`, `dhcman`, `cluman`) for `x86_64-unknown-linux-musl`. |
+//! | `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, creates symlinks, and packs everything into a newc cpio archive compressed as `os.tar.gz`. |
+//! | *(final)* | `scratch`      | Exports `os.tar.gz` as `os.initramfs.tar.gz`, the sole artifact consumed by the ISO assembly step. |
+
+/// Multi-stage Containerfile template used to produce `os.initramfs.tar.gz`.
+///
+/// The string is a valid Containerfile **except** for the `ARG MODE` line,
+/// which carries no default value.  Before the file is written to disk,
+/// [`ContMode::return_final_contf`] replaces that line with
+/// `ARG MODE=<value>` so `podman build` receives the mode without requiring
+/// a `--build-arg` flag.
+///
+/// # Why `static mut`
+///
+/// The `replace` call in [`ContMode::return_final_contf`] operates on the
+/// string slice through a shared `unsafe` block and never actually mutates
+/// the static — it returns a fresh `String`.  The `mut` marker is an
+/// artefact of the original design; the `#[allow(static_mut_refs)]`
+/// attribute suppresses the lint that would otherwise fire on the `unsafe`
+/// reference.
+#[allow(static_mut_refs)]
+static mut CONT_F: &str = r#"
+# check=skip=FromAsCasing
+# scaffolding
+FROM alpine:latest as stage0
+RUN apk add busybox-static
+RUN mkdir -p \
+    out/dev \
+    out/run \
+    out/sys \
+    out/proc \
+    out/tmp \
+    out/home \
+    out/bin \
+    out/etc/init/start \
+    out/etc/init/stop
+RUN cp /bin/busybox.static out/bin/busybox
+RUN apk add curl tar
+RUN curl -LO $(curl -s https://api.github.com/repos/containerd/nerdctl/releases/latest | grep full | grep browser_download_url | head -n1 | awk '{print $2}' | cut -d '"' -f2)
+RUN tar -xpf nerdctl*.tar.gz -C out/ \
+    bin/nerdctl \
+    bin/containerd \
+    bin/containerd-shim-runc-v2 \
+    bin/buildkitd \
+    bin/runc \
+    libexec/cni/
+RUN cd out/bin && for applet in $(/out/bin/busybox --list); do ln -sf busybox "$applet"; done
+
+# init + package manager
+FROM rust:alpine as util
+COPY . /mdl
+RUN cd /mdl \
+    && cargo build --release --target x86_64-unknown-linux-musl \
+    && cp target/x86_64-unknown-linux-musl/release/actman /actman \
+    && cp target/x86_64-unknown-linux-musl/release/updman /updman \
+    && cp target/x86_64-unknown-linux-musl/release/dhcman /dhcman \
+    && cp target/x86_64-unknown-linux-musl/release/cluman /cluman \
+    && rm -rf target /root/.cargo/registry
+
+# packaging
+FROM alpine:latest as stage1
+ARG MODE
+COPY --from=stage0 out out
+COPY --from=util /actman out/bin/init
+COPY --from=util /updman out/bin/updman
+COPY --from=util /dhcman out/bin/dhcman
+COPY --from=util /cluman out/bin/cluman
+RUN cd out && ln -sf bin sbin
+RUN printf '#!/bin/sh\nip link set lo up && ip addr add 127.0.0.1/8 dev lo\n' > out/etc/init/start/00-loopback \
+    && chmod +x out/etc/init/start/00-loopback
+RUN cd out && ln -sf bin/dhcman etc/init/start/00-eth0
+RUN cd out && ln -sf bin/buildkitd etc/init/start/buildkitd
+RUN cd out && ln -sf bin/containerd etc/init/start/containerd
+RUN cd out && ln -sf bin/sh etc/init/start/sh
+RUN cd out && ln -sf bin/nerdctl bin/docker
+RUN cd out && ln -sf bin/nerdctl bin/podman
+RUN cd out && ln -sf bin/init bin/poweroff
+RUN cd out && ln -sf bin/init bin/reboot
+RUN cd out && ln -sf bin/init init
+# cluman mode — the binary dispatches on argv[0], so symlink it to the mode name.
+# client/server are boot-time daemons started by init; controller is a one-shot
+# CLI tool and is only installed as a named symlink without an init entry.
+RUN cd out && ln -sf bin/cluman etc/init/start/$MODE
+RUN apk add fakeroot
+RUN fakeroot sh -c 'mknod out/dev/console c 5 1 && cd out && find . | cpio -o -H newc | gzip > ../os.tar.gz'
+# final
+FROM scratch
+COPY --from=stage1 os.tar.gz os.initramfs.tar.gz
+"#;
+
+/// Renders the [`CONT_F`] Containerfile template with a specific `cluman` mode
+/// baked in.
+///
+/// Call [`set_mode`](ContMode::set_mode) to choose the operating mode, then
+/// [`return_final_contf`](ContMode::return_final_contf) to obtain the
+/// ready-to-write Containerfile string.  The default mode is whatever
+/// [`cluman::schemas::Mode`] implements as its [`Default`].
+///
+/// # Example
+///
+/// ```rust,ignore
+/// let mut cm = ContMode::new();
+/// cm.set_mode(Mode::Server);
+/// let containerfile = cm.return_final_contf();
+/// std::fs::write("Containerfile.generated", &containerfile)?;
+/// ```
+#[derive(Default)]
+pub struct ContMode {
+    mode: cluman::schemas::Mode,
+}
+
+impl ContMode {
+    /// Creates a new `ContMode` with the default [`cluman::schemas::Mode`].
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Sets the `cluman` operating mode to embed in the generated Containerfile.
+    ///
+    /// Returns `&Self` so calls can be chained with
+    /// [`return_final_contf`](ContMode::return_final_contf).
+    ///
+    /// Accepted modes (defined by `cluman`):
+    /// - `client` — boot-time daemon, started by init on every boot.
+    /// - `server` — boot-time daemon, started by init on every boot.
+    /// - `controller` — one-shot CLI tool; installed as a named symlink only,
+    ///   no init entry is created.
+    pub fn set_mode(&mut self, mode: cluman::schemas::Mode) -> &Self {
+        self.mode = mode;
+        self
+    }
+
+    /// Returns the fully rendered Containerfile as an owned [`String`].
+    ///
+    /// Replaces the bare `ARG MODE` declaration in [`CONT_F`] with
+    /// `ARG MODE=<mode>`, so `podman build` does not require an explicit
+    /// `--build-arg MODE=…` flag.
+    ///
+    /// # Safety
+    ///
+    /// Reads from `CONT_F` inside an `unsafe` block.  The access is safe in
+    /// practice because `CONT_F` is never actually mutated after
+    /// initialisation; the `static mut` declaration is a historical artefact.
+    #[allow(static_mut_refs)]
+    pub fn return_final_contf(&self) -> String {
+        unsafe { CONT_F.replace("ARG MODE", &format!("ARG MODE={}", self.mode)) }
+    }
+}

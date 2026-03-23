@@ -1,18 +1,18 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-
+pub mod schema;
 pub const LIMINE_REPO: &str = "https://github.com/limine-bootloader/limine.git";
 pub const LIMINE_BRANCH: &str = "v10.x-binary";
 pub const LIMINE_CONF: &str = r#"timeout: 5
 default_entry: 1
 
-/MDL
+/LosOS
     protocol: linux
     path: boot():/boot/vmlinuz
     cmdline: quiet net.ifnames=0 biosdevname=0
     module_path: boot():/boot/initramfs.gz
 
-/MDL on the serial port
+/LosOS on the serial port
     protocol: linux
     path: boot():/boot/vmlinuz
     cmdline: console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0
@@ -36,9 +36,13 @@ pub fn scopeguard(path: &Path) -> impl Drop + use<'_> {
 
 #[cfg(test)]
 mod tests {
+    use crate::schema::ContMode;
     use crate::{LIMINE_BRANCH, LIMINE_CONF, LIMINE_REPO, resolve_output, scopeguard};
+    use cluman::schemas::Mode;
     use std::path::PathBuf;
     use tempfile::TempDir;
+
+    // ── scopeguard ────────────────────────────────────────────────────────────
 
     #[test]
     fn scopeguard_removes_directory_on_drop() {
@@ -63,14 +67,16 @@ mod tests {
         assert!(!path.exists());
     }
 
+    // ── LIMINE_CONF ───────────────────────────────────────────────────────────
+
     #[test]
     fn limine_conf_contains_default_entry() {
-        assert!(LIMINE_CONF.contains("/util-mdl\n"));
+        assert!(LIMINE_CONF.contains("/LosOS\n"));
     }
 
     #[test]
     fn limine_conf_contains_serial_entry() {
-        assert!(LIMINE_CONF.contains("/util-mdl (serial)\n"));
+        assert!(LIMINE_CONF.contains("/LosOS on the serial port\n"));
     }
 
     #[test]
@@ -106,7 +112,7 @@ mod tests {
         let lines: Vec<&str> = LIMINE_CONF.lines().collect();
         let serial_pos = lines
             .iter()
-            .position(|l| *l == "/util-mdl (serial)")
+            .position(|l| *l == "/LosOS on the serial port")
             .expect("serial entry must exist");
         let serial_section: String = lines[serial_pos..]
             .iter()
@@ -133,6 +139,8 @@ mod tests {
         assert!(LIMINE_BRANCH.ends_with("-binary"));
     }
 
+    // ── resolve_output ────────────────────────────────────────────────────────
+
     #[test]
     fn absolute_output_path_is_kept_as_is() {
         let base = PathBuf::from("/some/cwd");
@@ -158,5 +166,84 @@ mod tests {
             resolve_output(&base, "out/images/disk.iso"),
             PathBuf::from("/build/out/images/disk.iso")
         );
+    }
+
+    // ── ContMode ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn contmode_default_bakes_in_default_mode() {
+        let cm = ContMode::new();
+        let out = cm.return_final_contf();
+        let default_mode = Mode::default().to_string();
+        assert!(
+            out.contains(&format!("ARG MODE={default_mode}")),
+            "expected ARG MODE={default_mode} in rendered Containerfile"
+        );
+    }
+
+    #[test]
+    fn contmode_no_bare_arg_mode_in_rendered_output() {
+        // After rendering, every occurrence of ARG MODE must carry a value.
+        let cm = ContMode::new();
+        let out = cm.return_final_contf();
+        for line in out.lines() {
+            if line.trim().starts_with("ARG MODE") {
+                assert!(
+                    line.contains('='),
+                    "bare 'ARG MODE' without a default found: {line:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn contmode_set_mode_client_bakes_in_client() {
+        let mut cm = ContMode::new();
+        cm.set_mode(Mode::Client);
+        let out = cm.return_final_contf();
+        assert!(out.contains("ARG MODE=client"));
+    }
+
+    #[test]
+    fn contmode_set_mode_server_bakes_in_server() {
+        let mut cm = ContMode::new();
+        cm.set_mode(Mode::Server);
+        let out = cm.return_final_contf();
+        assert!(out.contains("ARG MODE=server"));
+    }
+
+    #[test]
+    fn contmode_set_mode_controller_bakes_in_controller() {
+        let mut cm = ContMode::new();
+        cm.set_mode(Mode::Controller);
+        let out = cm.return_final_contf();
+        assert!(out.contains("ARG MODE=controller"));
+    }
+
+    #[test]
+    fn contmode_rendered_containerfile_starts_with_from() {
+        let cm = ContMode::new();
+        let out = cm.return_final_contf();
+        assert!(
+            out.lines().any(|l| l.starts_with("FROM ")),
+            "rendered Containerfile must contain at least one FROM instruction"
+        );
+    }
+
+    #[test]
+    fn contmode_rendered_containerfile_ends_with_scratch_stage() {
+        let cm = ContMode::new();
+        let out = cm.return_final_contf();
+        assert!(
+            out.contains("FROM scratch"),
+            "rendered Containerfile must end with a FROM scratch export stage"
+        );
+    }
+
+    #[test]
+    fn contmode_rendered_containerfile_exports_initramfs_artifact() {
+        let cm = ContMode::new();
+        let out = cm.return_final_contf();
+        assert!(out.contains("os.initramfs.tar.gz"));
     }
 }

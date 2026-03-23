@@ -18,7 +18,7 @@ fn parse_ip_range(s: &str) -> Result<IpRange, String> {
 /// listed server.  The controller exits once all pushes have completed.
 #[derive(Debug, Parser)]
 #[command(version, about)]
-pub(crate) struct ControllerArgs {
+pub struct ControllerArgs {
     /// One or more Docker Compose files to push to the servers.
     #[arg(required = true)]
     compose_files: Vec<PathBuf>,
@@ -51,7 +51,7 @@ pub(crate) struct ControllerArgs {
 //
 // All configuration comes from clap (see ControllerArgs above).
 
-pub(crate) async fn run_controller(args: ControllerArgs) -> miette::Result<()> {
+pub async fn run_controller(args: ControllerArgs) -> miette::Result<()> {
     let server_urls: Vec<String> = args
         .servers
         .iter()

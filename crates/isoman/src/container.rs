@@ -1,9 +1,12 @@
-use std::path::Path;
+use std::fs::write;
 use std::process::Command;
+use std::{env::temp_dir, path::Path};
 
 use cluman::schemas::Mode;
 use miette::{Context, IntoDiagnostic, bail};
 use tracing::info;
+
+use isoman::schema::ContMode;
 
 /// Build the initramfs container image for the given `mode` and extract
 /// `os.initramfs.tar.gz` from it into `output`.
@@ -14,15 +17,19 @@ use tracing::info;
 /// 3. `podman cp <id>:/os.initramfs.tar.gz <output>`
 /// 4. `podman rm <id>`
 pub fn build_initramfs(
-    containerfile: &Path,
     context: &Path,
     mode: &Mode,
     output: &Path,
+    cache: bool,
 ) -> miette::Result<()> {
+    let cf_path = temp_dir().join("contf");
+    let mut cmode = ContMode::new();
+    let m = cmode.set_mode(*mode);
+    write(&cf_path, m.return_final_contf()).into_diagnostic()?;
     let mode_str = mode.to_string();
     let tag = format!("util-mdl-build-{mode_str}");
 
-    let containerfile_str = containerfile
+    let containerfile_str = cf_path
         .to_str()
         .ok_or_else(|| miette::miette!("Containerfile path is not valid UTF-8"))?;
     let context_str = context
@@ -33,21 +40,34 @@ pub fn build_initramfs(
         .ok_or_else(|| miette::miette!("output path is not valid UTF-8"))?;
 
     // ── 1. Build the image ────────────────────────────────────────────────────
-
+    let mode = format!("MODE={mode_str}");
     info!(%mode_str, %tag, "Building container image");
-
-    let build_status = Command::new("podman")
-        .args([
+    let args = if cache {
+        vec![
             "build",
-            "--no-cache",
             "--build-arg",
-            &format!("MODE={mode_str}"),
+            &mode,
             "-t",
             &tag,
             "-f",
             containerfile_str,
             context_str,
-        ])
+        ]
+    } else {
+        vec![
+            "build",
+            "--no-cache",
+            "--build-arg",
+            &mode,
+            "-t",
+            &tag,
+            "-f",
+            containerfile_str,
+            context_str,
+        ]
+    };
+    let build_status = Command::new("podman")
+        .args(args)
         // Inherit stdio so build progress is visible to the user.
         .status()
         .into_diagnostic()
