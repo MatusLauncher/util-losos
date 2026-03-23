@@ -1,155 +1,37 @@
 stages:
-  - build
-  - assemble
+  - check
   - test
-  - publish
 
-variables:
-  INITRAMFS: os.initramfs.tar.gz
-  ISO: os.iso
-  # cluman mode embedded in the initramfs image: client | server | controller
-  MODE: client
-  # Full image refs pushed to the registry
-  IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
-  IMAGE_LATEST: $CI_REGISTRY_IMAGE:latest
+# ── fmt ────────────────────────────────────────────────────────────────────────
 
-# ── compile ────────────────────────────────────────────────────────────────────
-#
-# Builds the isoman binary on the Fedora-based Podman image.
-# Runs in parallel with the initramfs job (same stage).
-#
-# gcc/g++ are required because transitive Rust dependencies (e.g. ring) compile
-# C sources via cc-rs.  The previous zig-cc shim broke those builds because zig
-# does not accept LLVM-style target triples like x86_64-unknown-linux-gnu.
-
-compile:
-  stage: build
-  image: quay.io/podman/stable
-  before_script:
-    - dnf install -y --setopt=install_weak_deps=False gcc g++
-    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
-    - source "$HOME/.cargo/env"
-  script:
-    - cargo build -p isoman
-  artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_SLUG"
-    paths:
-      - target/debug/isoman
-    expire_in: 1 day
-
-# ── initramfs ──────────────────────────────────────────────────────────────────
-#
-# Runs `podman build` against the project Containerfile and extracts the
-# os.initramfs.tar.gz artifact that the final stage1 layer writes to /.
-# Runs in parallel with the compile job (same stage).
-
-initramfs:
-  stage: build
-  image: quay.io/podman/stable
-  variables:
-    STORAGE_DRIVER: vfs
-  script:
-    - podman build --no-cache --build-arg "MODE=$MODE" -t initramfs-build .
-    - podman create --name initramfs-ctr initramfs-build
-    - podman cp initramfs-ctr:/os.initramfs.tar.gz "$INITRAMFS"
-    - podman rm initramfs-ctr
-  artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_SLUG"
-    paths:
-      - $INITRAMFS
-    expire_in: 1 day
-
-# ── iso ────────────────────────────────────────────────────────────────────────
-#
-# Uses the isoman binary (from compile) and the initramfs artifact to clone
-# Limine and assemble a hybrid BIOS+UEFI ISO via xorriso.
-#
-# Requires $KERNEL to be set as a CI/CD project variable pointing to a vmlinuz
-# file accessible inside the job container.  Skipped when $KERNEL is unset —
-# this intentionally avoids the exit-code bug caused by `ls /boot/vmlinuz-*`
-# returning 1 when no kernel is present on shared runners.
-
-iso:
-  stage: assemble
-  needs: [compile, initramfs]
-  image: quay.io/podman/stable
-  before_script:
-    - dnf install -y --setopt=install_weak_deps=False git make xorriso
-  script:
-    - ./target/debug/isoman --kernel "$KERNEL" --initramfs "$INITRAMFS" --output "$ISO"
-  artifacts:
-    name: "$CI_JOB_NAME-$CI_COMMIT_REF_SLUG"
-    paths:
-      - $ISO
-    expire_in: 1 day
-  rules:
-    - if: $KERNEL
-
-# ── test-boot ──────────────────────────────────────────────────────────────────
-#
-# Boots the initramfs in QEMU via testman and asserts expected log output.
-# Starts as soon as the initramfs artifact is ready (does not wait for iso).
-#
-# Requires:
-#   - $KERNEL set as a CI/CD variable
-#   - qemu-system-x86_64 on the runner host (or KVM=0 for software emulation)
-#
-# Mark as manual on shared runners; remove `when: manual` on dedicated
-# bare-metal runners that have QEMU available.
-
-test-boot:
-  stage: test
-  needs: [initramfs]
+fmt:
+  stage: check
   image: rust:slim
-  variables:
-    KVM: "0"
-    MEMORY: "512M"
-    CPUS: "1"
-  before_script:
-    - apt-get update -qq
-    - apt-get install -y -qq qemu-system-x86
-    - cargo build -p testman
   script:
-    - KERNEL="$KERNEL" INITRAMFS="$INITRAMFS" MEMORY="$MEMORY" CPUS="$CPUS" KVM="$KVM" cargo run -p testman
-  rules:
-    - if: $KERNEL
-      when: manual
-      allow_failure: false
+    - rustup component add rustfmt
+    - cargo fmt --check
 
-# ── publish ────────────────────────────────────────────────────────────────────
-#
-# Builds the final container image and pushes it to the GitLab registry tagged
-# as <branch-slug>.  Runs on every branch push.
+# ── clippy ─────────────────────────────────────────────────────────────────────
 
-publish:
-  stage: publish
-  image: quay.io/podman/stable
-  variables:
-    STORAGE_DRIVER: vfs
-  before_script:
-    - podman login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+clippy:
+  stage: check
+  image: rust:slim
   script:
-    - podman build --no-cache --build-arg "MODE=$MODE" -t "$IMAGE" .
-    - podman push "$IMAGE"
-  rules:
-    - if: $CI_COMMIT_BRANCH
+    - rustup component add clippy
+    - cargo clippy -- -W clippy::all -W clippy::perf
 
-# ── publish-latest ─────────────────────────────────────────────────────────────
-#
-# Pulls the already-pushed branch image and re-tags it as :latest.  Runs only
-# on the default branch, after `publish` has completed successfully.
+# ── test ───────────────────────────────────────────────────────────────────────
 
-publish-latest:
-  stage: publish
-  needs: [publish]
-  image: quay.io/podman/stable
-  variables:
-    STORAGE_DRIVER: vfs
-  before_script:
-    - podman login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+test:
+  stage: test
+  image: rust:slim
   script:
-    - podman pull "$IMAGE"
-    - podman tag "$IMAGE" "$IMAGE_LATEST"
-    - podman push "$IMAGE_LATEST"
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - cargo test
+
+# ── bench ──────────────────────────────────────────────────────────────────────
+
+bench:
+  stage: test
+  image: rust:slim
+  script:
+    - cargo bench
