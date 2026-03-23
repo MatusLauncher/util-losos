@@ -230,4 +230,4 @@ The `MODE` build argument controls which `cluman` symlink is installed under `/e
 
 ## AI Disclosure
 
-This project uses generative AI (Claude Sonnet 4.6 Thinking) to generate documentation and tests. It is also used for refactoring and will be used in the future to review MRs.
+This project uses generative AI (Claude Sonnet 4.6 Thinking) to generate documentation and tests. It is also used for refactoring and for regression fighting and will be used in the future to review MRs and manage issues.
