@@ -74,7 +74,7 @@ On failure the full captured QEMU output is available via `TestHarness::dump_log
 
 Wraps a `Child` QEMU process. A background thread drains stdout into an `mpsc` channel. `wait_for` receives from the channel with a deadline, appending every line to an internal log.
 
-```rust,ignore
+```text
 pub fn wait_for(&mut self, pattern: &str, timeout: Duration) -> miette::Result<bool>
 pub fn send(&mut self, line: &str) -> miette::Result<()>   // write to serial stdin
 pub fn dump_log(&self) -> &[String]
@@ -103,7 +103,7 @@ Reads env vars, constructs `HarnessConfig`, wires up the four built-in test case
 
 Add a `.test()` call in `crates/testman/src/main.rs`:
 
-```rust,ignore
+```text
 .test("nerdctl available", |h| {
     match h.wait_for("nerdctl", Duration::from_secs(60)) {
         Ok(true) => TestResult::Pass,
