@@ -49,7 +49,7 @@ impl Executor for ProcessExecutor {
     /// `Err` containing the exit code and captured stderr otherwise.
     fn run_compose(&self, compose_file: &Path) -> Result<(), String> {
         let path_str = compose_file.to_string_lossy().into_owned();
-        match Command::new("docker")
+        match Command::new("/bin/nerdctl")
             .args(["compose", "-f", &path_str, "up", "-d", "--remove-orphans"])
             .output()
         {
