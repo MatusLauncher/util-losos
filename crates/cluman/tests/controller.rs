@@ -32,7 +32,7 @@ use cluman::controller::{ControllerArgs, run_controller};
 use cluman::schemas::Task;
 use httpmock::HttpMockResponse;
 use httpmock::prelude::*;
-use serde_json::{Value, json};
+use serde_json::json;
 use tempfile::TempDir;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -51,11 +51,6 @@ fn write_compose(dir: &TempDir, filename: &str, content: &str) -> String {
     let path = dir.path().join(filename);
     fs::write(&path, content).unwrap();
     path.to_string_lossy().into_owned()
-}
-
-/// Decode a raw byte slice as a `serde_json::Value`.
-fn parse_json(bytes: &[u8]) -> Value {
-    serde_json::from_slice(bytes).expect("bytes are valid JSON")
 }
 
 /// Allocate an ephemeral OS port and immediately release it.
