@@ -43,7 +43,11 @@ impl UpdMan {
     /// Constructs an [`UpdMan`] directly from the given field values.
     /// Useful in tests and when the values are known without reading the kernel
     /// command line.
-    pub fn new(base_url: impl Into<String>, image_tag: impl Into<String>, hash: impl Into<String>) -> Self {
+    pub fn new(
+        base_url: impl Into<String>,
+        image_tag: impl Into<String>,
+        hash: impl Into<String>,
+    ) -> Self {
         Self {
             base_url: base_url.into(),
             image_tag: image_tag.into(),

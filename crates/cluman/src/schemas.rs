@@ -234,7 +234,9 @@ pub struct Tasks {
 impl Tasks {
     pub fn new(tasks: impl IntoIterator<Item = Task>) -> Self {
         let v: Vec<Task> = tasks.into_iter().collect();
-        Self { tasks: VecDeque::from(v) }
+        Self {
+            tasks: VecDeque::from(v),
+        }
     }
 
     pub fn tasks(&self) -> impl ExactSizeIterator<Item = &Task> {
@@ -318,7 +320,10 @@ pub struct ClientState {
 
 impl ClientState {
     pub fn new(server_url: impl Into<String>, own_ip: Ipv4Addr) -> Self {
-        Self { server_url: server_url.into(), own_ip }
+        Self {
+            server_url: server_url.into(),
+            own_ip,
+        }
     }
 }
 

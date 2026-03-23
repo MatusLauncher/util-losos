@@ -1864,6 +1864,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pakman"
+version = "0.1.0"
+dependencies = [
+ "actman",
+ "clap",
+ "miette",
+ "rustix",
+ "tracing",
+ "tracing-subscriber",
+ "walkdir",
+]
+
+[[package]]
 name = "parking"
 version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,14 +1,20 @@
 [workspace]
 resolver = "3"
-members = ["crates/actman", "crates/updman", "crates/dhcman", "crates/testman", "crates/isoman", "crates/cluman", "crates/bench"]
+members = ["crates/actman", "crates/updman", "crates/dhcman", "crates/testman", "crates/isoman", "crates/cluman", "crates/bench", "crates/pakman"]
 
 [workspace.dependencies]
-miette = {version = "*", features = ["fancy"]}
+miette = { version = "*", features = ["fancy"] }
 tracing = "*"
 tracing-subscriber = "*"
 walkdir = "*"
 criterion = { version = "0.8.2", features = ["html_reports"] }
 fastrand = "2"
+clap = { version = "4.6.0", features = ["derive", "env"] }
+rustix = { version = "1.1.4", features = ["system", "mount", "process"] }
+strum = { version = "0.28.0", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tempfile = "3"
 
 [profile.release]
 lto = true
