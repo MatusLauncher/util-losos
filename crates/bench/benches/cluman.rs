@@ -552,12 +552,12 @@ fn bench_task_serde(c: &mut Criterion) {
 
     // Tasks queue round-trip (100 entries).
     group.bench_function("serialize_tasks_100", |b| {
-        let q = Tasks::new((0..100).map(make_task).collect());
+        let q = Tasks::new((0..100).map(make_task).collect::<Vec<_>>());
         b.iter(|| serde_json::to_string(&q).unwrap());
     });
 
     group.bench_function("deserialize_tasks_100", |b| {
-        let q = Tasks::new((0..100).map(make_task).collect());
+        let q = Tasks::new((0..100).map(make_task).collect::<Vec<_>>());
         let json = serde_json::to_string(&q).unwrap();
         b.iter(|| serde_json::from_str::<Tasks>(&json).unwrap());
     });

@@ -41,11 +41,7 @@ use tempfile::TempDir;
 ///
 /// Panics if clap rejects the arguments — use `ControllerArgs::try_parse_from`
 /// directly in tests that verify CLI validation behaviour.
-fn parse_args<I, S>(tokens: I) -> ControllerArgs
-where
-    I: IntoIterator<Item = S>,
-    S: Into<std::ffi::OsString> + Clone,
-{
+fn parse_args(tokens: impl IntoIterator<Item: Into<std::ffi::OsString> + Clone>) -> ControllerArgs {
     ControllerArgs::try_parse_from(tokens).expect("valid ControllerArgs")
 }
 

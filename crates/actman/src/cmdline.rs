@@ -45,12 +45,12 @@ impl CmdLineOptions {
     /// use actman::cmdline::CmdLineOptions;
     ///
     /// let opts = CmdLineOptions::from_map(
-    ///     [("server_url".into(), "http://10.0.0.1:9999".into())].into(),
+    ///     [("server_url".into(), "http://10.0.0.1:9999".into())],
     /// );
     /// assert_eq!(opts.opts().get("server_url").map(String::as_str), Some("http://10.0.0.1:9999"));
     /// ```
-    pub fn from_map(opts: std::collections::HashMap<String, String>) -> Self {
-        Self { opts }
+    pub fn from_map(opts: impl Into<HashMap<String, String>>) -> Self {
+        Self { opts: opts.into() }
     }
 
     /// Returns a reference to the parsed key=value map.
@@ -60,7 +60,8 @@ impl CmdLineOptions {
 
     /// Splits `f` on whitespace, then on `=`, collecting into a map.
     /// Entries without a `=` separator are discarded.
-    pub fn param_search(f: String) -> HashMap<String, String> {
+    pub fn param_search(f: impl Into<String>) -> HashMap<String, String> {
+        let f = f.into();
         f.split_whitespace()
             .filter_map(|kv| {
                 kv.split_once('=')

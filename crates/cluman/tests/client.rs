@@ -102,7 +102,7 @@ fn cmdline_opts(server_url: &str, own_ip: Ipv4Addr) -> actman::cmdline::CmdLineO
             ("own_ip".to_owned(), own_ip.to_string()),
         ]
         .into_iter()
-        .collect(),
+        .collect::<std::collections::HashMap<_, _>>(),
     )
 }
 

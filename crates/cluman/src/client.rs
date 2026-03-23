@@ -64,6 +64,7 @@ impl Executor for ProcessExecutor {
     }
 }
 
+#[allow(unused)]
 // ── Client ────────────────────────────────────────────────────────────────────
 //
 // Long-running.  Registers with a server on start-up, then polls it for tasks.
@@ -170,7 +171,7 @@ pub async fn run_client_with(
 /// started at a time per client node.  The temp file name embeds the process ID
 /// and the original filename to avoid collisions if concurrent execution is ever
 /// introduced.
-fn execute_compose(task: Task, executor: &dyn Executor) {
+fn execute_compose(task: Task, executor: &(impl Executor + ?Sized)) {
     let tmp_path = std::env::temp_dir().join(format!("cluman-{}-{}", process::id(), task.filename));
 
     if let Err(e) = fs::write(&tmp_path, &task.content) {

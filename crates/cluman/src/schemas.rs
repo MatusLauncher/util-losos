@@ -232,9 +232,9 @@ pub struct Tasks {
 
 #[allow(dead_code)]
 impl Tasks {
-    pub fn new(tasks: Vec<Task>) -> Self {
+    pub fn new(tasks: impl IntoIterator<Item = Task>) -> Self {
         Self {
-            tasks: VecDeque::from(tasks),
+            tasks: tasks.into_iter().collect(),
         }
     }
 
@@ -318,8 +318,8 @@ pub struct ClientState {
 }
 
 impl ClientState {
-    pub fn new(server_url: String, own_ip: Ipv4Addr) -> Self {
-        Self { server_url, own_ip }
+    pub fn new(server_url: impl Into<String>, own_ip: Ipv4Addr) -> Self {
+        Self { server_url: server_url.into(), own_ip }
     }
 }
 
