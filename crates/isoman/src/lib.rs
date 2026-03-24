@@ -65,7 +65,7 @@ pub fn scopeguard(path: &Path) -> impl Drop + use<'_> {
 #[cfg(test)]
 mod tests {
     use crate::schema::ContMode;
-    use crate::{LIMINE_BRANCH, LIMINE_CONF, LIMINE_REPO, resolve_output, scopeguard};
+    use crate::{LIMINE_BRANCH, LIMINE_CONF, LIMINE_REPO, resolve_output};
     use cluman::schemas::Mode;
     use std::path::PathBuf;
     use tempfile::TempDir;
