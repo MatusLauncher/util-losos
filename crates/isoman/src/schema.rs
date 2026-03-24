@@ -1,8 +1,8 @@
 //! Containerfile template and mode-injection for the initramfs image build.
 //!
-//! This module owns the multi-stage `CONT_F` Containerfile string that
-//! `isoman` writes to disk before invoking `podman build`.  The file is
-//! parameterised by one runtime value — the `cluman` operating mode — which is
+//! This module owns the multi-stage [`CONT_F`] Containerfile string that
+//! `isoman` writes to disk before invoking `podman build`.  The template is
+//! parameterised by one value — the `cluman` operating mode — which is
 //! baked in via [`ContMode::return_final_contf`].
 //!
 //! # Build stages
@@ -22,18 +22,8 @@
 /// `ARG MODE=<value>` so `podman build` receives the mode without requiring
 /// a `--build-arg` flag.
 ///
-/// # Why `static mut`
-///
-/// The `replace` call in [`ContMode::return_final_contf`] operates on the
-/// string slice through a shared `unsafe` block and never actually mutates
-/// the static — it returns a fresh `String`.  The `mut` marker is an
-/// artefact of the original design; the `#[allow(static_mut_refs)]`
-/// attribute suppresses the lint that would otherwise fire on the `unsafe`
-/// reference.
-///
 /// This item is private; it is accessed only through [`ContMode::return_final_contf`].
-#[allow(static_mut_refs)]
-static mut CONT_F: &str = r#"
+const CONT_F: &str = r#"
 # check=skip=FromAsCasing
 # scaffolding
 FROM alpine:latest as stage0
@@ -146,17 +136,10 @@ impl ContMode {
 
     /// Returns the fully rendered Containerfile as an owned [`String`].
     ///
-    /// Replaces the bare `ARG MODE` declaration in `CONT_F` with
+    /// Replaces the bare `ARG MODE` declaration in [`CONT_F`] with
     /// `ARG MODE=<mode>`, so `podman build` does not require an explicit
     /// `--build-arg MODE=…` flag.
-    ///
-    /// # Safety
-    ///
-    /// Reads from `CONT_F` inside an `unsafe` block.  The access is safe in
-    /// practice because `CONT_F` is never actually mutated after
-    /// initialisation; the `static mut` declaration is a historical artefact.
-    #[allow(static_mut_refs)]
     pub fn return_final_contf(&self) -> String {
-        unsafe { CONT_F.replace("ARG MODE", &format!("ARG MODE={}", self.mode)) }
+        CONT_F.replace("ARG MODE", &format!("ARG MODE={}", self.mode))
     }
 }
