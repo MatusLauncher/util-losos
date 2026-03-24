@@ -78,9 +78,6 @@ mod tests {
         let path = tmp.path().join("staging");
         std::fs::create_dir_all(&path).unwrap();
         assert!(path.is_dir(), "directory should exist before drop");
-        {
-            let _guard = scopeguard(&path);
-        }
         assert!(!path.exists(), "directory should be removed after drop");
     }
 
