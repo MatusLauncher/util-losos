@@ -14,6 +14,8 @@
 //! | `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, creates symlinks, and packs everything into a newc cpio archive compressed as `os.tar.gz`. |
 //! | *(final)* | `scratch`      | Exports `os.tar.gz` as `os.initramfs.tar.gz`, the sole artifact consumed by the ISO assembly step. |
 
+use cluman::schemas::Mode;
+
 /// Multi-stage Containerfile template used to produce `os.initramfs.tar.gz`.
 ///
 /// The string is a valid Containerfile **except** for the `ARG MODE` line,
@@ -130,7 +132,9 @@ impl ContMode {
     /// - `controller` — one-shot CLI tool; installed as a named symlink only,
     ///   no init entry is created.
     pub fn set_mode(&mut self, mode: cluman::schemas::Mode) -> &Self {
-        self.mode = mode;
+        if mode != Mode::Controller {
+            self.mode = mode;
+        }
         self
     }
 
