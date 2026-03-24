@@ -4,11 +4,9 @@
 //! Each entry in `VIRTUAL_FS` maps a mountpoint name to its filesystem type;
 //! entries are only attempted if the corresponding directory exists under `/`.
 
-use std::fs::create_dir_all;
-use std::path::Path;
+use std::{ffi::CStr, fs::create_dir_all, path::Path};
 
 use miette::IntoDiagnostic;
-use rustix::ffi::CStr;
 use rustix::mount::{MountFlags, mount};
 use tracing::{info, warn};
 

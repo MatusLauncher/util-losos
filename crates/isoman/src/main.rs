@@ -7,9 +7,10 @@ use std::{env::current_dir, path::PathBuf, process::Command, str::FromStr};
 
 use clap::Parser;
 use cluman::schemas::Mode;
-use isoman::{resolve_output, scopeguard};
+use isoman::resolve_output;
 use miette::IntoDiagnostic;
 use tracing::info;
+use tracing_subscriber::fmt;
 /// Build a bootable hybrid ISO image using the Limine bootloader.
 ///
 /// When `--build` is supplied the initramfs is produced by generating the
@@ -97,8 +98,7 @@ fn default_kernel() -> PathBuf {
 
 /// Parses CLI arguments, optionally builds the initramfs via `build_initramfs`, then assembles the ISO via `build_iso`.
 fn main() -> miette::Result<()> {
-    tracing_subscriber::fmt::init();
-
+    fmt().init();
     let args = Args::parse();
 
     let kernel = args.kernel.unwrap_or_else(default_kernel);
@@ -113,7 +113,6 @@ fn main() -> miette::Result<()> {
     // When --build is requested we produce the initramfs ourselves into a
     // temp file, then use that path for the ISO assembly step.
     let stage = std::env::temp_dir().join(format!("isoman-{}", std::process::id()));
-    let _cleanup = scopeguard(&stage);
 
     let initramfs: PathBuf = if args.build {
         let build_context = args
