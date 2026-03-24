@@ -1,6 +1,6 @@
 //! Containerfile template and mode-injection for the initramfs image build.
 //!
-//! This module owns the multi-stage [`CONT_F`] Containerfile string that
+//! This module owns the multi-stage `CONT_F` Containerfile string that
 //! `isoman` writes to disk before invoking `podman build`.  The file is
 //! parameterised by one runtime value — the `cluman` operating mode — which is
 //! baked in via [`ContMode::return_final_contf`].
@@ -30,6 +30,8 @@
 /// artefact of the original design; the `#[allow(static_mut_refs)]`
 /// attribute suppresses the lint that would otherwise fire on the `unsafe`
 /// reference.
+///
+/// This item is private; it is accessed only through [`ContMode::return_final_contf`].
 #[allow(static_mut_refs)]
 static mut CONT_F: &str = r#"
 # check=skip=FromAsCasing
@@ -100,7 +102,7 @@ FROM scratch
 COPY --from=stage1 os.tar.gz os.initramfs.tar.gz
 "#;
 
-/// Renders the [`CONT_F`] Containerfile template with a specific `cluman` mode
+/// Renders the `CONT_F` Containerfile template with a specific `cluman` mode
 /// baked in.
 ///
 /// Call [`set_mode`](ContMode::set_mode) to choose the operating mode, then
@@ -144,7 +146,7 @@ impl ContMode {
 
     /// Returns the fully rendered Containerfile as an owned [`String`].
     ///
-    /// Replaces the bare `ARG MODE` declaration in [`CONT_F`] with
+    /// Replaces the bare `ARG MODE` declaration in `CONT_F` with
     /// `ARG MODE=<mode>`, so `podman build` does not require an explicit
     /// `--build-arg MODE=…` flag.
     ///

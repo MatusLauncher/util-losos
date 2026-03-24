@@ -21,11 +21,15 @@ const CLIENT_PORT: u16 = 68;
 const RECV_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ATTEMPTS: usize = 3;
 
-/// Result of a successful DHCP lease acquisition.
+/// The IP configuration returned by a successful DHCP lease acquisition.
 pub struct DhcpLease {
+    /// The IPv4 address assigned by the DHCP server.
     pub ip: Ipv4Addr,
+    /// Subnet prefix length derived from the offered subnet mask.
     pub prefix_len: u8,
+    /// Default gateway, if provided in the DHCP offer.
     pub gateway: Option<Ipv4Addr>,
+    /// DNS server addresses provided by the DHCP server.
     pub dns: Vec<Ipv4Addr>,
 }
 
@@ -45,6 +49,11 @@ fn read_mac(iface: &str) -> Result<[u8; 6]> {
 }
 
 /// Derive a transaction ID from the current time.
+///
+/// The ID is seeded from the sub-second nanosecond component of the current
+/// system time. If the system clock is before the Unix epoch (i.e.
+/// [`SystemTime::duration_since`](std::time::SystemTime::duration_since)
+/// returns an error), the value falls back to `0xdead_beef`.
 pub fn new_xid() -> u32 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -126,12 +135,14 @@ fn dhcp_socket(iface: &str) -> Result<UdpSocket> {
     Ok(udp)
 }
 
+/// Serialises a [`dhcproto::v4::Message`] into a byte vector.
 pub fn encode(msg: &Message) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     msg.encode(&mut Encoder::new(&mut buf)).into_diagnostic()?;
     Ok(buf)
 }
 
+/// Deserialises a [`dhcproto::v4::Message`] from a byte slice.
 pub fn decode(buf: &[u8]) -> Result<Message> {
     Message::decode(&mut Decoder::new(buf)).into_diagnostic()
 }
@@ -156,6 +167,12 @@ fn recv_reply(sock: &UdpSocket, buf: &mut [u8], xid: u32) -> Result<Message> {
 }
 
 /// Build a DHCPDISCOVER message.
+///
+/// The message has the broadcast flag set so that the server's reply reaches
+/// the client before an IP address has been assigned. The parameter request
+/// list asks for [`OptionCode::SubnetMask`], [`OptionCode::Router`], and
+/// [`OptionCode::DomainNameServer`]. `xid` is the transaction ID (see
+/// [`new_xid`]) and `mac` is the 6-byte hardware address of the interface.
 pub fn discover(xid: u32, mac: &[u8; 6]) -> Message {
     let mut msg = Message::default();
     msg.set_opcode(Opcode::BootRequest)
@@ -174,6 +191,12 @@ pub fn discover(xid: u32, mac: &[u8; 6]) -> Message {
 }
 
 /// Build a DHCPREQUEST after receiving an offer.
+///
+/// In addition to the standard boot-request fields, this message includes a
+/// [`DhcpOption::RequestedIpAddress`] option set to `offered` (the IP
+/// address proposed in the DHCPOFFER) and a [`DhcpOption::ServerIdentifier`]
+/// option set to `server` (the IP of the offering DHCP server), as required
+/// by RFC 2131 when transitioning from the SELECTING state.
 pub fn request(xid: u32, mac: &[u8; 6], offered: Ipv4Addr, server: Ipv4Addr) -> Message {
     let mut msg = Message::default();
     msg.set_opcode(Opcode::BootRequest)
@@ -195,6 +218,9 @@ pub fn request(xid: u32, mac: &[u8; 6], offered: Ipv4Addr, server: Ipv4Addr) -> 
 }
 
 /// Parse subnet mask → prefix length.
+///
+/// Counts the number of leading one-bits in the 32-bit representation of
+/// `mask`. For example: `mask_to_prefix(255.255.255.0) == 24`.
 pub fn mask_to_prefix(mask: Ipv4Addr) -> u8 {
     u32::from(mask).leading_ones() as u8
 }
@@ -257,7 +283,13 @@ fn try_once(sock: &UdpSocket, mac: &[u8; 6], buf: &mut [u8]) -> Result<DhcpLease
     })
 }
 
-/// Perform DHCP DORA, retrying up to `MAX_ATTEMPTS` times.
+/// Perform the full DHCP DORA exchange on `iface`, retrying on failure.
+///
+/// Opens a single broadcast UDP socket via `dhcp_socket` and re-uses it
+/// across all attempts. The handshake is attempted up to `MAX_ATTEMPTS` (3)
+/// times; each attempt generates a fresh transaction ID. On the first
+/// successful attempt the resulting [`DhcpLease`] is returned immediately.
+/// If every attempt fails, the error from the final attempt is returned.
 pub fn acquire(iface: &str) -> Result<DhcpLease> {
     let mac = read_mac(iface)?;
     let sock = dhcp_socket(iface)?;

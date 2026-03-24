@@ -1,3 +1,5 @@
+//! CLI entry point for `isoman` — builds a bootable hybrid ISO and, optionally, the initramfs that goes inside it.
+
 mod build;
 mod container;
 
@@ -72,7 +74,10 @@ struct Args {
     /// Only meaningful when `--build` is set.
     #[arg(long, env = "INITRAMFS_OUT")]
     initramfs_out: Option<PathBuf>,
-    /// Whether or not cache the final result for faster rebuilds.
+    /// Flag to enable Docker layer caching during the `podman build` step.
+    ///
+    /// When set, previously cached layers are reused to speed up subsequent
+    /// builds.  Only meaningful when `--build` is set.
     #[arg(long, default_value_t = true)]
     with_cache: bool,
 }
@@ -90,6 +95,7 @@ fn default_kernel() -> PathBuf {
     PathBuf::from(format!("/boot/vmlinuz-{release}"))
 }
 
+/// Parses CLI arguments, optionally builds the initramfs via `build_initramfs`, then assembles the ISO via `build_iso`.
 fn main() -> miette::Result<()> {
     tracing_subscriber::fmt::init();
 

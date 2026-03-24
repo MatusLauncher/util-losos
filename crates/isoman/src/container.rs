@@ -1,3 +1,6 @@
+//! Container-based initramfs builder — renders the [`isoman::schema::ContMode`] Containerfile,
+//! runs `podman build`, and extracts the resulting `os.initramfs.tar.gz` artifact.
+
 use std::fs::write;
 use std::process::Command;
 use std::{env::temp_dir, path::Path};

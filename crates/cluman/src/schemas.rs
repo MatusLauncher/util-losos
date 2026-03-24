@@ -1,3 +1,16 @@
+//! Wire-format and shared-state types for the `cluman` binary.
+//!
+//! This module defines every type that is serialised over the network or held
+//! in shared memory at runtime:
+//!
+//! * [`IpRange`]      — an IPv4 address range in single / CIDR / dash notation.
+//! * [`Mode`]         — the three runtime personalities of the binary.
+//! * [`CluManSchema`] — the registration payload exchanged between nodes.
+//! * [`Task`]         — a single Docker Compose task pushed by a Controller.
+//! * [`Tasks`]        — an ordered queue of pending [`Task`]s.
+//! * [`ServerState`]  — shared state owned by a Server node.
+//! * [`ClientState`]  — state carried by a Client node.
+
 use std::{
     collections::{HashMap, VecDeque},
     net::Ipv4Addr,
@@ -91,12 +104,17 @@ impl FromStr for IpRange {
 
 // ── Mode ──────────────────────────────────────────────────────────────────────
 
+/// The three runtime personalities of the `cluman` binary.
+///
+/// The active mode is selected by examining `argv[0]` (the name under which
+/// the binary was invoked), so a single executable can be symlinked to
+/// `client`, `server`, or `controller`. [`Mode::Client`] is the default.
 #[derive(
     Debug, Serialize, Deserialize, Default, EnumIter, Clone, Copy, PartialEq, Eq, PartialOrd, Ord,
 )]
 pub enum Mode {
     #[default]
-    /// Does the tasks.
+    /// Polls the server for [`Task`]s and executes Docker Compose files received from it.
     Client,
     /// Runs on MDL and assigns tasks to [`Self::Client`]s.
     Server,
@@ -106,6 +124,7 @@ pub enum Mode {
 }
 
 impl std::fmt::Display for Mode {
+    /// Serialises the mode to its lowercase string form: `"client"`, `"server"`, or `"controller"`.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Mode::Client => "client",
@@ -118,6 +137,7 @@ impl std::fmt::Display for Mode {
 impl FromStr for Mode {
     type Err = miette::Error;
 
+    /// Parses a mode from a string. `"cluman"` is accepted as an alias for `"controller"`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "client" => Ok(Self::Client),
@@ -214,6 +234,7 @@ pub struct Task {
 }
 
 impl Task {
+    /// Creates a new [`Task`] from a filename and content string.
     pub fn new(filename: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             filename: filename.into(),
@@ -232,6 +253,7 @@ pub struct Tasks {
 
 #[allow(dead_code)]
 impl Tasks {
+    /// Creates a [`Tasks`] queue pre-populated from an iterator of [`Task`] values.
     pub fn new(tasks: impl IntoIterator<Item = Task>) -> Self {
         let v: Vec<Task> = tasks.into_iter().collect();
         Self {
@@ -239,6 +261,7 @@ impl Tasks {
         }
     }
 
+    /// Returns an iterator over the pending tasks without consuming the queue.
     pub fn tasks(&self) -> impl ExactSizeIterator<Item = &Task> {
         self.tasks.iter()
     }
@@ -253,10 +276,12 @@ impl Tasks {
         self.tasks.pop_front()
     }
 
+    /// Returns `true` if there are no pending tasks.
     pub fn is_empty(&self) -> bool {
         self.tasks.is_empty()
     }
 
+    /// Returns the number of tasks currently in the queue.
     pub fn len(&self) -> usize {
         self.tasks.len()
     }
@@ -279,10 +304,12 @@ pub struct ServerState {
 }
 
 impl ServerState {
+    /// Creates a new, empty [`ServerState`].
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Records `ip` as a registered [`Mode::Client`] node.
     pub fn register_client(&self, ip: Ipv4Addr) {
         self.clients.lock().unwrap().insert(ip, Mode::Client);
     }
@@ -319,6 +346,7 @@ pub struct ClientState {
 }
 
 impl ClientState {
+    /// Creates a new [`ClientState`] with the given server URL and own IP address.
     pub fn new(server_url: impl Into<String>, own_ip: Ipv4Addr) -> Self {
         Self {
             server_url: server_url.into(),

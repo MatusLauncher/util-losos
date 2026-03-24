@@ -1,3 +1,39 @@
+//! # actman
+//!
+//! `actman` is the PID 1 / init system for the **util-mdl** initramfs OS.
+//! It is responsible for early-boot orchestration and clean system shutdown or
+//! restart, operating in the minimal environment provided by an initramfs.
+//!
+//! ## Symlink-polymorphism
+//!
+//! The crate is compiled to a single binary that inspects `argv[0]` at runtime
+//! to decide which role to play:
+//!
+//! | `argv[0]` basename | Behaviour                              |
+//! |--------------------|----------------------------------------|
+//! | `init`             | Run as PID 1, mount filesystems, etc.  |
+//! | `poweroff`         | Issue a power-off syscall and halt.    |
+//! | `reboot`           | Issue a reboot syscall and restart.    |
+//!
+//! Installing the binary once and creating two additional symlinks named
+//! `poweroff` and `reboot` pointing to it is sufficient to get all three
+//! behaviours.
+//!
+//! ## Public sub-modules
+//!
+//! - [`cmdline`] — exposes [`cmdline::CmdLineOptions`], a parser for kernel
+//!   command-line arguments in `key=value` form (bare flags without a `=` are
+//!   silently ignored).
+//!
+//! - [`preboot`] — exposes [`preboot::Preboot`], which handles early-boot
+//!   mounting of virtual filesystems (procfs, sysfs, devtmpfs, …) by
+//!   inspecting which mount-point directories actually exist before attempting
+//!   to mount them.
+//!
+//! - [`reboot`] — exposes [`reboot::RebootCMD`], an enum that maps an
+//!   `argv[0]` basename (or a `rustix` [`rustix::system::RebootCommand`]
+//!   value) to the appropriate Linux reboot syscall command, and vice-versa.
+
 pub mod cmdline;
 pub mod preboot;
 pub mod reboot;

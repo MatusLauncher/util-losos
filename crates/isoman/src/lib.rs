@@ -1,8 +1,28 @@
+//! Builds bootable hybrid ISO images (BIOS + UEFI) using the
+//! [Limine](https://limine-bootloader.org/) bootloader.
+//!
+//! Optionally, the initramfs can be built first via `podman build` by
+//! delegating to `container::build_initramfs` before the ISO assembly step.
+//!
+//! # Public surface
+//!
+//! - [`LIMINE_REPO`] — Git URL of the Limine binary release repository.
+//! - [`LIMINE_BRANCH`] — Git branch used when cloning Limine.
+//! - [`LIMINE_CONF`] — Default `limine.conf` embedded into the ISO image.
+//! - [`resolve_output`] — Resolves a user-supplied output path against a base directory.
+//! - [`scopeguard`] — RAII helper that removes a staging directory on drop.
 use std::fs;
 use std::path::{Path, PathBuf};
 pub mod schema;
+/// Git URL of the Limine bootloader binary release repository.
 pub const LIMINE_REPO: &str = "https://github.com/limine-bootloader/limine.git";
+/// Git branch name for the Limine binary release (e.g. `"v10.x-binary"`).
 pub const LIMINE_BRANCH: &str = "v10.x-binary";
+/// Default `limine.conf` written into the ISO's `/boot/limine/` directory.
+///
+/// Defines two boot entries — a silent default entry and a serial-console
+/// entry — both booting `boot():/boot/vmlinuz` with
+/// `boot():/boot/initramfs.gz` as the initramfs module.
 pub const LIMINE_CONF: &str = r#"timeout: 5
 default_entry: 1
 
@@ -19,11 +39,19 @@ default_entry: 1
     module_path: boot():/boot/initramfs.gz
 "#;
 
+/// Resolves `raw` as an output path relative to `base`.
+///
+/// If `raw` is an absolute path it is returned unchanged.
+/// Otherwise `raw` is joined onto `base`.
 pub fn resolve_output(base: &Path, raw: &str) -> PathBuf {
     let p = PathBuf::from(raw);
     if p.is_absolute() { p } else { base.join(p) }
 }
 
+/// Returns a RAII guard that recursively removes `path` when dropped.
+///
+/// Used to clean up staging directories on error. The removal is
+/// best-effort — failures are silently ignored.
 pub fn scopeguard(path: &Path) -> impl Drop + use<'_> {
     struct Guard<'a>(&'a Path);
     impl Drop for Guard<'_> {

@@ -1,7 +1,7 @@
 //! Kernel command-line parser.
 //!
 //! Reads `/proc/cmdline` and exposes the parsed `key=value` pairs as a
-//! [`HashMap`](std::collections::HashMap). Parameters without a `=` separator
+//! [`HashMap`]. Parameters without a `=` separator
 //! (bare flags) are silently ignored.
 
 use std::{collections::HashMap, fs::read_to_string};

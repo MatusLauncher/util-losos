@@ -1,3 +1,6 @@
+//! ISO assembly using Limine — clones the Limine binary release, builds the host tool, assembles
+//! the ISO staging tree, and produces a hybrid BIOS+UEFI ISO with `xorriso`.
+
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -7,6 +10,29 @@ use isoman::{LIMINE_BRANCH, LIMINE_CONF, LIMINE_REPO};
 use miette::{Context, IntoDiagnostic, bail};
 use tracing::info;
 
+/// Assemble a bootable hybrid ISO from a kernel and initramfs using Limine.
+///
+/// # Parameters
+///
+/// - `kernel`    — path to the kernel image (`vmlinuz`).
+/// - `initramfs` — path to the initramfs archive.
+/// - `output`    — destination path for the finished `.iso` file.
+/// - `stage`     — temporary directory used for all intermediate files.
+/// - `_mode`     — unused; reserved for future build-mode differentiation.
+///
+/// # Steps
+///
+/// 1. Clone the Limine binary release from the upstream repository (`git clone`).
+/// 2. Build the `limine` host utility inside the cloned directory (`make`).
+/// 3. Assemble the ISO staging tree: copy the kernel, initramfs, `limine.conf`, and
+///    all required Limine boot files into the `iso-root` layout.
+/// 4. Produce the hybrid BIOS+UEFI ISO image (`xorriso -as mkisofs`).
+/// 5. Embed the Limine BIOS boot sectors into the ISO (`limine bios-install`).
+///
+/// # Errors
+///
+/// Returns a [`miette::Report`] if `git`, `make`, `xorriso`, or `limine` are not
+/// found on `PATH` or exit with a non-zero status code.
 pub(crate) fn build_iso(
     kernel: &Path,
     initramfs: &Path,

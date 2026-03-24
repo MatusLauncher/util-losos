@@ -13,6 +13,22 @@ use std::{
 use actman::cmdline::CmdLineOptions;
 use miette::{IntoDiagnostic, bail};
 use tracing::info;
+/// Central update-manager type for the MTOS update sequence.
+///
+/// Holds the container registry coordinates that are read from the kernel
+/// command line at startup and uses them to drive the full update pipeline.
+///
+/// # Entry point
+///
+/// The main entry point is [`UpdMan::update`], which executes every step of
+/// the update sequence in order: pull → save → extract → install → unmount.
+///
+/// # Construction
+///
+/// | Method | When to use |
+/// |--------|-------------|
+/// | [`UpdMan::new`]`(base_url, image_tag, hash)` | Tests and programmatic use where the values are already known. |
+/// | [`Default::default`]`()` | Production path — reads `base_url`, `tag`, and `hash` directly from `/proc/cmdline` via [`CmdLineOptions`]. |
 pub struct UpdMan {
     /// Container registry prefix, e.g. `"registry.example.com/mtos-v2"`.
     /// Combined with [`image_tag`](UpdMan::image_tag) as `<base_url>/<image_tag>`
@@ -60,7 +76,7 @@ impl UpdMan {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```text
     /// // base_url = "registry.example.com/mtos-v2"
     /// // image_tag = "util-mdl:latest"
     /// // → "registry.example.com/mtos-v2/util-mdl:latest"

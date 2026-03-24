@@ -6,6 +6,7 @@ use tracing::{error, info};
 
 use crate::schemas::{IpRange, Task};
 
+/// Clap value-parser shim — delegates to `IpRange::from_str` and converts the error to a `String`.
 fn parse_ip_range(s: &str) -> Result<IpRange, String> {
     IpRange::from_str(s).map_err(|e| e.to_string())
 }
@@ -19,16 +20,11 @@ fn parse_ip_range(s: &str) -> Result<IpRange, String> {
 #[derive(Debug, Parser)]
 #[command(version, about)]
 pub struct ControllerArgs {
-    /// One or more Docker Compose files to push to the servers.
+    /// Paths to Docker Compose files to push to every server.
     #[arg(required = true)]
     compose_files: Vec<PathBuf>,
 
-    /// IP ranges of servers to push tasks to.
-    ///
-    /// Accepts single IPs (`10.0.0.1`), CIDR notation (`10.0.0.0/24`), or
-    /// dash ranges (`10.0.0.1-10.0.0.20`).  Comma-separate multiple values.
-    ///
-    /// Example: `--servers 10.0.0.1-10.0.0.5,10.0.1.0/24`
+    /// Target server IP ranges (single, CIDR, or dash-range notation). Comma-separated; repeatable. Also read from the `SERVER_IPS` env var.
     #[arg(
         short,
         long,
@@ -39,18 +35,18 @@ pub struct ControllerArgs {
     )]
     servers: Vec<IpRange>,
 
-    /// Port that every server listens on.
+    /// TCP port the servers are listening on. Defaults to 9999. Also read from `SERVER_PORT` env var.
     #[arg(short, long, env = "SERVER_PORT", default_value_t = 9999u16)]
     port: u16,
 }
 
 // ── Controller ────────────────────────────────────────────────────────────────
-//
-// One-shot: reads compose files from disk, pushes their full contents to every
-// listed server as Task objects, then exits.  It does NOT run a server.
-//
-// All configuration comes from clap (see ControllerArgs above).
 
+/// Expands all IP ranges in `args.servers` to a flat list of server URLs, then
+/// for each compose file reads it from disk, wraps its contents as a [`Task`],
+/// and POSTs it to `/api/push-task` on every server.  Returns an error that
+/// reports the total number of failures if any server rejected or could not be
+/// reached for any task.
 pub async fn run_controller(args: ControllerArgs) -> miette::Result<()> {
     let server_urls: Vec<String> = args
         .servers

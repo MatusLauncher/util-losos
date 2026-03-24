@@ -21,7 +21,11 @@ use netlink_packet_route::{
 };
 use tracing::debug;
 
-/// Read the kernel interface index from sysfs.
+/// Reads the kernel interface index for `iface` from `/sys/class/net/<iface>/ifindex`.
+///
+/// The file contains a single decimal integer written by the kernel; this
+/// function trims whitespace and parses it into a `u32` suitable for use in
+/// netlink message headers.
 fn ifindex(iface: &str) -> Result<u32> {
     std::fs::read_to_string(format!("/sys/class/net/{iface}/ifindex"))
         .map_err(|e| miette!("cannot read ifindex for {iface}: {e}"))?
@@ -30,7 +34,11 @@ fn ifindex(iface: &str) -> Result<u32> {
         .map_err(|e| miette!("invalid ifindex for {iface}: {e}"))
 }
 
-/// Open an `AF_NETLINK / NETLINK_ROUTE` raw socket.
+/// Opens an `AF_NETLINK / NETLINK_ROUTE` raw socket with `SOCK_CLOEXEC`.
+///
+/// The `SOCK_CLOEXEC` flag is set atomically so the file descriptor is never
+/// accidentally inherited across an `exec`. The returned [`OwnedFd`] closes
+/// the socket automatically when dropped.
 fn nl_socket() -> Result<OwnedFd> {
     let fd = unsafe { libc::socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE) };
     if fd < 0 {
@@ -42,7 +50,11 @@ fn nl_socket() -> Result<OwnedFd> {
     Ok(unsafe { OwnedFd::from_raw_fd(fd) })
 }
 
-/// Serialise a finalised `NetlinkMessage` into a byte vec.
+/// Finalises and serialises `msg` into a byte vector.
+///
+/// Calls [`NetlinkMessage::finalize`] to fill in the length and sequence-number
+/// fields, then [`Emitable::emit`] to write the wire-format bytes into a
+/// freshly allocated buffer.
 fn encode<T>(mut msg: NetlinkMessage<T>) -> Vec<u8>
 where
     T: netlink_packet_core::NetlinkSerializable,
@@ -54,7 +66,13 @@ where
     buf
 }
 
-/// Send `buf` to the kernel via `sock` and wait for the NLMSG_ERROR ack.
+/// Sends `buf` to the kernel and reads the `NLMSG_ERROR` ack, returning an
+/// error if the kernel reports a non-zero errno.
+///
+/// The datagram is addressed to pid 0 (the kernel). After the send, a single
+/// reply datagram is received into a 4 KiB buffer and deserialised; if the
+/// embedded error code is non-zero the absolute value is converted into a
+/// human-readable [`std::io::Error`] and returned as a [`miette`] diagnostic.
 fn nl_transact(sock: &OwnedFd, buf: &[u8]) -> Result<()> {
     // Send to kernel (pid = 0).
     let mut dst: libc::sockaddr_nl = unsafe { std::mem::zeroed() };
@@ -99,6 +117,14 @@ fn nl_transact(sock: &OwnedFd, buf: &[u8]) -> Result<()> {
 }
 
 /// Bring the interface up (set `IFF_UP`).
+///
+/// The implementation:
+/// 1. Reads the interface index from `/sys/class/net/<iface>/ifindex` via
+///    `ifindex`.
+/// 2. Opens an `AF_NETLINK / NETLINK_ROUTE` socket via `nl_socket`.
+/// 3. Builds an `RTM_NEWLINK` message with the [`LinkFlags::Up`] flag set in
+///    both `flags` and `change_mask`, then sends it to the kernel and waits
+///    for the `NLMSG_ERROR` acknowledgement.
 pub fn set_link_up(iface: &str) -> Result<()> {
     let idx = ifindex(iface)?;
     let sock = nl_socket()?;
@@ -120,6 +146,12 @@ pub fn set_link_up(iface: &str) -> Result<()> {
 }
 
 /// Assign `ip/prefix_len` to the interface.
+///
+/// Sends an `RTM_NEWADDRESS` message with flags `NLM_F_CREATE | NLM_F_EXCL`
+/// so that the call succeeds only when the address does not already exist,
+/// avoiding silent duplicates. Both the `Address` and `Local` attributes are
+/// set to `ip` as required by the kernel for point-to-point and broadcast
+/// interfaces alike.
 pub fn set_addr(iface: &str, ip: Ipv4Addr, prefix_len: u8) -> Result<()> {
     let idx = ifindex(iface)?;
     let sock = nl_socket()?;
@@ -144,7 +176,16 @@ pub fn set_addr(iface: &str, ip: Ipv4Addr, prefix_len: u8) -> Result<()> {
     Ok(())
 }
 
-/// Install a default route (0.0.0.0/0) via `gateway`.
+/// Install a default route (`0.0.0.0/0`) via `gateway`.
+///
+/// Sends an `RTM_NEWROUTE` message with:
+/// - **protocol** `Boot` — indicates the route was installed by a boot-time
+///   program (i.e. a DHCP client).
+/// - **scope** `Universe` — the gateway is reachable via the broader network,
+///   not link-local.
+/// - **type** `Unicast` — a regular forwarding route.
+/// - flags `NLM_F_CREATE | NLM_F_EXCL` — fails if a default route already
+///   exists, preventing accidental overwrites.
 pub fn add_default_route(gateway: Ipv4Addr) -> Result<()> {
     let sock = nl_socket()?;
 

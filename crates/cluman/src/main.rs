@@ -1,3 +1,5 @@
+//! Entry point for the `cluman` binary — dispatches to client, server, or controller mode based on `argv[0]`.
+
 use std::{env::args, path::Path, str::FromStr};
 
 // Re-export the library's schemas module so that `crate::schemas` resolves
@@ -16,10 +18,12 @@ mod client;
 mod controller;
 mod server;
 
+/// Default TCP port that clients and servers listen on.
 pub(crate) const PORT: u16 = 9999;
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
+/// Initialises tracing, determines the mode from `argv[0]`, and dispatches to the appropriate runtime (`run_controller`, `run_server`, or `run_client`).
 #[tokio::main]
 async fn main() -> miette::Result<()> {
     fmt().init();

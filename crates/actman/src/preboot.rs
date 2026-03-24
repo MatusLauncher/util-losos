@@ -1,7 +1,7 @@
 //! Pre-boot filesystem mounting.
 //!
 //! Mounts the standard virtual filesystems needed before userspace starts.
-//! Each entry in [`VIRTUAL_FS`] maps a mountpoint name to its filesystem type;
+//! Each entry in `VIRTUAL_FS` maps a mountpoint name to its filesystem type;
 //! entries are only attempted if the corresponding directory exists under `/`.
 
 use std::fs::create_dir_all;
@@ -26,7 +26,7 @@ pub(crate) const VIRTUAL_FS: &[(&str, &str)] = &[
 /// Filesystem mounter for the early boot environment.
 ///
 /// On construction, [`Preboot`] builds the list of virtual filesystems to
-/// mount by intersecting [`VIRTUAL_FS`] with the directories that actually
+/// mount by intersecting `VIRTUAL_FS` with the directories that actually
 /// exist under `/`.  Calling [`mount`](Preboot::mount) then issues one
 /// `mount(2)` syscall per entry.
 #[derive(Debug, Clone)]
