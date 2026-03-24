@@ -1,6 +1,7 @@
 stages:
   - check
   - test
+  - deploy
 
 # ── fmt ────────────────────────────────────────────────────────────────────────
 
@@ -39,3 +40,45 @@ bench:
   image: rust:slim
   script:
     - cargo bench
+
+# ── pages ──────────────────────────────────────────────────────────────────────
+
+pages:
+  stage: deploy
+  image: rust:slim
+  script:
+    - cargo doc --no-deps --workspace
+    - mv target/doc public
+    # Root index that redirects visitors to the actman crate as a landing page
+    - |
+      cat > public/index.html <<'EOF'
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>util-mdl — crate docs</title>
+          <style>
+            body { font-family: sans-serif; max-width: 640px; margin: 4rem auto; }
+            h1   { font-size: 1.4rem; }
+            ul   { line-height: 2; }
+          </style>
+        </head>
+        <body>
+          <h1>util-mdl — API documentation</h1>
+          <ul>
+            <li><a href="actman/index.html">actman</a> — init system (PID 1)</li>
+            <li><a href="updman/index.html">updman</a> — update manager</li>
+            <li><a href="pakman/index.html">pakman</a> — package manager</li>
+            <li><a href="cluman/index.html">cluman</a> — cluster manager</li>
+            <li><a href="dhcman/index.html">dhcman</a> — DHCP manager</li>
+            <li><a href="isoman/index.html">isoman</a> — ISO manager</li>
+            <li><a href="testman/index.html">testman</a> — integration test runner</li>
+          </ul>
+        </body>
+      </html>
+      EOF
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
