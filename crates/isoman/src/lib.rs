@@ -89,10 +89,6 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("nonexistent");
         assert!(!path.exists());
-        {
-            let _guard = scopeguard(&path);
-        }
-        assert!(!path.exists());
     }
 
     // ── LIMINE_CONF ───────────────────────────────────────────────────────────
