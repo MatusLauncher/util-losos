@@ -1,7 +1,8 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, thread::spawn};
 
 use actman::cmdline::CmdLineOptions;
 use miette::IntoDiagnostic;
+use rustix::system::reboot;
 use rustyx::RustyX;
 use serde_json::json;
 use tracing::info;
@@ -53,7 +54,24 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
             }
         }
     });
-
+    server.get("/reboot", async move |req, res| {
+       match req.json::<CluManSchema>() {
+        Ok(_) => {
+            spawn(move || reboot(rustix::system::RebootCommand::Restart));
+            res.status(200)
+        },
+        Err(_) => res.status(400),
+    } 
+    });
+    server.get("/poweroff", async move |req, res| {
+       match req.json::<CluManSchema>() {
+        Ok(_) => {
+            spawn(move || reboot(rustix::system::RebootCommand::PowerOff));
+            res.status(200)
+        },
+        Err(_) => res.status(400),
+    } 
+    });
     // ── POST /api/register-client ─────────────────────────────────────────────
     let st = state.clone();
     server.post("/api/register-client", move |req, res| {

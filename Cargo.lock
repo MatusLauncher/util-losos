@@ -452,6 +452,7 @@ dependencies = [
  "miette",
  "minreq",
  "mockall",
+ "rustix",
  "rustyx",
  "serde",
  "serde_json",
