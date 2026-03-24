@@ -1,5 +1,5 @@
 //! Container-based initramfs builder — renders the [`isoman::schema::ContMode`] Containerfile,
-//! runs `podman build`, and extracts the resulting `os.initramfs.tar.gz` artifact.
+//! runs `/bin/nerdctl build`, and extracts the resulting `os.initramfs.tar.gz` artifact.
 
 use std::fs::write;
 use std::process::Command;
@@ -15,10 +15,10 @@ use isoman::schema::ContMode;
 /// `os.initramfs.tar.gz` from it into `output`.
 ///
 /// Steps:
-/// 1. `podman build --build-arg MODE=<mode> --no-cache -t <tag> -f <containerfile> <context>`
-/// 2. `podman create <tag>` → container ID
-/// 3. `podman cp <id>:/os.initramfs.tar.gz <output>`
-/// 4. `podman rm <id>`
+/// 1. `/bin/nerdctl build --build-arg MODE=<mode> --no-cache -t <tag> -f <containerfile> <context>`
+/// 2. `/bin/nerdctl create <tag>` → container ID
+/// 3. `/bin/nerdctl cp <id>:/os.initramfs.tar.gz <output>`
+/// 4. `/bin/nerdctl rm <id>`
 pub fn build_initramfs(
     context: &Path,
     mode: &Mode,
@@ -69,30 +69,30 @@ pub fn build_initramfs(
             context_str,
         ]
     };
-    let build_status = Command::new("podman")
+    let build_status = Command::new("/bin/nerdctl")
         .args(args)
         // Inherit stdio so build progress is visible to the user.
         .status()
         .into_diagnostic()
-        .wrap_err("podman not found; install podman")?;
+        .wrap_err("/bin/nerdctl not found; install nerdctl")?;
 
     if !build_status.success() {
-        bail!("podman build failed (exit {})", build_status);
+        bail!("/bin/nerdctl build failed (exit {})", build_status);
     }
 
     // ── 2. Create a container so we can copy files out ────────────────────────
 
     info!(%tag, "Creating ephemeral container to extract initramfs");
 
-    let create_out = Command::new("podman")
+    let create_out = Command::new("/bin/nerdctl")
         .args(["create", &tag])
         .output()
         .into_diagnostic()
-        .wrap_err("podman create failed")?;
+        .wrap_err("/bin/nerdctl create failed")?;
 
     if !create_out.status.success() {
         bail!(
-            "podman create failed (exit {}): {}",
+            "/bin/nerdctl create failed (exit {}): {}",
             create_out.status,
             String::from_utf8_lossy(&create_out.stderr)
         );
@@ -106,7 +106,7 @@ pub fn build_initramfs(
 
     // ── 3. Copy the initramfs out of the container ────────────────────────────
 
-    let cp_out = Command::new("podman")
+    let cp_out = Command::new("/bin/nerdctl")
         .args([
             "cp",
             &format!("{container_id}:/os.initramfs.tar.gz"),
@@ -114,27 +114,27 @@ pub fn build_initramfs(
         ])
         .output()
         .into_diagnostic()
-        .wrap_err("podman cp failed")?;
+        .wrap_err("/bin/nerdctl cp failed")?;
 
     // Always remove the container, even if the copy failed.
-    let rm_out = Command::new("podman")
+    let rm_out = Command::new("/bin/nerdctl")
         .args(["rm", &container_id])
         .output()
         .into_diagnostic()
-        .wrap_err("podman rm failed")?;
+        .wrap_err("/bin/nerdctl rm failed")?;
 
     if !rm_out.status.success() {
         // Non-fatal — warn but don't abort.
         tracing::warn!(
             %container_id,
             stderr = %String::from_utf8_lossy(&rm_out.stderr),
-            "podman rm returned non-zero exit code"
+            "/bin/nerdctl rm returned non-zero exit code"
         );
     }
 
     if !cp_out.status.success() {
         bail!(
-            "podman cp failed (exit {}): {}",
+            "/bin/nerdctl cp failed (exit {}): {}",
             cp_out.status,
             String::from_utf8_lossy(&cp_out.stderr)
         );
