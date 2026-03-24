@@ -109,44 +109,36 @@ fn bench_reboot_cmd_dispatch(c: &mut Criterion) {
     // (`argv[0]` is always a `String`).
 
     group.bench_function("init_bare", |b| {
-        let s = "init".to_string();
-        b.iter(|| RebootCMD::from(&s));
+        b.iter(|| RebootCMD::from("init"));
     });
 
     group.bench_function("poweroff_bare", |b| {
-        let s = "poweroff".to_string();
-        b.iter(|| RebootCMD::from(&s));
+        b.iter(|| RebootCMD::from("poweroff"));
     });
 
     group.bench_function("reboot_bare", |b| {
-        let s = "reboot".to_string();
-        b.iter(|| RebootCMD::from(&s));
+        b.iter(|| RebootCMD::from("reboot"));
     });
 
     group.bench_function("unknown_bare", |b| {
-        let s = "shutdown".to_string();
-        b.iter(|| RebootCMD::from(&s));
+        b.iter(|| RebootCMD::from("shutdown"));
     });
 
     // Full path variants — exercises the Path::file_name() strip.
     group.bench_function("init_full_path", |b| {
-        let s = "/bin/init".to_string();
-        b.iter(|| RebootCMD::from(&s));
+        b.iter(|| RebootCMD::from("/bin/init"));
     });
 
     group.bench_function("poweroff_full_path", |b| {
-        let s = "/bin/poweroff".to_string();
-        b.iter(|| RebootCMD::from(&s));
+        b.iter(|| RebootCMD::from("/bin/poweroff"));
     });
 
     group.bench_function("reboot_full_path", |b| {
-        let s = "/bin/reboot".to_string();
-        b.iter(|| RebootCMD::from(&s));
+        b.iter(|| RebootCMD::from("/bin/reboot"));
     });
 
     group.bench_function("unknown_deep_path", |b| {
-        let s = "/usr/local/sbin/some-unknown-tool".to_string();
-        b.iter(|| RebootCMD::from(&s));
+        b.iter(|| RebootCMD::from("/usr/local/sbin/some-unknown-tool"));
     });
 
     group.finish();

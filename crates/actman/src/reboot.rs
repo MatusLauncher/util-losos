@@ -32,7 +32,7 @@ pub enum RebootCMD {
     CadOff,
 }
 
-impl<'a> From<&'a String> for RebootCMD {
+impl<'a> From<&'a str> for RebootCMD {
     /// Derives the mode from the basename of `argv[0]`.
     ///
     /// | Basename    | Variant              |
@@ -41,11 +41,11 @@ impl<'a> From<&'a String> for RebootCMD {
     /// | `"poweroff"`| [`RebootCMD::PowerOff`] |
     /// | `"reboot"`  | [`RebootCMD::Reboot`]   |
     /// | _anything else_ | [`RebootCMD::CadOff`] |
-    fn from(value: &'a String) -> Self {
+    fn from(value: &'a str) -> Self {
         let basename = std::path::Path::new(value)
             .file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or(value.as_str());
+            .unwrap_or(value);
         match basename {
             "init" => Self::Init,
             "poweroff" => Self::PowerOff,

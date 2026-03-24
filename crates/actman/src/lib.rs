@@ -143,37 +143,37 @@ mod tests {
 
     #[test]
     fn basename_init_maps_to_init() {
-        assert_eq!(RebootCMD::from(&"init".to_string()), RebootCMD::Init);
+        assert_eq!(RebootCMD::from("init"), RebootCMD::Init);
     }
 
     #[test]
     fn basename_poweroff_maps_to_poweroff() {
         assert_eq!(
-            RebootCMD::from(&"poweroff".to_string()),
+            RebootCMD::from("poweroff"),
             RebootCMD::PowerOff
         );
     }
 
     #[test]
     fn basename_reboot_maps_to_reboot() {
-        assert_eq!(RebootCMD::from(&"reboot".to_string()), RebootCMD::Reboot);
+        assert_eq!(RebootCMD::from("reboot"), RebootCMD::Reboot);
     }
 
     #[test]
     fn unrecognised_basename_maps_to_cadoff() {
-        assert_eq!(RebootCMD::from(&"foobar".to_string()), RebootCMD::CadOff);
-        assert_eq!(RebootCMD::from(&"shutdown".to_string()), RebootCMD::CadOff);
+        assert_eq!(RebootCMD::from("foobar"), RebootCMD::CadOff);
+        assert_eq!(RebootCMD::from("shutdown"), RebootCMD::CadOff);
     }
 
     #[test]
     fn path_prefixed_init_resolves_correctly() {
-        assert_eq!(RebootCMD::from(&"/bin/init".to_string()), RebootCMD::Init);
+        assert_eq!(RebootCMD::from("/bin/init"), RebootCMD::Init);
     }
 
     #[test]
     fn path_prefixed_poweroff_resolves_correctly() {
         assert_eq!(
-            RebootCMD::from(&"/bin/poweroff".to_string()),
+            RebootCMD::from("/bin/poweroff"),
             RebootCMD::PowerOff
         );
     }
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn path_prefixed_reboot_resolves_correctly() {
         assert_eq!(
-            RebootCMD::from(&"/bin/reboot".to_string()),
+            RebootCMD::from("/bin/reboot"),
             RebootCMD::Reboot
         );
     }
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn path_prefixed_unknown_maps_to_cadoff() {
         assert_eq!(
-            RebootCMD::from(&"/usr/sbin/unknown".to_string()),
+            RebootCMD::from("/usr/sbin/unknown"),
             RebootCMD::CadOff
         );
     }

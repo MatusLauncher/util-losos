@@ -12,7 +12,7 @@ use walkdir::WalkDir;
 fn main() -> miette::Result<()> {
     fmt().init();
     let args: Vec<_> = std::env::args().collect();
-    match RebootCMD::from(&args[0]) {
+    match RebootCMD::from(args[0].as_str()) {
         RebootCMD::Init => {
             Preboot::new().mount()?;
             for scripts in WalkDir::new("/etc/init/start").min_depth(1) {
