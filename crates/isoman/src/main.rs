@@ -2,6 +2,7 @@
 
 mod build;
 mod container;
+mod gsi;
 
 use std::{env::current_dir, path::PathBuf, process::Command, str::FromStr};
 
