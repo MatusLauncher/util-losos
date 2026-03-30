@@ -16,6 +16,13 @@ use std::path::{Path, PathBuf};
 pub mod schema;
 /// Git URL of the Limine bootloader binary release repository.
 pub const LIMINE_REPO: &str = "https://github.com/limine-bootloader/limine.git";
+
+/// Default kernel command line embedded into GSI boot images.
+pub const GSI_CMDLINE: &str = "quiet net.ifnames=0 biosdevname=0";
+/// Default output filename for the Fastboot GSI artifact.
+pub const GSI_FASTBOOT_DEFAULT: &str = "boot.img";
+/// Default output filename for the Odin GSI artifact.
+pub const GSI_ODIN_DEFAULT: &str = "AP_losos.tar.md5";
 /// Git branch name for the Limine binary release (e.g. `"v10.x-binary"`).
 pub const LIMINE_BRANCH: &str = "v10.x-binary";
 /// Default `limine.conf` written into the ISO's `/boot/limine/` directory.
@@ -158,6 +165,23 @@ mod tests {
     #[test]
     fn limine_branch_is_binary_release() {
         assert!(LIMINE_BRANCH.ends_with("-binary"));
+    }
+
+    // ── GSI constants ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn gsi_cmdline_is_nonempty() {
+        assert!(!crate::GSI_CMDLINE.is_empty());
+    }
+
+    #[test]
+    fn gsi_fastboot_default_has_img_extension() {
+        assert!(crate::GSI_FASTBOOT_DEFAULT.ends_with(".img"));
+    }
+
+    #[test]
+    fn gsi_odin_default_has_tar_md5_extension() {
+        assert!(crate::GSI_ODIN_DEFAULT.ends_with(".tar.md5"));
     }
 
     // ── resolve_output ────────────────────────────────────────────────────────
