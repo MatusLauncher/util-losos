@@ -6,12 +6,23 @@ mod gsi;
 
 use std::{env::current_dir, path::PathBuf, process::Command, str::FromStr};
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use cluman::schemas::Mode;
-use isoman::resolve_output;
+use isoman::{GSI_FASTBOOT_DEFAULT, GSI_ODIN_DEFAULT, resolve_output};
 use miette::IntoDiagnostic;
 use tracing::info;
 use tracing_subscriber::fmt;
+
+/// Which GSI output format(s) to produce.
+#[derive(Debug, Clone, ValueEnum)]
+enum GsiFormat {
+    /// Fastboot-compatible `boot.img`.
+    Fastboot,
+    /// Samsung Odin-compatible `.tar.md5` archive.
+    Odin,
+    /// Both Fastboot and Odin outputs.
+    All,
+}
 /// Build a bootable hybrid ISO image using the Limine bootloader.
 ///
 /// When `--build` is supplied the initramfs is produced by generating the
@@ -82,6 +93,31 @@ struct Args {
     /// builds.  Only meaningful when `--build` is set.
     #[arg(long, default_value_t = true)]
     with_cache: bool,
+
+    /// Build a GSI (Generic System Image) instead of a bootable ISO.
+    ///
+    /// Uses `mkbootimg` to bundle the kernel and initramfs into an Android boot
+    /// image, then packages it for the requested flash tool(s).
+    #[arg(long, default_value_t = false)]
+    gsi: bool,
+
+    /// Which GSI format(s) to emit.
+    ///
+    /// Only meaningful when `--gsi` is set.
+    #[arg(long, default_value = "all", requires = "gsi")]
+    gsi_format: GsiFormat,
+
+    /// Destination path for the Fastboot `boot.img` artifact.
+    ///
+    /// Only meaningful when `--gsi` is set.
+    #[arg(long, env = "FASTBOOT_OUT", default_value = GSI_FASTBOOT_DEFAULT, requires = "gsi")]
+    fastboot_out: String,
+
+    /// Destination path for the Odin `.tar.md5` artifact.
+    ///
+    /// Only meaningful when `--gsi` is set.
+    #[arg(long, env = "ODIN_OUT", default_value = GSI_ODIN_DEFAULT, requires = "gsi")]
+    odin_out: String,
 }
 
 fn parse_mode(s: &str) -> Result<Mode, String> {
@@ -145,13 +181,52 @@ fn main() -> miette::Result<()> {
         args.initramfs.clone()
     };
 
-    info!(
-        kernel    = %kernel.display(),
-        initramfs = %initramfs.display(),
-        output    = %output.display(),
-        mode      = %args.mode.to_string(),
-        "Assembling ISO (Limine)"
-    );
+    if args.gsi {
+        let cwd = std::env::current_dir().into_diagnostic()?;
+        let fastboot_out = resolve_output(&cwd, &args.fastboot_out);
+        let odin_out = resolve_output(&cwd, &args.odin_out);
 
-    build::build_iso(&kernel, &initramfs, &output, &stage, &args.mode)
+        match args.gsi_format {
+            GsiFormat::Fastboot => {
+                info!(
+                    kernel    = %kernel.display(),
+                    initramfs = %initramfs.display(),
+                    output    = %fastboot_out.display(),
+                    "Building Fastboot GSI"
+                );
+                gsi::build_gsi_fastboot(&kernel, &initramfs, &fastboot_out, &stage)?;
+            }
+            GsiFormat::Odin => {
+                info!(
+                    kernel    = %kernel.display(),
+                    initramfs = %initramfs.display(),
+                    output    = %odin_out.display(),
+                    "Building Odin GSI"
+                );
+                gsi::build_gsi_odin(&kernel, &initramfs, &odin_out, &stage)?;
+            }
+            GsiFormat::All => {
+                info!(
+                    kernel    = %kernel.display(),
+                    initramfs = %initramfs.display(),
+                    fastboot  = %fastboot_out.display(),
+                    odin      = %odin_out.display(),
+                    "Building GSI for all formats"
+                );
+                gsi::build_gsi_fastboot(&kernel, &initramfs, &fastboot_out, &stage)?;
+                gsi::build_gsi_odin(&kernel, &initramfs, &odin_out, &stage)?;
+            }
+        }
+    } else {
+        info!(
+            kernel    = %kernel.display(),
+            initramfs = %initramfs.display(),
+            output    = %output.display(),
+            mode      = %args.mode.to_string(),
+            "Assembling ISO (Limine)"
+        );
+        build::build_iso(&kernel, &initramfs, &output, &stage, &args.mode)?;
+    }
+
+    Ok(())
 }
