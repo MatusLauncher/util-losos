@@ -52,8 +52,12 @@ struct Args {
     initramfs: PathBuf,
 
     /// Destination path for the produced ISO file.
-    #[arg(short, long, env = "OUTPUT", default_value = "os.iso")]
-    output: String,
+    ///
+    /// Defaults to `os-<mode>.iso` (e.g. `os-client.iso`, `os-server.iso`)
+    /// when omitted, so that client and server images built in the same
+    /// working directory do not overwrite each other.
+    #[arg(short, long, env = "OUTPUT")]
+    output: Option<String>,
 
     /// Build the initramfs from source via `podman build` before assembling
     /// the ISO.  Requires podman to be installed.  The Containerfile is
@@ -207,9 +211,18 @@ fn main() -> miette::Result<()> {
 
     // Resolve the ISO output path to absolute before we potentially change
     // into a staging directory.
+    //
+    // When --output is omitted the filename is derived from the mode so that
+    // a client and a server image built in the same directory never collide:
+    //   client     → os-client.iso
+    //   server     → os-server.iso
+    //   controller → os-controller.iso  (fallback; controller has no ISO)
     let output = {
         let cwd = std::env::current_dir().into_diagnostic()?;
-        resolve_output(&cwd, &args.output)
+        let raw = args
+            .output
+            .unwrap_or_else(|| format!("os-{}.iso", args.mode));
+        resolve_output(&cwd, &raw)
     };
 
     // When --build is requested we produce the initramfs ourselves into a
