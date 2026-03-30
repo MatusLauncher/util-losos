@@ -3,14 +3,14 @@
 //!
 //! # Artifacts
 //!
-//! | Format   | Tool       | Output                  |
-//! |----------|------------|-------------------------|
-//! | Fastboot | `fastboot` | `boot.img`              |
-//! | Odin     | Odin/heimdall | `AP_losos.tar.md5`   |
+//! | Format   | Tool          | Output               |
+//! |----------|---------------|----------------------|
+//! | Fastboot  | `fastboot`   | `boot.img`           |
+//! | Odin      | Odin/heimdall | `AP_losos.tar.md5`  |
 //!
 //! Both formats share a common `boot.img` built by [`build_boot_img`] using
-//! `mkbootimg`.  The Odin variant additionally wraps the image in a
-//! `.tar.md5` archive as expected by Samsung's Odin flash tool.
+//! the [`mkbootimg`] library.  The Odin variant additionally wraps the image
+//! in a `.tar.md5` archive as expected by Samsung's Odin flash tool.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -18,16 +18,18 @@ use std::process::Command;
 
 use isoman::GSI_CMDLINE;
 use miette::{Context, IntoDiagnostic, bail};
+use mkbootimg::MkbootimgParams;
 use tracing::info;
 
-/// Build an Android boot image from a kernel and initramfs using `mkbootimg`.
+/// Build an Android boot image from a kernel and initramfs using the
+/// [`mkbootimg`] library.
 ///
 /// The image is written to `<stage>/boot.img` and its path is returned.
 ///
 /// # Errors
 ///
-/// Returns a [`miette::Report`] if `mkbootimg` is not found on `PATH` or exits
-/// with a non-zero status code.
+/// Returns a [`miette::Report`] if the underlying `mkbootimg` C library
+/// returns a non-zero exit code.
 fn build_boot_img(kernel: &Path, initramfs: &Path, stage: &Path) -> miette::Result<PathBuf> {
     let output = stage.join("boot.img");
 
@@ -43,28 +45,14 @@ fn build_boot_img(kernel: &Path, initramfs: &Path, stage: &Path) -> miette::Resu
 
     info!(kernel = %kernel.display(), initramfs = %initramfs.display(), "Building boot.img with mkbootimg");
 
-    let mkbootimg_out = Command::new("mkbootimg")
-        .args([
-            "--kernel",
-            kernel_str,
-            "--ramdisk",
-            initramfs_str,
-            "--cmdline",
-            GSI_CMDLINE,
-            "--output",
-            output_str,
-        ])
-        .output()
-        .into_diagnostic()
-        .wrap_err("mkbootimg not found; install mkbootimg")?;
-
-    if !mkbootimg_out.status.success() {
-        bail!(
-            "mkbootimg failed (exit {}): {}",
-            mkbootimg_out.status,
-            String::from_utf8_lossy(&mkbootimg_out.stderr)
-        );
-    }
+    let mut params = MkbootimgParams::default();
+    params.output = output_str.to_owned();
+    params.kernel = Some(kernel_str.to_owned());
+    params.ramdisk = Some(initramfs_str.to_owned());
+    params.cmdline = Some(GSI_CMDLINE.to_owned());
+    params
+        .create()
+        .map_err(|e| miette::miette!("mkbootimg failed: {e}"))?;
 
     info!(output = %output.display(), "boot.img written");
     Ok(output)
@@ -117,12 +105,12 @@ pub(crate) fn build_gsi_odin(
     let boot_img = build_boot_img(kernel, initramfs, stage)?;
     let tar_path = stage.join("AP_losos.tar");
 
-    let boot_img_str = boot_img
-        .to_str()
-        .ok_or_else(|| miette::miette!("boot.img path is not valid UTF-8"))?;
     let tar_str = tar_path
         .to_str()
         .ok_or_else(|| miette::miette!("tar path is not valid UTF-8"))?;
+
+    // Suppress unused-variable warning — boot_img is kept alive for clarity
+    let _ = &boot_img;
 
     // ── Create tar archive ────────────────────────────────────────────────────
 
@@ -140,9 +128,6 @@ pub(crate) fn build_gsi_odin(
             String::from_utf8_lossy(&tar_out.stderr)
         );
     }
-
-    // Suppress "boot.img" unused-variable warning from above
-    let _ = boot_img_str;
 
     // ── Append MD5 checksum to the archive ────────────────────────────────────
     //
