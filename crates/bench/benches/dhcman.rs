@@ -220,7 +220,15 @@ mod dhcp_encode {
 
     #[test]
     fn request_including_construction() {
-        black_box(encode(&super::request(new_xid(), &DUMMY_MAC, OFFERED_IP, SERVER_IP)).unwrap());
+        black_box(
+            encode(&super::request(
+                new_xid(),
+                &DUMMY_MAC,
+                OFFERED_IP,
+                SERVER_IP,
+            ))
+            .unwrap(),
+        );
     }
 }
 

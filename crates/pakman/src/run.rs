@@ -49,7 +49,7 @@ impl ProgRunner {
     ///
     /// This is a zero-cost constructor — `ProgRunner` carries no state of its own.
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     /// Loads the saved tarball for `prog` and runs it interactively.

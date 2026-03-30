@@ -12,8 +12,10 @@ cluman      = { version = "0.1.0", path = "../cluman" }
 dhcman      = { version = "0.1.0", path = "../dhcman" }
 updman      = { version = "0.1.0", path = "../updman" }
 pakman      = { version = "0.1.0", path = "../pakman" }
+isoman      = { version = "0.1.0", path = "../isoman" }
+mkbootimg   = { workspace = true }
+tempfile.workspace = true
 serde_json.workspace = true
-tempfile.workspace   = true
 walkdir.workspace    = true
 
 [[test]]
@@ -35,3 +37,7 @@ path = "benches/updman.rs"
 [[test]]
 name = "pakman"
 path = "benches/pakman.rs"
+
+[[test]]
+name = "isoman"
+path = "benches/isoman.rs"

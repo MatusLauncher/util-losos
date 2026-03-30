@@ -12,6 +12,7 @@ use isoman::{GSI_FASTBOOT_DEFAULT, GSI_ODIN_DEFAULT, resolve_output};
 use miette::IntoDiagnostic;
 use tracing::info;
 use tracing_subscriber::fmt;
+use walkdir::WalkDir;
 
 /// Which GSI output format(s) to produce.
 #[derive(Debug, Clone, ValueEnum)]
@@ -124,13 +125,74 @@ fn parse_mode(s: &str) -> Result<Mode, String> {
     Mode::from_str(s).map_err(|e| e.to_string())
 }
 
-fn default_kernel() -> PathBuf {
-    let release = Command::new("uname")
-        .arg("-r")
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default();
-    PathBuf::from(format!("/boot/vmlinuz-{release}"))
+/// Locate the running kernel image under `/boot` without requiring it to sit
+/// at the root of that directory.
+///
+/// Standard distros (`/boot/vmlinuz-<release>`) are handled by a fast exact
+/// probe.  Immutable distros that store kernels in subdirectories are handled
+/// by a recursive walk that matches on the **filename** only:
+///
+/// | Distro | Typical path |
+/// |---|---|
+/// | Fedora / Debian / Ubuntu | `/boot/vmlinuz-<release>` |
+/// | Silverblue / CoreOS | `/boot/ostree/<deployment>/vmlinuz-<release>` |
+/// | NixOS | `/boot/kernels/<hash>-linux-<ver>/bzImage` (no vmlinuz) |
+///
+/// Selection priority (highest first):
+/// 1. `/boot/vmlinuz-<uname -r>` — exact match for the running release.
+/// 2. Any file under `/boot` whose **filename** starts with `vmlinuz` and
+///    whose filename contains the running release string.
+/// 3. Any file under `/boot` whose **filename** starts with `vmlinuz`.
+fn find_kernel() -> miette::Result<PathBuf> {
+    // Obtain the running kernel release string from `uname -r`.
+    let release = Command::new("uname").arg("-r").output().into_diagnostic()?;
+    let release = String::from_utf8_lossy(&release.stdout).trim().to_string();
+
+    // ── Fast path: standard /boot/vmlinuz-<release> ──────────────────────────
+    let standard = PathBuf::from(format!("/boot/vmlinuz-{release}"));
+    if standard.is_file() {
+        return Ok(standard);
+    }
+
+    // ── Slow path: recursive walk, filename-only matching ────────────────────
+    //
+    // We match on the *filename* component only (not the full path) so that
+    // directory names like `/boot/ostree/default-<hash>/` do not interfere.
+    // Entries that cannot be read (permission errors, broken symlinks) are
+    // silently skipped.
+    let mut best_with_release: Option<PathBuf> = None;
+    let mut best_any: Option<PathBuf> = None;
+
+    for entry in WalkDir::new("/boot")
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.into_path();
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if !name.starts_with("vmlinuz") {
+            continue;
+        }
+        if name.contains(release.as_str()) {
+            // Prefer the first match that contains the running release string.
+            if best_with_release.is_none() {
+                best_with_release = Some(path);
+            }
+        } else if best_any.is_none() {
+            best_any = Some(path);
+        }
+    }
+
+    best_with_release.or(best_any).ok_or_else(|| {
+        miette::miette!(
+            "no kernel image found under /boot — \
+             pass --kernel explicitly or set the KERNEL env-var"
+        )
+    })
 }
 
 /// Parses CLI arguments, optionally builds the initramfs via `build_initramfs`, then assembles the ISO via `build_iso`.
@@ -138,7 +200,10 @@ fn main() -> miette::Result<()> {
     fmt().init();
     let args = Args::parse();
 
-    let kernel = args.kernel.unwrap_or_else(default_kernel);
+    let kernel = match args.kernel {
+        Some(k) => k,
+        None => find_kernel()?,
+    };
 
     // Resolve the ISO output path to absolute before we potentially change
     // into a staging directory.

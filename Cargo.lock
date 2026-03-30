@@ -273,6 +273,8 @@ dependencies = [
  "actman",
  "cluman",
  "dhcman",
+ "isoman",
+ "mkbootimg",
  "pakman",
  "rustix",
  "serde_json",
@@ -1431,6 +1433,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "tracing-subscriber",
+ "walkdir",
 ]
 
 [[package]]

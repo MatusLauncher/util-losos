@@ -2,7 +2,10 @@
 
 use actman::{preboot::Preboot, reboot::RebootCMD};
 use miette::IntoDiagnostic;
-use rustix::{process::{WaitOptions, waitpid}, system::reboot};
+use rustix::{
+    process::{WaitOptions, waitpid},
+    system::reboot,
+};
 use std::process::Command;
 use strum::IntoEnumIterator;
 use tracing::info;

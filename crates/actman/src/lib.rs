@@ -148,10 +148,7 @@ mod tests {
 
     #[test]
     fn basename_poweroff_maps_to_poweroff() {
-        assert_eq!(
-            RebootCMD::from("poweroff"),
-            RebootCMD::PowerOff
-        );
+        assert_eq!(RebootCMD::from("poweroff"), RebootCMD::PowerOff);
     }
 
     #[test]
@@ -172,26 +169,17 @@ mod tests {
 
     #[test]
     fn path_prefixed_poweroff_resolves_correctly() {
-        assert_eq!(
-            RebootCMD::from("/bin/poweroff"),
-            RebootCMD::PowerOff
-        );
+        assert_eq!(RebootCMD::from("/bin/poweroff"), RebootCMD::PowerOff);
     }
 
     #[test]
     fn path_prefixed_reboot_resolves_correctly() {
-        assert_eq!(
-            RebootCMD::from("/bin/reboot"),
-            RebootCMD::Reboot
-        );
+        assert_eq!(RebootCMD::from("/bin/reboot"), RebootCMD::Reboot);
     }
 
     #[test]
     fn path_prefixed_unknown_maps_to_cadoff() {
-        assert_eq!(
-            RebootCMD::from("/usr/sbin/unknown"),
-            RebootCMD::CadOff
-        );
+        assert_eq!(RebootCMD::from("/usr/sbin/unknown"), RebootCMD::CadOff);
     }
 
     #[test]

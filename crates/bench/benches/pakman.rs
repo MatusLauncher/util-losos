@@ -106,7 +106,9 @@ mod add_to_queue_bulk {
     #[test]
     fn ten_packages() {
         let mut pi = PackageInstallation::new();
-        for pkg in &["curl", "git", "jq", "ripgrep", "htop", "tree", "wget", "bat", "fd", "fzf"] {
+        for pkg in &[
+            "curl", "git", "jq", "ripgrep", "htop", "tree", "wget", "bat", "fd", "fzf",
+        ] {
             pi.add_to_queue(pkg);
         }
         black_box(pi);
