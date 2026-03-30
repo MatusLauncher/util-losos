@@ -1,4 +1,4 @@
 /target
 .claude
 os.initramfs.tar.gz
-os.iso
+os*.iso
