@@ -3,6 +3,7 @@ name = "bench"
 version = "0.1.0"
 edition = "2024"
 publish = false
+autobenches = false
 
 [dev-dependencies]
 actman      = { version = "0.1.0", path = "../actman" }
@@ -11,28 +12,26 @@ cluman      = { version = "0.1.0", path = "../cluman" }
 dhcman      = { version = "0.1.0", path = "../dhcman" }
 updman      = { version = "0.1.0", path = "../updman" }
 pakman      = { version = "0.1.0", path = "../pakman" }
-criterion.workspace  = true
-fastrand.workspace   = true
 serde_json.workspace = true
 tempfile.workspace   = true
 walkdir.workspace    = true
 
-[[bench]]
+[[test]]
 name = "actman"
-harness = false
+path = "benches/actman.rs"
 
-[[bench]]
+[[test]]
 name = "cluman"
-harness = false
+path = "benches/cluman.rs"
 
-[[bench]]
+[[test]]
 name = "dhcman"
-harness = false
+path = "benches/dhcman.rs"
 
-[[bench]]
+[[test]]
 name = "updman"
-harness = false
+path = "benches/updman.rs"
 
-[[bench]]
+[[test]]
 name = "pakman"
-harness = false
+path = "benches/pakman.rs"

@@ -1,9 +1,9 @@
 //! Containerfile template and mode-injection for the initramfs image build.
 //!
-//! This module owns the multi-stage [`CONT_F`] Containerfile string that
-//! `isoman` writes to disk before invoking `podman build`.  The template is
-//! parameterised by one value — the `cluman` operating mode — which is
-//! baked in via [`ContMode::return_final_contf`].
+//! This module owns the multi-stage Containerfile strings that `isoman` writes
+//! to disk before invoking `podman build`.  The template is parameterised by
+//! one value — the `cluman` operating mode — which is baked in via
+//! [`ContMode::return_final_contf`].
 //!
 //! # Build stages
 //!
@@ -16,17 +16,8 @@
 
 use cluman::schemas::Mode;
 
-/// Multi-stage Containerfile template used to produce `os.initramfs.tar.gz`.
-///
-/// The string is a valid Containerfile **except** for the `ARG MODE` line,
-/// which carries no default value.  Before the file is written to disk,
-/// [`ContMode::return_final_contf`] replaces that line with
-/// `ARG MODE=<value>` so `podman build` receives the mode without requiring
-/// a `--build-arg` flag.
-///
-/// This item is private; it is accessed only through [`ContMode::return_final_contf`].
-const CONT_F: &str = r#"
-# check=skip=FromAsCasing
+/// Scaffolding stage: sets up the base filesystem tree and downloads nerdctl.
+const STAGE0: &str = r#"# check=skip=FromAsCasing
 # scaffolding
 FROM alpine:latest as stage0
 RUN apk add busybox-static
@@ -51,7 +42,10 @@ RUN tar -xpf nerdctl*.tar.gz -C out/ \
     bin/runc \
     libexec/cni/
 RUN cd out/bin && for applet in $(/out/bin/busybox --list); do ln -sf busybox "$applet"; done
+"#;
 
+/// Build stage: compiles all workspace binaries for `x86_64-unknown-linux-musl`.
+const STAGE_UTIL: &str = r#"
 # init + package manager
 FROM rust:alpine as util
 COPY . /mdl
@@ -62,7 +56,13 @@ RUN cd /mdl \
     && cp target/x86_64-unknown-linux-musl/release/dhcman /dhcman \
     && cp target/x86_64-unknown-linux-musl/release/cluman /cluman \
     && rm -rf target /root/.cargo/registry
+"#;
 
+/// Assembly stage: builds the final filesystem and packs it into a cpio archive.
+///
+/// Contains the bare `ARG MODE` declaration; [`ContMode::return_final_contf`]
+/// replaces it with `ARG MODE=<value>` before the file is written to disk.
+const STAGE1: &str = r#"
 # packaging
 FROM alpine:latest as stage1
 ARG MODE
@@ -89,13 +89,16 @@ RUN cd out && ln -sf bin/init init
 RUN cd out && ln -sf bin/cluman etc/init/start/$MODE
 RUN apk add fakeroot
 RUN fakeroot sh -c 'mknod out/dev/console c 5 1 && cd out && find . | cpio -o -H newc | gzip > ../os.tar.gz'
+"#;
+
+/// Export stage: copies the initramfs archive out of the build as the sole artifact.
+const STAGE_FINAL: &str = r#"
 # final
 FROM scratch
 COPY --from=stage1 os.tar.gz os.initramfs.tar.gz
 "#;
 
-/// Renders the `CONT_F` Containerfile template with a specific `cluman` mode
-/// baked in.
+/// Renders the Containerfile template with a specific `cluman` mode baked in.
 ///
 /// Call [`set_mode`](ContMode::set_mode) to choose the operating mode, then
 /// [`return_final_contf`](ContMode::return_final_contf) to obtain the
@@ -129,8 +132,10 @@ impl ContMode {
     /// Accepted modes (defined by `cluman`):
     /// - `client` — boot-time daemon, started by init on every boot.
     /// - `server` — boot-time daemon, started by init on every boot.
-    /// - `controller` — one-shot CLI tool; installed as a named symlink only,
-    ///   no init entry is created.
+    ///
+    /// [`Mode::Controller`] is silently ignored: controller is a one-shot CLI
+    /// tool installed only as a named symlink, so no init entry or mode argument
+    /// is needed in the Containerfile.
     pub fn set_mode(&mut self, mode: cluman::schemas::Mode) -> &Self {
         if mode != Mode::Controller {
             self.mode = mode;
@@ -140,10 +145,11 @@ impl ContMode {
 
     /// Returns the fully rendered Containerfile as an owned [`String`].
     ///
-    /// Replaces the bare `ARG MODE` declaration in [`CONT_F`] with
+    /// Replaces the bare `ARG MODE` declaration in [`STAGE1`] with
     /// `ARG MODE=<mode>`, so `podman build` does not require an explicit
     /// `--build-arg MODE=…` flag.
     pub fn return_final_contf(&self) -> String {
-        CONT_F.replace("ARG MODE", &format!("ARG MODE={}", self.mode))
+        let stage1 = STAGE1.replace("ARG MODE", &format!("ARG MODE={}", self.mode));
+        format!("{STAGE0}{STAGE_UTIL}{stage1}{STAGE_FINAL}")
     }
 }

@@ -87,3 +87,19 @@ slow-timeout = { period = "30s", terminate-after = 5 }
 path = "target/nextest/boot/junit.xml"
 
 report-name = "util-mdl — QEMU boot integration tests"
+
+# ── bench profile ─────────────────────────────────────────────────────────────
+#
+# Runs the `bench` crate's libtest smoke tests via:
+#   cargo nextest run -p bench --profile bench
+
+[profile.bench]
+fail-fast = false
+success-output = "immediate-final"
+failure-output = "immediate-final"
+status-level = "all"
+final-status-level = "all"
+
+[profile.bench.junit]
+path = "target/nextest/bench/junit.xml"
+report-name = "util-mdl — benchmark smoke tests"
