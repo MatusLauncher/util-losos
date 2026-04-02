@@ -8,7 +8,9 @@ members = [
             "crates/isoman", 
             "crates/cluman", 
             "crates/bench", 
-            "crates/pakman"
+            "crates/pakman",
+            "crates/user/userman",
+            "crates/user/perman"
           ]
 
 [workspace.dependencies]
