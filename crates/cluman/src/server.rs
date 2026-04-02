@@ -6,7 +6,6 @@
 
 use actman::cmdline::CmdLineOptions;
 use expressjs::prelude::*;
-use miette::IntoDiagnostic;
 use rustix::system::reboot;
 use serde_json::json;
 use std::{net::Ipv4Addr, thread::spawn};
@@ -79,7 +78,7 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
                     st.push_task(task);
                     res.status_code(201).send_json(&json!({ "response": "Task queued" }))
                 }
-                Err(e) => res.status_code(400).send_text(&e.to_string()),
+                Err(e) => res.status_code(400).send_text(e.to_string()),
             }
         }
     });

@@ -1,6 +1,6 @@
 # LosOS Utilities
 
-`util-mdl` is the main repository where all LosOS OS utilities are built. It produces a bootable initramfs image containing an init system, a DHCP client, a cluster manager, and an OTA update manager — all compiled as statically-linked MUSL binaries and assembled into a cpio initramfs via a multi-stage container build.
+`util-mdl` is the main repository where all LosOS OS utilities are built. It produces a bootable initramfs image containing an init system, a DHCP client, a cluster manager, a user manager, and an OTA update manager — all compiled as statically-linked MUSL binaries and assembled into a cpio initramfs via a multi-stage container build.
 
 ## Crates
 
@@ -10,10 +10,12 @@
 | [`dhcman`](#dhcman) | DHCP client — configures a network interface via a full DORA sequence |
 | [`cluman`](#cluman) | Cluster manager — client, server, and controller modes |
 | [`updman`](#updman) | OTA update manager — pulls a new initramfs from a container registry and swaps it onto the BOOT partition |
-| [`isoman`](#isoman) | ISO builder — generates the Containerfile, builds the initramfs via `podman build`, and assembles a hybrid BIOS+UEFI ISO with Limine |
+| [`isoman`](#isoman) | ISO / GSI builder — generates the Containerfile, builds the initramfs via `podman build`, assembles a hybrid BIOS+UEFI ISO with Limine, and optionally produces Android-compatible GSI images via `mkbootimg` |
+| [`userman`](#userman) | User manager — CLI client, HTTP daemon, and login screen with 2FA (TOTP / password / FIDO2) and LUKS home encryption |
+| [`perman`](#perman) | Permission enforcement — `cdylib` that intercepts `chdir` via `LD_PRELOAD` to enforce per-user allowed directories |
 | [`pakman`](#pakman) | Package manager — installs, removes, and runs programs packaged as Nix-based container images stored on the data drive |
 | [`testman`](#testman) | Integration test framework — boots the initramfs in QEMU and asserts expected log output |
-| [`bench`](#bench) | Criterion benchmarks for all crates |
+| [`bench`](#bench) | Smoke tests and micro-benchmarks for all crates |
 
 ## Building
 
@@ -28,11 +30,33 @@ cargo build --release
 cargo build --release --target x86_64-unknown-linux-musl
 
 # Build initramfs + ISO in one step (requires podman)
-cargo r -p isoman -- --build -m <client|server|controller>
+# Output files are mode-stamped: os-client.iso, os-server.iso, etc.
+cargo run -p isoman -- --build --mode <client|server|controller>
 
-# Build only the initramfs container image directly
-podman build --no-cache --build-arg "MODE=client" -t util-mdl-build .
+# Build only the initramfs, skip ISO assembly
+cargo run -p isoman -- --build --mode client --initramfs-out os-client.initramfs.tar.gz
+
+# Assemble ISO from a pre-built initramfs
+cargo run -p isoman -- --initramfs os-client.initramfs.tar.gz --mode client
+
+# Build an Android GSI (boot.img + Odin .tar.md5) instead of an ISO
+cargo run -p isoman -- --build --mode client --gsi
+cargo run -p isoman -- --build --mode client --gsi --gsi-format fastboot
+cargo run -p isoman -- --build --mode client --gsi --gsi-format odin
 ```
+
+### Output filename conventions
+
+All `isoman` output paths default to a mode-stamped name so that client and server artifacts built in the same working directory never overwrite each other:
+
+| Artifact | Default path |
+|----------|-------------|
+| ISO | `os-<mode>.iso` (e.g. `os-client.iso`) |
+| Initramfs | `os-<mode>.initramfs.tar.gz` (e.g. `os-server.initramfs.tar.gz`) |
+| Fastboot GSI | `boot.img` |
+| Odin GSI | `AP_losos.tar.md5` |
+
+Pass `--output`, `--initramfs`, `--fastboot-out`, or `--odin-out` to override any of these.
 
 ### launch.sh
 
@@ -42,7 +66,7 @@ podman build --no-cache --build-arg "MODE=client" -t util-mdl-build .
 # Launch the initramfs interactively in QEMU
 ./launch.sh
 
-# Build initramfs first, then launch
+# Build initramfs first (via podman build), then launch
 ./launch.sh --build
 
 # Run integration tests (testman)
@@ -51,12 +75,14 @@ podman build --no-cache --build-arg "MODE=client" -t util-mdl-build .
 # Build initramfs then run tests
 ./launch.sh --build --test
 
-# Build a bootable ISO
+# Build a bootable ISO from a pre-built initramfs
 ./launch.sh --iso
 
 # Disable KVM (CI environments without nested virtualisation)
 KVM=0 ./launch.sh --test
 ```
+
+`launch.sh` automatically builds a supplemental initrd containing decompressed `virtio_net`, `net_failover`, and `failover` kernel modules and prepends it to the initramfs so that the virtual NIC is available in QEMU even when the main image has no kernel modules.
 
 Environment variables respected by `launch.sh`:
 
@@ -77,12 +103,12 @@ cargo fmt --check
 
 ## CI Pipeline
 
-The GitLab CI pipeline is split into five focused stages:
+The GitLab CI pipeline is split into focused stages:
 
 | Job | Stage | Description |
 |-----|-------|-------------|
 | `compile` | `build` | Compiles the `isoman` binary on the Podman image |
-| `initramfs` | `build` | Runs `podman build` to produce `os.initramfs.tar.gz` |
+| `initramfs` | `build` | Runs `podman build` to produce `os-<mode>.initramfs.tar.gz` |
 | `iso` | `assemble` | Assembles the hybrid ISO using `isoman` + Limine (skipped when `$KERNEL` is unset) |
 | `test-boot` | `test` | Boots the initramfs in QEMU via `testman` (manual, requires `$KERNEL`) |
 | `publish` | `publish` | Pushes the container image to the GitLab registry tagged as `<branch-slug>` |
@@ -163,19 +189,67 @@ Key source files:
 
 ### isoman
 
-`isoman` has two responsibilities:
+`isoman` has three responsibilities:
 
-1. **Build the initramfs** — generate the Containerfile from the template embedded in `crates/isoman/src/schema.rs`, bake in the chosen `cluman` mode (`ARG MODE=<mode>`), and invoke `podman build`.
-2. **Assemble the ISO** — clone the Limine bootloader, copy the kernel and initramfs into a staging directory, and call `xorriso` to produce a hybrid BIOS+UEFI ISO.
+1. **Build the initramfs** — generate the Containerfile from the template embedded in `crates/isoman/src/schema.rs`, bake in the chosen `cluman` mode (`ARG MODE=<mode>`), and invoke `podman build`. Output is mode-stamped (`os-<mode>.initramfs.tar.gz`) so client and server archives never collide.
 
-The Containerfile is never read from disk; it lives as a `static` string in the Rust source and is written to a temp file before the build.
+2. **Assemble the ISO** — clone the Limine bootloader, copy the kernel and initramfs into a staging directory, and call `xorriso` to produce a hybrid BIOS+UEFI ISO. Output defaults to `os-<mode>.iso`.
+
+3. **Build a GSI** — use the [`mkbootimg`](https://gitlab.com/mtos-v2/mkbootimg) Rust library (wrapping the upstream Android `mkbootimg` C tool) to bundle the kernel and initramfs into an Android boot image. Supports two output formats:
+   - **Fastboot** — raw `boot.img` flashable via `fastboot flash boot`.
+   - **Odin** — `AP_losos.tar.md5` archive for Samsung Odin / `heimdall`.
+
+The kernel auto-detection (`--kernel` omitted) walks `/boot` recursively and matches on the filename only, so it works correctly on standard distros (`/boot/vmlinuz-<release>`) as well as immutable ones where the kernel lives in a subdirectory (e.g. Silverblue's `/boot/ostree/<deployment>/vmlinuz-<release>`). The running release string from `uname -r` is used to prefer the booted kernel over stale deployments.
+
+The Containerfile is never read from disk; it lives as `static` strings in the Rust source and is written to a temp file before the build.
 
 Key source files:
 
-- `crates/isoman/src/schema.rs` — `CONT_F` template + `ContMode` renderer
-- `crates/isoman/src/container.rs` — `podman build` invocation
+- `crates/isoman/src/schema.rs` — `ContMode` renderer + embedded Containerfile stage constants
+- `crates/isoman/src/container.rs` — `podman build` / `podman cp` invocation
 - `crates/isoman/src/build.rs` — Limine ISO assembly
-- `crates/isoman/src/main.rs` — `clap` CLI entry point
+- `crates/isoman/src/gsi.rs` — GSI builder using the `mkbootimg` library
+- `crates/isoman/src/main.rs` — `clap` CLI entry point; `find_kernel` auto-detection
+
+### userman
+
+`userman` is the user management subsystem. A single binary serves four roles determined at runtime by the executable's filename (symlink polymorphism):
+
+| Symlink name | Role |
+|---|---|
+| `userman` / `useradd` | CLI client — `create`, `delete`, `update` subcommands |
+| `usersvc-local` | HTTP daemon — loopback-only connections |
+| `usersvc-remote` | HTTP daemon — non-loopback connections |
+| `login` | Interactive login screen with 2FA and LUKS home unlock |
+
+The daemon exposes a REST API on port 20 and persists user records as JSON:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/healthcheck` | Liveness probe |
+| `GET` | `/user/get/:name` | Fetch a single user record |
+| `GET` | `/users` | List all users |
+| `POST` | `/user/create` | Create a user |
+| `DELETE` | `/user/delete/:name` | Remove a user |
+| `PATCH` | `/user/update/:name` | Update a user field |
+
+Supported 2FA methods: **TOTP** (SHA1, 6-digit, 30-second window), **secondary password**, and **FIDO2/Passkey** (CTAP HID, RPID `"losOS"`). When `--encrypt` is set at creation time, the login screen unlocks a LUKS2 home partition before completing the session.
+
+Key source files:
+
+- `crates/user/userman/src/mode.rs` — `ModeOfOperation::from(exe_name)` dispatch
+- `crates/user/userman/src/daemon.rs` — `Daemon` (expressjs HTTP server) and `UserAPI` (ureq client)
+- `crates/user/userman/src/cli.rs` — clap CLI (`Create`, `Delete`, `Update`)
+- `crates/user/userman/src/twofa.rs` — TOTP generation/validation, FIDO2 registration/assertion
+- `crates/user/userman/src/crypto.rs` — LUKS2 home unlock via dmsetup
+
+### perman
+
+`perman` compiles as a `cdylib` and is injected into every login shell via `LD_PRELOAD=/lib/libperman.so` (set in `/etc/profile` by the container build). It intercepts `chdir` calls via a `#[no_mangle] extern "C" fn chdir` and validates the target path against the calling user's `allowed_dirs` list by querying the `userman` daemon. This enforces filesystem sandboxing without kernel modifications.
+
+Key source files:
+
+- `crates/user/perman/src/lib.rs` — `chdir` intercept and `userman` API call
 
 ### pakman
 
@@ -253,13 +327,22 @@ Key source files:
 
 ### bench
 
-Criterion benchmarks for the core logic of `actman`, `dhcman`, `cluman`, and `updman`. Run with:
+Smoke tests and micro-benchmarks for the core logic of all crates. Each crate gets its own `[[test]]` target under `crates/bench/benches/`. Run with:
 
 ```bash
-cargo bench
+cargo test -p bench
 ```
 
-Results are written to `target/criterion/` as HTML reports.
+Coverage by target:
+
+| Target | What is exercised |
+|--------|-------------------|
+| `actman` | `CmdLineOptions` parsing, `RebootCMD` dispatch |
+| `cluman` | `IpRange` parsing/expansion, `CluManSchema`, `Tasks`, `ServerState`, `Mode` conversions, `Task` serde |
+| `dhcman` | DORA message construction, netconf helpers |
+| `updman` | `UpdMan` schema parsing, `image_ref` construction |
+| `pakman` | `PackageInstallation` queue, Dockerfile template rendering, `WalkDir` scan, `nerdctl` command construction |
+| `isoman` | `build_gsi_fastboot` / `build_gsi_odin` end-to-end (boot image header validation, Odin MD5 trailer, monotonic size scaling), `MkbootimgParams` construction, `resolve_output` |
 
 ---
 
@@ -269,19 +352,32 @@ All fallible operations return `miette::Result<()>` using the `IntoDiagnostic` t
 
 ## Container Build
 
-The multi-stage Containerfile (embedded in `isoman`) produces `os.initramfs.tar.gz`:
+The multi-stage Containerfile (embedded in `isoman`) produces `os-<mode>.initramfs.tar.gz`:
 
 | Stage | Base | Purpose |
 |-------|------|---------|
-| `stage0` | `alpine:latest` | Downloads `busybox-static` and the latest `nerdctl` full bundle; builds the target filesystem tree |
-| `util` | `rust:alpine` | Compiles `actman`, `updman`, `dhcman`, `cluman` for `x86_64-unknown-linux-musl` |
-| `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, creates symlinks, packs into a newc cpio archive |
+| `stage0` | `alpine:latest` | Downloads `busybox-static` and the latest `nerdctl` full bundle; builds the target filesystem tree under `out/`, including `out/lib/` for shared libraries |
+| `util` | `rust:alpine` | Compiles `actman`, `updman`, `dhcman`, `cluman`, `userman`, and `libperman.so` for `x86_64-unknown-linux-musl`. Static binaries use the default Rust musl linker; `perman` is linked as a `cdylib` |
+| `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, copies `libperman.so` to `out/lib/`, sets `LD_PRELOAD` in `/etc/profile`, installs the mode-selected `cluman` symlink under `/etc/init/start/`, and packs everything into a newc cpio archive |
 | *(final)* | `scratch` | Exports `os.tar.gz` as `os.initramfs.tar.gz` |
 
-The `MODE` build argument controls which `cluman` symlink is installed under `/etc/init/start/`, making the cluman role (client/server) a build-time decision baked into the image.
+The `MODE` build argument controls which `cluman` symlink (`client` or `server`) is installed under `/etc/init/start/`, making the cluster role a build-time decision baked into the image. `isoman` bakes this in automatically — no `--build-arg` is needed on the command line.
+
+Init scripts installed at boot time:
+
+| Path | Source | Purpose |
+|------|--------|---------|
+| `/etc/init/start/00-loopback` | inline shell | Brings up `lo` with `127.0.0.1/8` |
+| `/etc/init/start/00-eth0` | symlink → `dhcman` | DHCP on `eth0` |
+| `/etc/init/start/login` | symlink → `userman` | Interactive login screen |
+| `/etc/init/start/usersvc-local` | symlink → `userman` | Local user management daemon |
+| `/etc/init/start/buildkitd` | symlink → `buildkitd` | BuildKit daemon for container builds |
+| `/etc/init/start/containerd` | symlink → `containerd` | containerd runtime |
+| `/etc/init/start/sh` | symlink → `sh` | Fallback shell |
+| `/etc/init/start/<mode>` | symlink → `cluman` | `cluman` in the baked-in mode |
 
 ---
 
 ## AI Disclosure
 
-This project uses generative AI (Claude Sonnet 4.6 Thinking) to generate documentation and tests. It is also used for refactoring and for regression fighting and will be used in the future to review MRs and manage issues.
+This project uses generative AI (Claude Sonnet 4.6) to generate documentation and tests. It is also used for refactoring and regression fighting and will be used in the future to review MRs and manage issues.

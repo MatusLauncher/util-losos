@@ -34,6 +34,8 @@ use base64::{Engine, prelude::BASE64_STANDARD};
 use expressjs::prelude::*;
 use miette::{IntoDiagnostic, miette};
 use serde::{Deserialize, Serialize};
+use tracing::info;
+
 
 use crate::mode::Location;
 
@@ -486,23 +488,17 @@ impl UserAPI {
     }
     /// Fetch all user schemas from the daemon.
     pub fn users(&self) -> miette::Result<Vec<UserSchema>> {
-        let mut response = ureq::get(format!("http://{}:20/users", self.addr))
+        let response = ureq::get(&format!("http://{}:20/users", self.addr))
             .call()
             .into_diagnostic()?;
-        response
-            .body_mut()
-            .read_json::<Vec<UserSchema>>()
-            .into_diagnostic()
+        Ok(response.into_json().into_diagnostic()?)
     }
     /// Fetch the schema for a single user by name.
     pub fn user(&self, name: &str) -> miette::Result<UserSchema> {
-        let mut response = ureq::get(&format!("http://{}:20/user/get/{name}", self.addr))
+        let response = ureq::get(&format!("http://{}:20/user/get/{name}", self.addr))
             .call()
             .into_diagnostic()?;
-        response
-            .body_mut()
-            .read_json::<UserSchema>()
-            .into_diagnostic()
+        Ok(response.into_json().into_diagnostic()?)
     }
     /// Send a create request for the given `schema`.
     pub fn create_user(&self, schema: &UserSchema) -> miette::Result<()> {
