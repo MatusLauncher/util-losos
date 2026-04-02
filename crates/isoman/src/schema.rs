@@ -10,7 +10,7 @@
 //! | Stage | Base image | Purpose |
 //! |-------|-----------|---------|
 //! | `stage0` | `alpine:latest` | Downloads `busybox-static` and the latest `nerdctl` full bundle; creates the target filesystem tree under `out/`. |
-//! | `util`   | `rust:alpine`   | Installs Zig as a musl cross-linker, then compiles all workspace binaries and `libperman.so` for `x86_64-unknown-linux-musl`. |
+//! | `util`   | `rust:alpine`   | Installs Zig + clang-dev (LIBCLANG_STATIC=1), then compiles all workspace binaries and `libperman.so` for `x86_64-unknown-linux-musl`. |
 //! | `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, copies `libperman.so` to `lib/`, sets `LD_PRELOAD` in `/etc/profile`, and packs everything into a newc cpio archive compressed as `os.tar.gz`. |
 //! | *(final)* | `scratch`      | Exports `os.tar.gz` as `os.initramfs.tar.gz`, the sole artifact consumed by the ISO assembly step. |
 
@@ -48,33 +48,29 @@ RUN tar -xpf nerdctl*.tar.gz -C out/ \
 RUN cd out/bin && for applet in $(/out/bin/busybox --list); do ln -sf busybox "$applet"; done
 "#;
 
-/// Build stage: installs the Zig cross-linker, then compiles all workspace
-/// binaries (static) and `libperman.so` (musl cdylib) for
-/// `x86_64-unknown-linux-musl`.
+/// Build stage: compiles all workspace binaries and `libperman.so` for
+/// `x86_64-unknown-linux-musl` in two passes.
 ///
-/// Zig is used as the C compiler/linker for every target crate so that
-/// `cdylib` outputs (shared libraries) are linked correctly against musl.
+/// **Pass 1** — static MUSL (default linker): builds every workspace member
+/// except `perman`.  The default linker in `rust:alpine` uses Rust's
+/// self-contained musl CRT; no external linker is needed.
+///
+/// **Pass 2** — dynamic MUSL (Zig linker): builds only `perman` as a `cdylib`.
+/// The compiled `.rlib` artifacts from pass 1 are reused; Zig is only invoked
+/// for the final `perman` shared-library link (`-shared`).  A `cdylib` link
+/// never injects startup CRT objects, so there is no `_start`/`_init` conflict.
 const STAGE_UTIL: &str = r#"
 # init + package manager
 FROM rust:alpine as util
-RUN apk add curl tar xz
-RUN curl -L -o /tmp/zig.tar.xz \
-        https://ziglang.org/download/ZIG_VERSION/zig-linux-x86_64-ZIG_VERSION.tar.xz \
-    && tar -xJf /tmp/zig.tar.xz -C /usr/local \
-    && printf '#!/bin/sh\nexec /usr/local/zig-linux-x86_64-ZIG_VERSION/zig cc -target x86_64-linux-musl "$@"\n' \
-       > /usr/local/bin/zigcc \
-    && chmod +x /usr/local/bin/zigcc \
-    && rm /tmp/zig.tar.xz
 COPY . /mdl
 RUN cd /mdl \
-    && CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=zigcc \
-       CC_x86_64_unknown_linux_musl=zigcc \
-       cargo build --release --target x86_64-unknown-linux-musl \
+    && cargo build --release --target x86_64-unknown-linux-musl --workspace --exclude perman --exclude isoman \
     && cp target/x86_64-unknown-linux-musl/release/actman /actman \
     && cp target/x86_64-unknown-linux-musl/release/updman /updman \
     && cp target/x86_64-unknown-linux-musl/release/dhcman /dhcman \
     && cp target/x86_64-unknown-linux-musl/release/cluman /cluman \
     && cp target/x86_64-unknown-linux-musl/release/userman /userman \
+    && cargo build -p perman --release --target x86_64-unknown-linux-musl \
     && cp target/x86_64-unknown-linux-musl/release/libperman.so /libperman.so \
     && rm -rf target /root/.cargo/registry
 "#;
