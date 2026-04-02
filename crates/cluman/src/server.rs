@@ -4,11 +4,18 @@
 //! the shared [`ServerState`] and exposes an HTTP API that lets controllers
 //! push work and lets clients claim that work.
 
-use actman::cmdline::CmdLineOptions;
+use actman::{cmdline::CmdLineOptions, persistence::Persistence};
 use expressjs::prelude::*;
+use miette::IntoDiagnostic;
 use rustix::system::reboot;
 use serde_json::json;
-use std::{net::Ipv4Addr, thread::spawn};
+use std::{
+    fs::create_dir_all,
+    net::Ipv4Addr,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    thread::spawn,
+};
 use tracing::info;
 
 use crate::{
@@ -64,18 +71,43 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
 
     info!(%own_ip, port = PORT, "Server starting");
 
-    let state = ServerState::new();
+    // ── Persistent overlay for server state ───────────────────────────────────
+    //
+    // The task queue and client registry live in /data/cluman/ on the data
+    // drive.  Wrapping that directory with a Persistence overlay means every
+    // mutation is staged in an upper layer.  On a controlled shutdown (reboot
+    // or poweroff) the overlay is committed atomically, making the state
+    // durable across reboots.  A crash leaves the lower layer (last committed
+    // state) intact.
+    create_dir_all("/data/cluman").into_diagnostic()?;
+    let mut cluman_persist = Persistence::new(PathBuf::from("/data/cluman"));
+    cluman_persist.mount()?;
+    let state_path = cluman_persist.mountpoint().join("state.json");
+
+    // Recover the task queue and client registry from the previous session.
+    let state = ServerState::load_from(&state_path)?;
+
+    // Shared handle so the reboot/poweroff handlers can commit before issuing
+    // the syscall.
+    let persist = Arc::new(Mutex::new(cluman_persist));
+
     let mut app = express();
 
     // ── POST /api/push-task — controllers push work here ─────────────────────
     let st = state.clone();
+    let sp = state_path.clone();
     app.post("/api/push-task", move |req, res| {
         let st = st.clone();
+        let sp = sp.clone();
         async move {
             match req.json::<Task>().await {
                 Ok(task) => {
                     info!(filename = task.filename, "Task received from controller");
                     st.push_task(task);
+                    // Persist the updated queue so a crash doesn't lose the task.
+                    if let Err(e) = st.save_to(&sp) {
+                        info!("Warning: could not persist state after push_task: {e}");
+                    }
                     res.status_code(201)
                         .send_json(&json!({ "response": "Task queued" }))
                 }
@@ -83,22 +115,38 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
             }
         }
     });
-    app.get("/reboot", move |req, res| async move {
-        match req.json::<CluManSchema>().await {
-            Ok(_) => {
-                spawn(move || reboot(rustix::system::RebootCommand::Restart));
-                res.status_code(200)
+    let p = persist.clone();
+    app.get("/reboot", move |req, res| {
+        let p = p.clone();
+        async move {
+            match req.json::<CluManSchema>().await {
+                Ok(_) => {
+                    // Commit the overlay before the reboot syscall so the
+                    // last-known state survives the next boot.
+                    spawn(move || {
+                        p.lock().unwrap().commit();
+                        reboot(rustix::system::RebootCommand::Restart)
+                    });
+                    res.status_code(200)
+                }
+                Err(_) => res.status_code(400),
             }
-            Err(_) => res.status_code(400),
         }
     });
-    app.get("/poweroff", move |req, res| async move {
-        match req.json::<CluManSchema>().await {
-            Ok(_) => {
-                spawn(move || reboot(rustix::system::RebootCommand::PowerOff));
-                res.status_code(200)
+    let p = persist.clone();
+    app.get("/poweroff", move |req, res| {
+        let p = p.clone();
+        async move {
+            match req.json::<CluManSchema>().await {
+                Ok(_) => {
+                    spawn(move || {
+                        p.lock().unwrap().commit();
+                        reboot(rustix::system::RebootCommand::PowerOff)
+                    });
+                    res.status_code(200)
+                }
+                Err(_) => res.status_code(400),
             }
-            Err(_) => res.status_code(400),
         }
     });
     // ── POST /api/register-client ─────────────────────────────────────────────
@@ -123,12 +171,19 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
 
     // ── GET /task — clients claim the next pending task ───────────────────────
     let st = state.clone();
+    let sp = state_path.clone();
     app.get("/task", move |_req, res| {
         let st = st.clone();
+        let sp = sp.clone();
         async move {
             match st.claim_task() {
                 Some(task) => {
                     info!(filename = task.filename, "Task dispatched to client");
+                    // Persist the reduced queue so a crash doesn't re-dispatch
+                    // the same task on the next boot.
+                    if let Err(e) = st.save_to(&sp) {
+                        info!("Warning: could not persist state after claim_task: {e}");
+                    }
                     res.send_json(&task)
                 }
                 None => res.status_code(204),

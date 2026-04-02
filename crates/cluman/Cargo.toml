@@ -9,6 +9,7 @@ clap.workspace = true
 ipnet = { version = "2.12.0", features = ["serde"] }
 either = { version = "1.15.0", features = ["serde"] }
 miette.workspace = true
+overlayfs_fuse.workspace = true
 minreq = "2.14.1"
 expressjs.workspace = true
 serde.workspace = true

@@ -4,13 +4,13 @@
 //! Each entry in `VIRTUAL_FS` maps a mountpoint name to its filesystem type;
 //! entries are only attempted if the corresponding directory exists under `/`.
 
-use std::{ffi::CStr, fs::create_dir_all, path::Path};
+use std::{ffi::CStr, fs::create_dir_all, path::{Path, PathBuf}};
 
 use miette::IntoDiagnostic;
 use rustix::mount::{MountFlags, mount};
 use tracing::{info, warn};
 
-use crate::cmdline::CmdLineOptions;
+use crate::{cmdline::CmdLineOptions, persistence::Persistence};
 
 /// `(directory_name, filesystem_type)` pairs for the standard virtual
 /// filesystems that must be mounted in the early boot environment.
@@ -52,8 +52,18 @@ impl Preboot {
         Self::default()
     }
 
-    /// Mounts each discovered virtual filesystem via `mount(2)`.
-    pub fn mount(&self) -> miette::Result<()> {
+    /// Mounts each discovered virtual filesystem via `mount(2)` and optionally
+    /// sets up a persistent overlay for `/etc`.
+    ///
+    /// # Return value
+    ///
+    /// Returns `Ok(Some(Persistence))` when a `data_drive` is present and the
+    /// `/etc` overlay was successfully mounted.  The caller **must** keep the
+    /// returned value alive for as long as the overlay should remain mounted —
+    /// dropping it unmounts the FUSE session via [`Persistence`]'s `Drop` impl.
+    ///
+    /// Returns `Ok(None)` when no `data_drive` is configured (RAM-only mode).
+    pub fn mount(&self) -> miette::Result<Option<Persistence>> {
         // Mount virtual filesystems first — /proc must exist before we can
         // read /proc/cmdline below.
         self.mounts
@@ -84,10 +94,22 @@ impl Preboot {
                     None::<&CStr>,
                 )
                 .into_diagnostic()?;
-            }
-            None => warn!("No data_drive kernel parameter set. The OS is running entirely in RAM."),
-        }
 
-        Ok(())
+                // Provide a durable overlay for /etc so configuration
+                // changes written during this session persist across reboots.
+                // The lower layer lives on the data drive; the upper layer
+                // accumulates changes until actman exits and commits on
+                // controlled shutdown.
+                info!("Setting up persistent overlay for /etc");
+                create_dir_all("/data/etc.lower").into_diagnostic()?;
+                let mut etc_persist = Persistence::new(PathBuf::from("/data/etc.lower"));
+                etc_persist.mount()?;
+                Ok(Some(etc_persist))
+            }
+            None => {
+                warn!("No data_drive kernel parameter set. The OS is running entirely in RAM.");
+                Ok(None)
+            }
+        }
     }
 }

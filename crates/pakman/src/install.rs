@@ -41,12 +41,12 @@
 use std::{
     env::temp_dir,
     fs::{create_dir_all, read_to_string, write},
-    path::Path,
+    path::PathBuf,
     process::Command,
     thread::scope,
 };
 
-use actman::cmdline::CmdLineOptions;
+use actman::{cmdline::CmdLineOptions, persistence::Persistence};
 use miette::{IntoDiagnostic, miette};
 use rustix::mount::{MountFlags, mount};
 use tracing::{info, warn};
@@ -152,40 +152,66 @@ impl PackageInstallation {
             Ok(_) => (),
             Err(_) => warn!("The program directory probably exists, continuing"),
         };
-        scope(|thread| {
-            self.install_tasks.iter().for_each(|task| {
-                thread.spawn(move || -> miette::Result<()> {
-                    let path = temp_dir().join(task);
-                    let join = Path::new("/data").join("progs");
-                    let perm_path = join.join(format!("{task}.tar"));
-                    write(
-                        &path,
-                        format!(
+
+        // Wrap /data/progs with a persistent overlay so that tarballs written
+        // during this session are staged in the upper layer.  On success the
+        // upper layer is committed atomically into /data/progs; on any failure
+        // it is discarded so a partial install never corrupts the on-disk state.
+        let mut progs_persist = Persistence::new(PathBuf::from("/data/progs"));
+        progs_persist.mount()?;
+        let overlay_mountpoint = progs_persist.mountpoint();
+
+        let all_ok = scope(|thread| {
+            let handles: Vec<_> = self.install_tasks.iter()
+                .map(|task| {
+                    let mount_path = overlay_mountpoint.clone();
+                    thread.spawn(move || -> bool {
+                        let path = temp_dir().join(task);
+                        let perm_path = mount_path.join(format!("{task}.tar"));
+                        let dockerfile = format!(
                             "FROM nixos/nix as base\nENTRYPOINT nix-shell -p {task} --run {task}"
-                        ),
-                    )
-                    .into_diagnostic()?;
-                    info!("Building the image with a system container runtime...");
-                    let mut command = Command::new("/bin/nerdctl");
-                    command
-                        .arg("build")
-                        .arg(&path)
-                        .arg("-t")
-                        .arg(format!("local/{task}"))
-                        .status()
-                        .into_diagnostic()?;
-                    command
-                        .arg("save")
-                        .arg(format!("local/{task}"))
-                        .arg("-o")
-                        .arg(perm_path)
-                        .spawn()
-                        .into_diagnostic()?;
-                    info!("DONE! Restart this machine to clean up build cache");
-                    Ok(())
-                });
-            });
+                        );
+                        if write(&path, dockerfile).is_err() {
+                            return false;
+                        }
+                        info!("Building the image with a system container runtime...");
+                        let build_ok = Command::new("/bin/nerdctl")
+                            .arg("build")
+                            .arg(&path)
+                            .arg("-t")
+                            .arg(format!("local/{task}"))
+                            .status()
+                            .map(|s| s.success())
+                            .unwrap_or(false);
+                        if !build_ok {
+                            return false;
+                        }
+                        let save_ok = Command::new("/bin/nerdctl")
+                            .arg("save")
+                            .arg(format!("local/{task}"))
+                            .arg("-o")
+                            .arg(&perm_path)
+                            .status()
+                            .map(|s| s.success())
+                            .unwrap_or(false);
+                        if save_ok {
+                            info!("DONE! Restart this machine to clean up build cache");
+                        }
+                        save_ok
+                    })
+                })
+                .collect();
+            handles.into_iter().all(|h| h.join().unwrap_or(false))
         });
+
+        if all_ok {
+            info!("All packages installed; committing overlay to /data/progs");
+            progs_persist.commit();
+        } else {
+            warn!("One or more packages failed to install; discarding overlay");
+            progs_persist.discard();
+            return Err(miette!("Package installation failed; no changes written to /data/progs"));
+        }
         Ok(())
     }
 }

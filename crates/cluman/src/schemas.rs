@@ -13,14 +13,16 @@
 
 use std::{
     collections::{HashMap, VecDeque},
+    fs,
     net::Ipv4Addr,
+    path::Path,
     str::FromStr,
     sync::{Arc, Mutex},
 };
 
 use either::Either;
 use ipnet::Ipv4Net;
-use miette::miette;
+use miette::{IntoDiagnostic, miette};
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
@@ -332,6 +334,52 @@ impl ServerState {
     /// Number of tasks currently waiting in the queue.
     pub fn pending_count(&self) -> usize {
         self.pending_tasks.lock().unwrap().len()
+    }
+}
+
+// ── ServerState persistence ───────────────────────────────────────────────────
+
+/// A serialisable snapshot of [`ServerState`] used for persistence.
+///
+/// [`ServerState`] itself cannot derive `Serialize`/`Deserialize` because it
+/// wraps its fields in `Arc<Mutex<…>>`.  This flat struct is used as an
+/// intermediate representation for saving to and loading from disk.
+#[derive(Serialize, Deserialize)]
+struct ServerStateSnapshot {
+    clients: HashMap<Ipv4Addr, Mode>,
+    pending_tasks: Tasks,
+}
+
+impl ServerState {
+    /// Serialises the current state to a JSON file at `path`.
+    ///
+    /// Both the client registry and the pending task queue are captured in
+    /// a point-in-time snapshot and written atomically via
+    /// [`fs::write`](std::fs::write).
+    pub fn save_to(&self, path: &Path) -> miette::Result<()> {
+        let snapshot = ServerStateSnapshot {
+            clients: self.clients.lock().unwrap().clone(),
+            pending_tasks: self.pending_tasks.lock().unwrap().clone(),
+        };
+        let json = serde_json::to_string(&snapshot).into_diagnostic()?;
+        fs::write(path, json).into_diagnostic()
+    }
+
+    /// Loads a previously saved [`ServerState`] from the JSON file at `path`.
+    ///
+    /// Returns a fresh empty [`ServerState`] when the file does not exist,
+    /// allowing the server to start cleanly on first boot without requiring
+    /// an explicit initialisation step.
+    pub fn load_from(path: &Path) -> miette::Result<Self> {
+        if !path.exists() {
+            return Ok(Self::new());
+        }
+        let json = fs::read_to_string(path).into_diagnostic()?;
+        let snapshot: ServerStateSnapshot = serde_json::from_str(&json).into_diagnostic()?;
+        Ok(Self {
+            clients: Arc::new(Mutex::new(snapshot.clients)),
+            pending_tasks: Arc::new(Mutex::new(snapshot.pending_tasks)),
+        })
     }
 }
 

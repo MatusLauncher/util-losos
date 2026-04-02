@@ -33,8 +33,14 @@
 //! - [`reboot`] — exposes [`reboot::RebootCMD`], an enum that maps an
 //!   `argv[0]` basename (or a `rustix` [`rustix::system::RebootCommand`]
 //!   value) to the appropriate Linux reboot syscall command, and vice-versa.
+//!
+//! - [`persistence`] — exposes [`persistence::Persistence`], a FUSE-backed
+//!   overlay filesystem wrapper.  Other util-mdl crates (pakman, updman,
+//!   cluman) use it to give their writable state durable persistence across
+//!   reboots via `overlayfs_fuse`.
 
 pub mod cmdline;
+pub mod persistence;
 pub mod preboot;
 pub mod reboot;
 

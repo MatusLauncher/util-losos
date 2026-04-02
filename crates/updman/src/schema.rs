@@ -10,9 +10,9 @@ use std::{
     process::{Command, Stdio},
 };
 
-use actman::cmdline::CmdLineOptions;
+use actman::{cmdline::CmdLineOptions, persistence::Persistence};
 use miette::{IntoDiagnostic, bail};
-use tracing::info;
+use tracing::{info, warn};
 /// Central update-manager type for the MTOS update sequence.
 ///
 /// Holds the container registry coordinates that are read from the kernel
@@ -131,41 +131,68 @@ impl UpdMan {
         drop(dl_file);
         create_dir_all(temp_dir().join("out")).into_diagnostic()?;
         create_dir_all(temp_dir().join("mnt")).into_diagnostic()?;
+
+        // Mount the BOOT partition to a temporary directory so we can inspect
+        // its current contents (the lower layer for the overlay).
         Command::new("mount")
             .arg("/dev/disk/by-label/BOOT")
             .arg(temp_dir().join("mnt"))
             .output()
             .into_diagnostic()?;
-        Command::new("tar")
-            .arg("-xvf")
-            .arg("dl.tar")
-            .arg("-C")
-            .arg(temp_dir().join("out"))
-            .output()
+
+        // Wrap the BOOT mountpoint in a persistent overlay.  The new initramfs
+        // is staged in the upper layer; only a successful CommitAtomic lands it
+        // on the actual partition, so a power-loss mid-download leaves the BOOT
+        // partition intact.
+        let mut boot_persist = Persistence::new(temp_dir().join("mnt"));
+        boot_persist.mount()?;
+        let boot_overlay = boot_persist.mountpoint();
+
+        let update_result: miette::Result<()> = (|| {
+            Command::new("tar")
+                .arg("-xvf")
+                .arg("dl.tar")
+                .arg("-C")
+                .arg(temp_dir().join("out"))
+                .output()
+                .into_diagnostic()?;
+            set_current_dir(temp_dir().join("out")).into_diagnostic()?;
+            info!("Extracting the initramfs image...");
+            // Find the first *.tar layer file with a plain read_dir — no
+            // recursive walk needed since OCI layers sit directly in the out/ dir.
+            let layer_tar = fs::read_dir(temp_dir().join("out"))
+                .into_diagnostic()?
+                .filter_map(|entry| entry.ok())
+                .find(|entry| entry.file_name().to_string_lossy().ends_with(".tar"))
+                .map(|entry| entry.path())
+                .ok_or_else(|| miette::miette!("no .tar layer found in extraction directory"))?;
+            Command::new("tar")
+                .arg("-xvf")
+                .arg(&layer_tar)
+                .output()
+                .into_diagnostic()?;
+            info!("Moving the initramfs image to the boot partition overlay...");
+            rename(
+                temp_dir().join("out").join("os.initramfs.tar.gz"),
+                boot_overlay.join("os.initramfs.tar.gz"),
+            )
             .into_diagnostic()?;
-        set_current_dir(temp_dir().join("out")).into_diagnostic()?;
-        info!("Extracting the initramfs image...");
-        // Find the first *.tar layer file with a plain read_dir — no
-        // recursive walk needed since OCI layers sit directly in the out/ dir.
-        let layer_tar = fs::read_dir(temp_dir().join("out"))
-            .into_diagnostic()?
-            .filter_map(|entry| entry.ok())
-            .find(|entry| entry.file_name().to_string_lossy().ends_with(".tar"))
-            .map(|entry| entry.path())
-            .ok_or_else(|| miette::miette!("no .tar layer found in extraction directory"))?;
-        Command::new("tar")
-            .arg("-xvf")
-            .arg(&layer_tar)
-            .output()
-            .into_diagnostic()?;
-        info!("Moving the initramfs image to the boot partition...");
-        rename(
-            temp_dir().join("out").join("os.initramfs.tar.gz"),
-            temp_dir().join("mnt").join("os.initramfs.tar.gz"),
-        )
-        .into_diagnostic()?;
+            Ok(())
+        })();
+
+        match update_result {
+            Ok(()) => {
+                info!("Committing new initramfs to BOOT partition");
+                boot_persist.commit();
+            }
+            Err(ref e) => {
+                warn!("Update failed ({e}); discarding overlay — BOOT partition unchanged");
+                boot_persist.discard();
+            }
+        }
+
         info!("Finishing up");
-        Command::new("umount").arg("-R").arg("mnt");
-        Ok(())
+        Command::new("umount").arg("-R").arg(temp_dir().join("mnt"));
+        update_result
     }
 }

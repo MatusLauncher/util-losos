@@ -45,7 +45,6 @@ use crate::mode::Location;
 #[derive(Default, Clone)]
 pub struct Daemon {
     save_location: PathBuf,
-    users: Users,
     location: Location,
 }
 

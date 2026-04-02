@@ -7,6 +7,7 @@ edition = "2024"
 actman = { version = "0.1.0", path = "../actman" }
 fetch-data = "0.2.0"
 miette.workspace = true
+overlayfs_fuse.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 walkdir.workspace = true

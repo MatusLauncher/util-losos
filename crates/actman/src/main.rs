@@ -17,7 +17,9 @@ fn main() -> miette::Result<()> {
     let args: Vec<_> = std::env::args().collect();
     match RebootCMD::from(args[0].as_str()) {
         RebootCMD::Init => {
-            Preboot::new().mount()?;
+            // _overlay keeps the FUSE session alive for the duration of
+            // PID 1's lifetime.  Dropping it would unmount the /etc overlay.
+            let _overlay = Preboot::new().mount()?;
             for scripts in WalkDir::new("/etc/init/start").min_depth(1) {
                 let dir_entry = scripts.into_diagnostic()?;
                 let script = dir_entry.path();
