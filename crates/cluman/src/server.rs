@@ -76,7 +76,8 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
                 Ok(task) => {
                     info!(filename = task.filename, "Task received from controller");
                     st.push_task(task);
-                    res.status_code(201).send_json(&json!({ "response": "Task queued" }))
+                    res.status_code(201)
+                        .send_json(&json!({ "response": "Task queued" }))
                 }
                 Err(e) => res.status_code(400).send_text(e.to_string()),
             }
@@ -110,9 +111,12 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
                     let (ip, _) = schema.peer().unwrap();
                     st.register_client(ip);
                     info!(%ip, "Client registered");
-                    res.status_code(201).send_json(&json!({ "response": "Successfully registered" }))
+                    res.status_code(201)
+                        .send_json(&json!({ "response": "Successfully registered" }))
                 }
-                _ => res.status_code(400).send_text("Invalid request. Only clients can register with servers."),
+                _ => res
+                    .status_code(400)
+                    .send_text("Invalid request. Only clients can register with servers."),
             }
         }
     });

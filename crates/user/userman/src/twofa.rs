@@ -71,8 +71,7 @@ pub fn validate_totp(secret: &[u8], code: &str) -> miette::Result<bool> {
 /// Returns `(credential_id, public_key_der, public_key_type)`.
 /// `public_key_type`: 0 = Unknown, 1 = Ecdsa256, 2 = Ed25519.
 pub fn register_fido2(pin: Option<&str>) -> miette::Result<(Vec<u8>, Vec<u8>, u8)> {
-    let device = FidoKeyHidFactory::create(&Cfg::init())
-        .map_err(|e| miette!("{:#}", e))?;
+    let device = FidoKeyHidFactory::create(&Cfg::init()).map_err(|e| miette!("{:#}", e))?;
     let challenge = verifier::create_challenge();
     let builder = MakeCredentialArgsBuilder::new(RPID, &challenge);
     let builder = match pin {
@@ -103,8 +102,7 @@ pub fn verify_fido2(
     public_key_type: u8,
     pin: Option<&str>,
 ) -> miette::Result<bool> {
-    let device = FidoKeyHidFactory::create(&Cfg::init())
-        .map_err(|e| miette!("{:#}", e))?;
+    let device = FidoKeyHidFactory::create(&Cfg::init()).map_err(|e| miette!("{:#}", e))?;
     let challenge = verifier::create_challenge();
     let builder = GetAssertionArgsBuilder::new(RPID, &challenge).credential_id(credential_id);
     let builder = match pin {
@@ -118,7 +116,12 @@ pub fn verify_fido2(
         .first()
         .ok_or_else(|| miette!("No FIDO2 assertion returned"))?;
     let public_key = PublicKey::with_der(public_key_der, key_type_from_u8(public_key_type));
-    Ok(verifier::verify_assertion(RPID, &public_key, &challenge, assertion))
+    Ok(verifier::verify_assertion(
+        RPID,
+        &public_key,
+        &challenge,
+        assertion,
+    ))
 }
 
 /// Convert a [`PublicKeyType`] to the compact `u8` representation stored in [`UserSchema`].

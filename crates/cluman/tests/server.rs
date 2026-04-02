@@ -143,7 +143,8 @@ fn build_server(state: ServerState) -> App {
             match req.json::<Task>().await {
                 Ok(task) => {
                     st.push_task(task);
-                    res.status_code(201).send_json(&json!({ "response": "Task queued" }))
+                    res.status_code(201)
+                        .send_json(&json!({ "response": "Task queued" }))
                 }
                 Err(e) => res.status_code(400).send_text(e.to_string()),
             }
@@ -159,9 +160,12 @@ fn build_server(state: ServerState) -> App {
                 Ok(schema) if schema.peer().is_some_and(|(_, m)| m == Mode::Client) => {
                     let (ip, _) = schema.peer().unwrap();
                     st.register_client(ip);
-                    res.status_code(201).send_json(&json!({ "response": "Successfully registered" }))
+                    res.status_code(201)
+                        .send_json(&json!({ "response": "Successfully registered" }))
                 }
-                _ => res.status_code(400).send_text("Only clients can register with servers."),
+                _ => res
+                    .status_code(400)
+                    .send_text("Only clients can register with servers."),
             }
         }
     });

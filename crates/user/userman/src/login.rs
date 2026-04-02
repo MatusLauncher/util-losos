@@ -149,10 +149,10 @@ fn handle_key(
         return Ok(());
     }
     match app.screen {
-        Screen::Credentials    => handle_credentials(app, key, daemon_api)?,
-        Screen::TotpCode       => handle_totp(app, key)?,
+        Screen::Credentials => handle_credentials(app, key, daemon_api)?,
+        Screen::TotpCode => handle_totp(app, key)?,
         Screen::SecondPassword => handle_second_password(app, key)?,
-        Screen::Fido2Pin       => handle_fido2_pin(app, key, terminal)?,
+        Screen::Fido2Pin => handle_fido2_pin(app, key, terminal)?,
         Screen::Fido2Waiting | Screen::Done => {}
     }
     Ok(())
@@ -171,8 +171,12 @@ fn handle_credentials(
             };
         }
         KeyCode::Backspace => match app.cred_focus {
-            CredField::Username => { app.username.pop(); }
-            CredField::Password => { app.password.pop(); }
+            CredField::Username => {
+                app.username.pop();
+            }
+            CredField::Password => {
+                app.password.pop();
+            }
         },
         KeyCode::Enter => {
             app.error_msg = None;
@@ -205,10 +209,10 @@ fn handle_credentials(
             unsafe { std::env::set_var("USER", &app.username) };
 
             app.screen = match user.twofa() {
-                Some(TwoFA::TOTP)     => Screen::TotpCode,
+                Some(TwoFA::TOTP) => Screen::TotpCode,
                 Some(TwoFA::Password) => Screen::SecondPassword,
-                Some(TwoFA::Passkey)  => Screen::Fido2Pin,
-                None                  => Screen::Done,
+                Some(TwoFA::Passkey) => Screen::Fido2Pin,
+                None => Screen::Done,
             };
             app.authenticated_user = Some(user);
         }
@@ -228,7 +232,9 @@ fn handle_totp(app: &mut LoginScreen, key: crossterm::event::KeyEvent) -> miette
             app.error_msg = None;
             app.screen = Screen::Credentials;
         }
-        KeyCode::Backspace => { app.totp_input.pop(); }
+        KeyCode::Backspace => {
+            app.totp_input.pop();
+        }
         KeyCode::Enter => {
             app.error_msg = None;
             let user = app
@@ -243,7 +249,10 @@ fn handle_totp(app: &mut LoginScreen, key: crossterm::event::KeyEvent) -> miette
                 }
             };
             match validate_totp(secret, &app.totp_input)? {
-                true  => { app.totp_input.clear(); app.screen = Screen::Done; }
+                true => {
+                    app.totp_input.clear();
+                    app.screen = Screen::Done;
+                }
                 false => {
                     app.error_msg = Some("Invalid TOTP code, try again.".into());
                     app.totp_input.clear();
@@ -268,7 +277,9 @@ fn handle_second_password(
             app.error_msg = None;
             app.screen = Screen::Credentials;
         }
-        KeyCode::Backspace => { app.second_pass_input.pop(); }
+        KeyCode::Backspace => {
+            app.second_pass_input.pop();
+        }
         KeyCode::Enter => {
             app.error_msg = None;
             let user = app
@@ -307,7 +318,9 @@ fn handle_fido2_pin(
             app.error_msg = None;
             app.screen = Screen::Credentials;
         }
-        KeyCode::Backspace => { app.fido2_pin.pop(); }
+        KeyCode::Backspace => {
+            app.fido2_pin.pop();
+        }
         KeyCode::Enter => {
             app.error_msg = None;
             // Paint the waiting screen and flush before blocking on verify_fido2.
@@ -332,11 +345,17 @@ fn handle_fido2_pin(
                     return Ok(());
                 }
             };
-            let pin_opt: Option<&str> =
-                if app.fido2_pin.is_empty() { None } else { Some(&app.fido2_pin) };
+            let pin_opt: Option<&str> = if app.fido2_pin.is_empty() {
+                None
+            } else {
+                Some(&app.fido2_pin)
+            };
 
             match verify_fido2(cred_id, pubkey_der, pubkey_type, pin_opt)? {
-                true => { app.fido2_pin.clear(); app.screen = Screen::Done; }
+                true => {
+                    app.fido2_pin.clear();
+                    app.screen = Screen::Done;
+                }
                 false => {
                     app.error_msg = Some("FIDO2 verification failed, try again.".into());
                     app.fido2_pin.clear();
@@ -357,9 +376,10 @@ fn handle_fido2_pin(
 fn ui(f: &mut Frame, app: &LoginScreen) {
     let area = centered_rect(62, 60, f.area());
     match app.screen {
-        Screen::Credentials    => draw_credentials(f, area, app),
-        Screen::TotpCode       => draw_single_input(
-            f, area,
+        Screen::Credentials => draw_credentials(f, area, app),
+        Screen::TotpCode => draw_single_input(
+            f,
+            area,
             " Two-Factor Authentication — TOTP ",
             "TOTP code (6 digits)",
             &app.totp_input,
@@ -368,7 +388,8 @@ fn ui(f: &mut Frame, app: &LoginScreen) {
             "Enter: verify   Esc: back   Ctrl-C: quit",
         ),
         Screen::SecondPassword => draw_single_input(
-            f, area,
+            f,
+            area,
             " Two-Factor Authentication — Password ",
             "Second password",
             &app.second_pass_input,
@@ -376,8 +397,9 @@ fn ui(f: &mut Frame, app: &LoginScreen) {
             app.error_msg.as_deref(),
             "Enter: verify   Esc: back   Ctrl-C: quit",
         ),
-        Screen::Fido2Pin       => draw_single_input(
-            f, area,
+        Screen::Fido2Pin => draw_single_input(
+            f,
+            area,
             " Two-Factor Authentication — FIDO2 ",
             "PIN (leave empty if not required)",
             &app.fido2_pin,
@@ -385,16 +407,13 @@ fn ui(f: &mut Frame, app: &LoginScreen) {
             app.error_msg.as_deref(),
             "Enter: confirm and wait for key tap   Esc: back",
         ),
-        Screen::Fido2Waiting   => draw_message(
-            f, area,
+        Screen::Fido2Waiting => draw_message(
+            f,
+            area,
             " FIDO2 ",
             "Please touch your FIDO2 key when it blinks...",
         ),
-        Screen::Done           => draw_message(
-            f, area,
-            " LosOS ",
-            "Login successful.",
-        ),
+        Screen::Done => draw_message(f, area, " LosOS ", "Login successful."),
     }
 }
 
@@ -457,12 +476,12 @@ fn draw_credentials(f: &mut Frame, area: Rect, app: &LoginScreen) {
 
     // Text cursor
     if user_focused {
-        let cx = (user_inner.x + app.username.len() as u16)
-            .min(user_inner.right().saturating_sub(1));
+        let cx =
+            (user_inner.x + app.username.len() as u16).min(user_inner.right().saturating_sub(1));
         f.set_cursor_position((cx, user_inner.y));
     } else {
-        let cx = (pass_inner.x + app.password.len() as u16)
-            .min(pass_inner.right().saturating_sub(1));
+        let cx =
+            (pass_inner.x + app.password.len() as u16).min(pass_inner.right().saturating_sub(1));
         f.set_cursor_position((cx, pass_inner.y));
     }
 }
@@ -505,7 +524,11 @@ fn draw_single_input(
         .border_style(Style::default().fg(Color::Yellow));
     let input_inner = input_block.inner(chunks[2]);
     f.render_widget(input_block, chunks[2]);
-    let display = if mask { "*".repeat(input.len()) } else { input.to_string() };
+    let display = if mask {
+        "*".repeat(input.len())
+    } else {
+        input.to_string()
+    };
     f.render_widget(Paragraph::new(display), input_inner);
 
     if let Some(err) = error {

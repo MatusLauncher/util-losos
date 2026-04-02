@@ -22,7 +22,10 @@ use actman::cmdline::CmdLineOptions;
 use userman::daemon::UserAPI;
 
 static USVC_IP: LazyLock<IpAddr> = LazyLock::new(|| {
-    match CmdLineOptions::new().ok().and_then(|c| c.opts().get("usvc_ip").cloned()) {
+    match CmdLineOptions::new()
+        .ok()
+        .and_then(|c| c.opts().get("usvc_ip").cloned())
+    {
         Some(addr) => IpAddr::from_str(&addr).unwrap_or_else(|_| Ipv4Addr::LOCALHOST.into()),
         None => Ipv4Addr::LOCALHOST.into(),
     }
@@ -36,9 +39,14 @@ fn current_username() -> Option<String> {
     // SAFETY: getlogin() returns a pointer to static storage; we copy it immediately.
     let ptr = unsafe { libc::getlogin() };
     if !ptr.is_null() {
-        return unsafe { CStr::from_ptr(ptr) }.to_str().ok().map(str::to_owned);
+        return unsafe { CStr::from_ptr(ptr) }
+            .to_str()
+            .ok()
+            .map(str::to_owned);
     }
-    std::env::var("LOGNAME").ok().or_else(|| std::env::var("USER").ok())
+    std::env::var("LOGNAME")
+        .ok()
+        .or_else(|| std::env::var("USER").ok())
 }
 
 /// Returns `true` if `path` is permitted for `username` according to the

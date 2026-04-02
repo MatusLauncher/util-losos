@@ -36,7 +36,6 @@ use miette::{IntoDiagnostic, miette};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-
 use crate::mode::Location;
 
 /// The HTTP daemon that owns the user database.
@@ -326,7 +325,11 @@ impl Daemon {
             What::AllowedDirectories(v) => schema.allowed_dirs = v,
             What::TwoFactor(v) => schema.twofa = v,
             What::TOTPSecret(v) => schema.totp_secret = Some(v),
-            What::FIDOCredential { credential_id, public_key_der, public_key_type } => {
+            What::FIDOCredential {
+                credential_id,
+                public_key_der,
+                public_key_type,
+            } => {
                 schema.fido2_credential_id = Some(credential_id);
                 schema.fido2_public_key_der = Some(public_key_der);
                 schema.fido2_public_key_type = Some(public_key_type);
@@ -364,15 +367,24 @@ impl Daemon {
     pub async fn run(&self) -> miette::Result<()> {
         let mut app = express();
 
-        app.get("/healthcheck", async move |_, res: Response| res.status_code(200));
+        app.get("/healthcheck", async move |_, res: Response| {
+            res.status_code(200)
+        });
 
         let daemon = self.clone();
         app.get("/user/get/:name", move |req: Request, res: Response| {
             let daemon = daemon.clone();
             async move {
-                let ip = req.ip().map(|s| s.ip()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+                let ip = req
+                    .ip()
+                    .map(|s| s.ip())
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
                 if daemon.validate_location(ip).is_ok() {
-                    let name = req.params().get("name").map(|s| s.to_owned()).unwrap_or_default();
+                    let name = req
+                        .params()
+                        .get("name")
+                        .map(|s| s.to_owned())
+                        .unwrap_or_default();
                     match daemon.get(name) {
                         Ok(schema) => res.send_json(&schema),
                         Err(_) => Response::not_found(),
@@ -387,7 +399,10 @@ impl Daemon {
         app.get("/users", move |req: Request, res: Response| {
             let daemon = daemon.clone();
             async move {
-                let ip = req.ip().map(|s| s.ip()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+                let ip = req
+                    .ip()
+                    .map(|s| s.ip())
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
                 if daemon.validate_location(ip).is_ok() {
                     match read_to_string(&daemon.save_location)
                         .ok()
@@ -406,7 +421,10 @@ impl Daemon {
         app.post("/user/create", move |req: Request, res: Response| {
             let daemon = daemon.clone();
             async move {
-                let ip = req.ip().map(|s| s.ip()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+                let ip = req
+                    .ip()
+                    .map(|s| s.ip())
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
                 if daemon.validate_location(ip).is_ok() {
                     match req.json::<UserSchema>().await {
                         Ok(schema) => match daemon.create(schema) {
@@ -425,9 +443,16 @@ impl Daemon {
         app.delete("/user/delete/:name", move |req: Request, res: Response| {
             let daemon = daemon.clone();
             async move {
-                let ip = req.ip().map(|s| s.ip()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+                let ip = req
+                    .ip()
+                    .map(|s| s.ip())
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
                 if daemon.validate_location(ip).is_ok() {
-                    let name = req.params().get("name").map(|s| s.to_owned()).unwrap_or_default();
+                    let name = req
+                        .params()
+                        .get("name")
+                        .map(|s| s.to_owned())
+                        .unwrap_or_default();
                     match daemon.delete(name) {
                         Ok(()) => res,
                         Err(_) => Response::not_found(),
@@ -442,9 +467,16 @@ impl Daemon {
         app.patch("/user/update/:name", move |req: Request, res: Response| {
             let daemon = daemon.clone();
             async move {
-                let ip = req.ip().map(|s| s.ip()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+                let ip = req
+                    .ip()
+                    .map(|s| s.ip())
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
                 if daemon.validate_location(ip).is_ok() {
-                    let name = req.params().get("name").map(|s| s.to_owned()).unwrap_or_default();
+                    let name = req
+                        .params()
+                        .get("name")
+                        .map(|s| s.to_owned())
+                        .unwrap_or_default();
                     match req.json::<ChangeSchema>().await {
                         Ok(cs) => match daemon.update(name, cs.what) {
                             Ok(()) => res,

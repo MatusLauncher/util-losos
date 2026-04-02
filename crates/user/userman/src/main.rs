@@ -35,11 +35,7 @@ async fn main() -> miette::Result<()> {
 
     let mut daemon_api = UserAPI::new();
     let cmdline = CmdLineOptions::new()?;
-    let userdb_addr = cmdline
-        .opts()
-        .get("usvc_ip")
-        .cloned()
-        .unwrap_or_default();
+    let userdb_addr = cmdline.opts().get("usvc_ip").cloned().unwrap_or_default();
 
     match ModeOfOperation::from(pname) {
         ModeOfOperation::Client => {
@@ -153,8 +149,11 @@ fn apply_twofa(
         }
         "passkey" => {
             let pin_input = prompt("FIDO2 PIN (leave empty if not required): ")?;
-            let pin_opt: Option<&str> =
-                if pin_input.is_empty() { None } else { Some(&pin_input) };
+            let pin_opt: Option<&str> = if pin_input.is_empty() {
+                None
+            } else {
+                Some(&pin_input)
+            };
             println!("Please touch your FIDO2 key when it blinks...");
             let (cred_id, pubkey_der, pubkey_type) = register_fido2(pin_opt)?;
             api.update_user(
@@ -167,7 +166,11 @@ fn apply_twofa(
             )?;
             api.update_user(name, What::TwoFactor(Some(TwoFA::Passkey)))?;
         }
-        other => return Err(miette!("Unknown 2FA method '{other}'. Use: totp, password, passkey")),
+        other => {
+            return Err(miette!(
+                "Unknown 2FA method '{other}'. Use: totp, password, passkey"
+            ));
+        }
     }
     Ok(())
 }
