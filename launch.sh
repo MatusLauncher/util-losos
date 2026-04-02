@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeux pipefail
 
-INITRAMFS="${INITRAMFS:-os.initramfs.tar.gz}"
+INITRAMFS="${INITRAMFS:-$(find . -name "*.initramfs.tar.gz")}"
 KERNEL="${KERNEL:-$(find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print -quit 2>/dev/null)}"
 MEMORY="${MEMORY:-2G}"
 CPUS="${CPUS:-2}"
