@@ -84,15 +84,15 @@ pub unsafe extern "C" fn chdir(path: *const c_char) -> c_int {
         }
     };
 
-    if let Some(username) = current_username() {
-        if !path_is_allowed(Path::new(path_str), &username) {
-            unsafe { *libc::__errno_location() = libc::EACCES };
-            return -1;
-        }
+    if let Some(username) = current_username()
+        && !path_is_allowed(Path::new(path_str), &username)
+    {
+        unsafe { *libc::__errno_location() = libc::EACCES };
+        return -1;
     }
 
     // Resolve the real chdir through the dynamic linker.
-    let sym = unsafe { libc::dlsym(libc::RTLD_NEXT, b"chdir\0".as_ptr() as *const c_char) };
+    let sym = unsafe { libc::dlsym(libc::RTLD_NEXT, c"chdir".as_ptr() as *const c_char) };
     if sym.is_null() {
         unsafe { *libc::__errno_location() = libc::ENOSYS };
         return -1;

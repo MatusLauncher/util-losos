@@ -523,14 +523,14 @@ impl UserAPI {
         let response = ureq::get(&format!("http://{}:20/users", self.addr))
             .call()
             .into_diagnostic()?;
-        Ok(response.into_json().into_diagnostic()?)
+        response.into_json().into_diagnostic()
     }
     /// Fetch the schema for a single user by name.
     pub fn user(&self, name: &str) -> miette::Result<UserSchema> {
         let response = ureq::get(&format!("http://{}:20/user/get/{name}", self.addr))
             .call()
             .into_diagnostic()?;
-        Ok(response.into_json().into_diagnostic()?)
+        response.into_json().into_diagnostic()
     }
     /// Send a create request for the given `schema`.
     pub fn create_user(&self, schema: &UserSchema) -> miette::Result<()> {

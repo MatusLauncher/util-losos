@@ -122,11 +122,22 @@ pub async fn run_client_with(
         Err(e) => warn!(error = %e, "Failed to register with server — will retry next poll"),
     }
 
-    // ── Background: poll server for tasks every 10 s ──────────────────────────
+    // ── Background: poll server for tasks ────────────────────────────────────
     //
     // minreq is synchronous; keep this in a plain OS thread so it does not
     // block the Tokio executor.  The Arc makes the executor shareable across
     // the thread boundary without cloning the underlying object.
+    //
+    // Poll interval defaults to 10 s but can be overridden via the
+    // `poll_interval_ms` cmdline key (useful in tests).
+
+    let poll_interval = Duration::from_millis(
+        cmdline
+            .opts()
+            .get("poll_interval_ms")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10_000),
+    );
 
     let st = state.clone();
     thread::spawn(move || {
@@ -147,7 +158,7 @@ pub async fn run_client_with(
                 Ok(resp) => warn!(status = resp.status_code, "Unexpected status polling task"),
                 Err(e) => warn!(error = %e, "Failed to poll server for task"),
             }
-            thread::sleep(Duration::from_secs(10));
+            thread::sleep(poll_interval);
         }
     });
 
