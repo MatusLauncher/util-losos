@@ -100,6 +100,7 @@ fn cmdline_opts(server_url: &str, own_ip: Ipv4Addr) -> actman::cmdline::CmdLineO
         [
             ("server_url".to_owned(), server_url.to_owned()),
             ("own_ip".to_owned(), own_ip.to_string()),
+            ("client_port".to_owned(), "0".to_owned()),
         ]
         .into_iter()
         .collect::<std::collections::HashMap<_, _>>(),

@@ -157,8 +157,14 @@ pub async fn run_client_with(
         res.send_json(&json!({ "status": "ok", "mode": "client" }))
     });
 
-    info!(port = PORT, "Client listening");
-    app.listen(PORT, |_| async {}).await;
+    let client_port: u16 = cmdline
+        .opts()
+        .get("client_port")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(PORT);
+
+    info!(port = client_port, "Client listening");
+    app.listen(client_port, |_| async {}).await;
     Ok(())
 }
 
