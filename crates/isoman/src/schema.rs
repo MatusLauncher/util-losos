@@ -14,8 +14,6 @@
 //! | `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, copies `libperman.so` to `lib/`, sets `LD_PRELOAD` in `/etc/profile`, and packs everything into a newc cpio archive compressed as `os.tar.gz`. |
 //! | *(final)* | `scratch`      | Exports `os.tar.gz` as `os.initramfs.tar.gz`, the sole artifact consumed by the ISO assembly step. |
 
-use cluman::schemas::Mode;
-
 /// Zig release used as the musl C compiler / linker inside the build container.
 const ZIG_VERSION: &str = "0.13.0";
 
@@ -155,14 +153,9 @@ impl ContMode {
     /// Accepted modes (defined by `cluman`):
     /// - `client` — boot-time daemon, started by init on every boot.
     /// - `server` — boot-time daemon, started by init on every boot.
-    ///
-    /// [`Mode::Controller`] is silently ignored: controller is a one-shot CLI
-    /// tool installed only as a named symlink, so no init entry or mode argument
-    /// is needed in the Containerfile.
+    /// - `controller` — one-shot CLI tool; installed as a named symlink only.
     pub fn set_mode(&mut self, mode: cluman::schemas::Mode) -> &Self {
-        if mode != Mode::Controller {
-            self.mode = mode;
-        }
+        self.mode = mode;
         self
     }
 

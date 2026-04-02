@@ -145,7 +145,7 @@ fn build_server(state: ServerState) -> App {
                     st.push_task(task);
                     res.status_code(201).send_json(&json!({ "response": "Task queued" }))
                 }
-                Err(e) => res.status_code(400).send_text(&e.to_string()),
+                Err(e) => res.status_code(400).send_text(e.to_string()),
             }
         }
     });
