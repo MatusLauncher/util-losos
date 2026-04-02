@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeux pipefail
 
-INITRAMFS="os.initramfs.tar.gz"
-KERNEL="${KERNEL:-/boot/vmlinuz-$(uname -r)}"
+INITRAMFS="${INITRAMFS:-os.initramfs.tar.gz}"
+KERNEL="${KERNEL:-$(find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print -quit 2>/dev/null)}"
 MEMORY="${MEMORY:-2G}"
 CPUS="${CPUS:-2}"
 
@@ -10,7 +10,7 @@ build_initramfs() {
     echo "==> Building initramfs..."
     podman build --no-cache -t util-mdl-build .
     podman create --name util-mdl-export util-mdl-build
-    podman cp util-mdl-export:/"$INITRAMFS" "$INITRAMFS"
+    podman cp util-mdl-export:/os.initramfs.tar.gz "$INITRAMFS"
     podman rm util-mdl-export
     echo "==> Initramfs written to $INITRAMFS"
 }
@@ -141,6 +141,9 @@ echo "    Memory:    $MEMORY"
 echo "    CPUs:      $CPUS"
 echo ""
 
+KVM_FLAG=()
+[[ "${KVM:-1}" -eq 1 ]] && KVM_FLAG=(-enable-kvm) || true
+
 exec qemu-system-x86_64 \
     -kernel "$KERNEL" \
     -initrd "$INITRAMFS" \
@@ -149,4 +152,4 @@ exec qemu-system-x86_64 \
     -smp "$CPUS" \
     -netdev user,id=n0 \
     -device virtio-net-pci,netdev=n0 \
-    -enable-kvm
+    "${KVM_FLAG[@]}"
