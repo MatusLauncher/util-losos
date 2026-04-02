@@ -9,8 +9,8 @@ use std::{
 };
 
 use actman::cmdline::CmdLineOptions;
+use expressjs::prelude::*;
 use miette::{IntoDiagnostic, miette};
-use rustyx::RustyX;
 use serde_json::json;
 use tracing::{error, info, warn};
 
@@ -106,7 +106,7 @@ pub async fn run_client_with(
     info!(%own_ip, server_url, "Client starting");
 
     let state = ClientState::new(server_url.clone(), own_ip);
-    let server = RustyX::new();
+    let mut app = express();
 
     // ── Register with the server ──────────────────────────────────────────────
 
@@ -153,12 +153,13 @@ pub async fn run_client_with(
 
     // ── GET /status — health check ────────────────────────────────────────────
 
-    server.get("/status", move |_req, res| async move {
-        res.json(json!({ "status": "ok", "mode": "client" }))
+    app.get("/status", move |_req, res| async move {
+        res.send_json(&json!({ "status": "ok", "mode": "client" }))
     });
 
     info!(port = PORT, "Client listening");
-    server.listen(PORT).await.into_diagnostic()
+    app.listen(PORT, |_| async {}).await;
+    Ok(())
 }
 
 // ── Task execution ────────────────────────────────────────────────────────────

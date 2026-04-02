@@ -5,9 +5,9 @@
 //! push work and lets clients claim that work.
 
 use actman::cmdline::CmdLineOptions;
+use expressjs::prelude::*;
 use miette::IntoDiagnostic;
 use rustix::system::reboot;
-use rustyx::RustyX;
 use serde_json::json;
 use std::{net::Ipv4Addr, thread::spawn};
 use tracing::info;
@@ -55,7 +55,7 @@ use crate::{
 /// # Errors
 ///
 /// Returns a [`miette::Result`] that propagates any error raised by
-/// [`RustyX::listen`] (e.g. the port is already in use).
+/// [`App::listen`] (e.g. the port is already in use).
 pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
     let own_ip: Ipv4Addr = cmdline
         .opts()
@@ -66,76 +66,76 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
     info!(%own_ip, port = PORT, "Server starting");
 
     let state = ServerState::new();
-    let server = RustyX::new();
+    let mut app = express();
 
     // ── POST /api/push-task — controllers push work here ─────────────────────
     let st = state.clone();
-    server.post("/api/push-task", move |req, res| {
+    app.post("/api/push-task", move |req, res| {
         let st = st.clone();
         async move {
-            match req.json::<Task>() {
+            match req.json::<Task>().await {
                 Ok(task) => {
                     info!(filename = task.filename, "Task received from controller");
                     st.push_task(task);
-                    res.created(json!({ "response": "Task queued" }))
+                    res.status_code(201).send_json(&json!({ "response": "Task queued" }))
                 }
-                Err(e) => res.bad_request(&e.to_string()),
+                Err(e) => res.status_code(400).send_text(&e.to_string()),
             }
         }
     });
-    server.get("/reboot", async move |req, res| {
-        match req.json::<CluManSchema>() {
+    app.get("/reboot", move |req, res| async move {
+        match req.json::<CluManSchema>().await {
             Ok(_) => {
                 spawn(move || reboot(rustix::system::RebootCommand::Restart));
-                res.status(200)
+                res.status_code(200)
             }
-            Err(_) => res.status(400),
+            Err(_) => res.status_code(400),
         }
     });
-    server.get("/poweroff", async move |req, res| {
-        match req.json::<CluManSchema>() {
+    app.get("/poweroff", move |req, res| async move {
+        match req.json::<CluManSchema>().await {
             Ok(_) => {
                 spawn(move || reboot(rustix::system::RebootCommand::PowerOff));
-                res.status(200)
+                res.status_code(200)
             }
-            Err(_) => res.status(400),
+            Err(_) => res.status_code(400),
         }
     });
     // ── POST /api/register-client ─────────────────────────────────────────────
     let st = state.clone();
-    server.post("/api/register-client", move |req, res| {
+    app.post("/api/register-client", move |req, res| {
         let st = st.clone();
         async move {
-            match req.json::<CluManSchema>() {
+            match req.json::<CluManSchema>().await {
                 Ok(schema) if schema.peer().is_some_and(|(_, m)| m == Mode::Client) => {
                     let (ip, _) = schema.peer().unwrap();
                     st.register_client(ip);
                     info!(%ip, "Client registered");
-                    res.created(json!({ "response": "Successfully registered" }))
+                    res.status_code(201).send_json(&json!({ "response": "Successfully registered" }))
                 }
-                _ => res.bad_request("Invalid request. Only clients can register with servers."),
+                _ => res.status_code(400).send_text("Invalid request. Only clients can register with servers."),
             }
         }
     });
 
     // ── GET /task — clients claim the next pending task ───────────────────────
     let st = state.clone();
-    server.get("/task", move |_req, res| {
+    app.get("/task", move |_req, res| {
         let st = st.clone();
         async move {
             match st.claim_task() {
                 Some(task) => {
                     info!(filename = task.filename, "Task dispatched to client");
-                    res.json(serde_json::to_value(&task).unwrap_or_default())
+                    res.send_json(&task)
                 }
-                None => res.no_content(),
+                None => res.status_code(204),
             }
         }
     });
 
     // ── GET /clients — introspection ──────────────────────────────────────────
     let st = state.clone();
-    server.get("/clients", move |_req, res| {
+    app.get("/clients", move |_req, res| {
         let st = st.clone();
         async move {
             let addrs: Vec<String> = st
@@ -143,17 +143,18 @@ pub(crate) async fn run_server(cmdline: &CmdLineOptions) -> miette::Result<()> {
                 .iter()
                 .map(|a: &std::net::Ipv4Addr| a.to_string())
                 .collect();
-            res.json(json!({ "clients": addrs }))
+            res.send_json(&json!({ "clients": addrs }))
         }
     });
 
     // ── GET /pending — introspection ──────────────────────────────────────────
     let st = state.clone();
-    server.get("/pending", move |_req, res| {
+    app.get("/pending", move |_req, res| {
         let st = st.clone();
-        async move { res.json(json!({ "pending": st.pending_count() })) }
+        async move { res.send_json(&json!({ "pending": st.pending_count() })) }
     });
 
     info!(port = PORT, "Server listening");
-    server.listen(PORT).await.into_diagnostic()
+    app.listen(PORT, |_| async {}).await;
+    Ok(())
 }

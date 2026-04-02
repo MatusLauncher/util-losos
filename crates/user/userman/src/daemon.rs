@@ -2,7 +2,7 @@
 //!
 //! # Server — [`Daemon`]
 //!
-//! An async RustyX HTTP server that persists all user data as a JSON file
+//! An async expressjs HTTP server that persists all user data as a JSON file
 //! (`Users { uschemas: Vec<UserSchema> }`).  It listens on **port 20** and
 //! exposes five REST routes:
 //!
@@ -31,8 +31,8 @@ use std::{
 };
 
 use base64::{Engine, prelude::BASE64_STANDARD};
+use expressjs::prelude::*;
 use miette::{IntoDiagnostic, miette};
-use rustyx::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::mode::Location;
@@ -44,7 +44,6 @@ use crate::mode::Location;
 #[derive(Default, Clone)]
 pub struct Daemon {
     save_location: PathBuf,
-    rustyx: RustyX,
     users: Users,
     location: Location,
 }
@@ -361,106 +360,104 @@ impl Daemon {
     ///
     /// [`validate_location`]: Daemon::validate_location
     pub async fn run(&self) -> miette::Result<()> {
-        self.rustyx
-            .get("/healthcheck", async move |_, res| res.status(200));
-        let daemon = self.clone();
-        self.rustyx
-            .get("/user/get/:name", move |req: Request, res: Response| {
-                let daemon = daemon.clone();
-                async move {
-                    if daemon.validate_location(req.ip()).is_ok() {
-                        let name = req.param("name").cloned().unwrap_or_default();
-                        match daemon.get(name) {
-                            Ok(schema) => res.json(schema),
-                            Err(_) => res.not_found(),
-                        }
-                    } else {
-                        res.forbidden()
-                    }
-                }
-            });
+        let mut app = express();
+
+        app.get("/healthcheck", async move |_, res: Response| res.status_code(200));
 
         let daemon = self.clone();
-        self.rustyx
-            .get("/users", move |req: Request, res: Response| {
-                let daemon = daemon.clone();
-                async move {
-                    if daemon.validate_location(req.ip()).is_ok() {
-                        match read_to_string(&daemon.save_location)
-                            .ok()
-                            .and_then(|f| serde_json::from_str::<Users>(&f).ok())
-                        {
-                            Some(users) => res.json(users.uschemas),
-                            None => res.internal_error("Failed to read users"),
-                        }
-                    } else {
-                        res.forbidden()
+        app.get("/user/get/:name", move |req: Request, res: Response| {
+            let daemon = daemon.clone();
+            async move {
+                let ip = req.ip().map(|s| s.ip()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+                if daemon.validate_location(ip).is_ok() {
+                    let name = req.params().get("name").map(|s| s.to_owned()).unwrap_or_default();
+                    match daemon.get(name) {
+                        Ok(schema) => res.send_json(&schema),
+                        Err(_) => Response::not_found(),
                     }
+                } else {
+                    res.status_code(403)
                 }
-            });
+            }
+        });
 
         let daemon = self.clone();
-        self.rustyx
-            .post("/user/create", move |req: Request, res: Response| {
-                let daemon = daemon.clone();
-                async move {
-                    if daemon.validate_location(req.ip()).is_ok() {
-                        match serde_json::from_str::<UserSchema>(
-                            &req.body_string().unwrap_or_default(),
-                        ) {
-                            Ok(schema) => match daemon.create(schema) {
-                                Ok(()) => res,
-                                Err(_) => res.internal_error("Failed to create user"),
-                            },
-                            Err(_) => res.bad_request("No schema supplied"),
-                        }
-                    } else {
-                        res.forbidden()
+        app.get("/users", move |req: Request, res: Response| {
+            let daemon = daemon.clone();
+            async move {
+                let ip = req.ip().map(|s| s.ip()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+                if daemon.validate_location(ip).is_ok() {
+                    match read_to_string(&daemon.save_location)
+                        .ok()
+                        .and_then(|f| serde_json::from_str::<Users>(&f).ok())
+                    {
+                        Some(users) => res.send_json(&users.uschemas),
+                        None => Response::internal_server_error(),
                     }
+                } else {
+                    res.status_code(403)
                 }
-            });
+            }
+        });
 
         let daemon = self.clone();
-        self.rustyx
-            .delete("/user/delete/:name", move |req: Request, res: Response| {
-                let daemon = daemon.clone();
-                async move {
-                    if daemon.validate_location(req.ip()).is_ok() {
-                        let name = req.param("name").cloned().unwrap_or_default();
-                        match daemon.delete(name) {
+        app.post("/user/create", move |req: Request, res: Response| {
+            let daemon = daemon.clone();
+            async move {
+                let ip = req.ip().map(|s| s.ip()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+                if daemon.validate_location(ip).is_ok() {
+                    match req.json::<UserSchema>().await {
+                        Ok(schema) => match daemon.create(schema) {
                             Ok(()) => res,
-                            Err(_) => res.not_found(),
-                        }
-                    } else {
-                        res.forbidden()
+                            Err(_) => Response::internal_server_error(),
+                        },
+                        Err(_) => res.status_code(400).send_text("No schema supplied"),
                     }
+                } else {
+                    res.status_code(403)
                 }
-            });
+            }
+        });
 
         let daemon = self.clone();
-        self.rustyx
-            .patch("/user/update/:name", move |req: Request, res: Response| {
-                let daemon = daemon.clone();
-                async move {
-                    if daemon.validate_location(req.ip()).is_ok() {
-                        let name = req.param("name").cloned().unwrap_or_default();
-                        match serde_json::from_str::<ChangeSchema>(
-                            &req.body_string().unwrap_or_default(),
-                        ) {
-                            Ok(cs) => match daemon.update(name, cs.what) {
-                                Ok(()) => res,
-                                Err(_) => res.not_found(),
-                            },
-                            Err(_) => res.bad_request("No change schema supplied"),
-                        }
-                    } else {
-                        res.forbidden()
+        app.delete("/user/delete/:name", move |req: Request, res: Response| {
+            let daemon = daemon.clone();
+            async move {
+                let ip = req.ip().map(|s| s.ip()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+                if daemon.validate_location(ip).is_ok() {
+                    let name = req.params().get("name").map(|s| s.to_owned()).unwrap_or_default();
+                    match daemon.delete(name) {
+                        Ok(()) => res,
+                        Err(_) => Response::not_found(),
                     }
+                } else {
+                    res.status_code(403)
                 }
-            });
+            }
+        });
 
-        self.rustyx.use_middleware(logger());
-        self.rustyx.clone().listen(20).await.into_diagnostic()?; // this'll be running as a system daemon, after all.
+        let daemon = self.clone();
+        app.patch("/user/update/:name", move |req: Request, res: Response| {
+            let daemon = daemon.clone();
+            async move {
+                let ip = req.ip().map(|s| s.ip()).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+                if daemon.validate_location(ip).is_ok() {
+                    let name = req.params().get("name").map(|s| s.to_owned()).unwrap_or_default();
+                    match req.json::<ChangeSchema>().await {
+                        Ok(cs) => match daemon.update(name, cs.what) {
+                            Ok(()) => res,
+                            Err(_) => Response::not_found(),
+                        },
+                        Err(_) => res.status_code(400).send_text("No change schema supplied"),
+                    }
+                } else {
+                    res.status_code(403)
+                }
+            }
+        });
+
+        app.use_global(LoggingMiddleware);
+        app.listen(20, |_| async {}).await; // this'll be running as a system daemon, after all.
         Ok(())
     }
 }

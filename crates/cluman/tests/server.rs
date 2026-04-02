@@ -5,7 +5,7 @@
 //! Add to `cluman/Cargo.toml` `[dev-dependencies]`:
 //! ```toml
 //! minreq     = "2.14.1"
-//! rustyx     = "0.2.0"
+//! expressjs  = "0.9.2"
 //! serde_json = "1.0.149"
 //! ```
 //!
@@ -26,12 +26,13 @@ use std::thread;
 use std::time::Duration;
 
 use cluman::schemas::{CluManSchema, Mode, ServerState, Task};
+use expressjs::prelude::*;
 use serde_json::{Value, json};
 
 // ── Port allocation ───────────────────────────────────────────────────────────
 
 /// Bind to port 0, let the OS assign a free port, then release the socket.
-/// `RustyX` binds independently a moment later; the tiny race is acceptable
+/// The app binds independently a moment later; the tiny race is acceptable
 /// in tests.
 fn alloc_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
@@ -66,7 +67,7 @@ impl TestServer {
                 .build()
                 .expect("tokio runtime")
                 .block_on(async move {
-                    build_server(st).listen(port).await.expect("server listen");
+                    build_server(st).listen(port, |_| async {}).await;
                 });
         });
 
@@ -127,24 +128,24 @@ impl TestServer {
 
 // ── Server builder ────────────────────────────────────────────────────────────
 
-/// Build a `RustyX` app with the same five routes as `server.rs`.
+/// Build an `expressjs` app with the same five routes as `server.rs`.
 ///
 /// Using only the public `ServerState` API means this is automatically
 /// kept honest — it can't call anything the real server can't call.
-fn build_server(state: ServerState) -> rustyx::RustyX {
-    let app = rustyx::RustyX::new();
+fn build_server(state: ServerState) -> App {
+    let mut app = express();
 
     // POST /api/push-task ─────────────────────────────────────────────────────
     let st = state.clone();
     app.post("/api/push-task", move |req, res| {
         let st = st.clone();
         async move {
-            match req.json::<Task>() {
+            match req.json::<Task>().await {
                 Ok(task) => {
                     st.push_task(task);
-                    res.created(json!({ "response": "Task queued" }))
+                    res.status_code(201).send_json(&json!({ "response": "Task queued" }))
                 }
-                Err(e) => res.bad_request(&e.to_string()),
+                Err(e) => res.status_code(400).send_text(&e.to_string()),
             }
         }
     });
@@ -154,13 +155,13 @@ fn build_server(state: ServerState) -> rustyx::RustyX {
     app.post("/api/register-client", move |req, res| {
         let st = st.clone();
         async move {
-            match req.json::<CluManSchema>() {
+            match req.json::<CluManSchema>().await {
                 Ok(schema) if schema.peer().is_some_and(|(_, m)| m == Mode::Client) => {
                     let (ip, _) = schema.peer().unwrap();
                     st.register_client(ip);
-                    res.created(json!({ "response": "Successfully registered" }))
+                    res.status_code(201).send_json(&json!({ "response": "Successfully registered" }))
                 }
-                _ => res.bad_request("Only clients can register with servers."),
+                _ => res.status_code(400).send_text("Only clients can register with servers."),
             }
         }
     });
@@ -171,8 +172,8 @@ fn build_server(state: ServerState) -> rustyx::RustyX {
         let st = st.clone();
         async move {
             match st.claim_task() {
-                Some(task) => res.json(serde_json::to_value(&task).unwrap_or_default()),
-                None => res.no_content(),
+                Some(task) => res.send_json(&task),
+                None => res.status_code(204),
             }
         }
     });
@@ -187,7 +188,7 @@ fn build_server(state: ServerState) -> rustyx::RustyX {
                 .iter()
                 .map(|a: &Ipv4Addr| a.to_string())
                 .collect();
-            res.json(json!({ "clients": addrs }))
+            res.send_json(&json!({ "clients": addrs }))
         }
     });
 
@@ -195,7 +196,7 @@ fn build_server(state: ServerState) -> rustyx::RustyX {
     let st = state.clone();
     app.get("/pending", move |_req, res| {
         let st = st.clone();
-        async move { res.json(json!({ "pending": st.pending_count() })) }
+        async move { res.send_json(&json!({ "pending": st.pending_count() })) }
     });
 
     app

@@ -45,7 +45,7 @@ One binary serving four roles determined at runtime by the executable's filename
 **`mode.rs`** — `ModeOfOperation::from(exe_name)` drives dispatch in `main`. `Location` enum (`Local`/`Remote`) is carried by the `Daemon` variant.
 
 **`daemon.rs`** — Both sides of the client/server split:
-- `Daemon` — RustyX async HTTP server that persists `Users { uschemas: Vec<UserSchema> }` as JSON. Listens on port 20.
+- `Daemon` — expressjs async HTTP server that persists `Users { uschemas: Vec<UserSchema> }` as JSON. Listens on port 20.
   - `GET  /healthcheck`
   - `GET  /user/get/:name` → `UserSchema`
   - `GET  /users` → `Vec<UserSchema>`
@@ -99,7 +99,7 @@ UserSchema {
 
 ## Key dependencies
 
-- **RustyX** — custom async HTTP framework (internal, `rustyx = "*"`)
+- **expressjs** — async HTTP framework inspired by Express.js (`expressjs = "0.9.2"`)
 - **actman** — from `util-mdl` GitLab monorepo; actor/service management utilities
 - **miette** — rich error diagnostics (`fancy` feature)
 - **ureq** — sync HTTP client used in `UserAPI`
