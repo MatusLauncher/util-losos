@@ -55,6 +55,8 @@ RUN cd /mdl \
     && cp target/x86_64-unknown-linux-musl/release/updman /updman \
     && cp target/x86_64-unknown-linux-musl/release/dhcman /dhcman \
     && cp target/x86_64-unknown-linux-musl/release/cluman /cluman \
+    && cp target/x86_64-unknown-linux-musl/release/userman /userman \
+    && cp target/x86_64-unknown-linux-musl/release/libperman.so /libperman.so \
     && rm -rf target /root/.cargo/registry
 "#;
 
@@ -65,16 +67,21 @@ RUN cd /mdl \
 const STAGE1: &str = r#"
 # packaging
 FROM alpine:latest as stage1
-ARG MODE
+ARG MODEfeat: Migrate crates/user workspace into root Cargo workspace
+
+# Move `userman` and `perman` crates from `crates/user/` into the root workspace as proper members, eliminating the nested workspace structure. Consolidate their Cargo dependencies and manifests.
 COPY --from=stage0 out out
 COPY --from=util /actman out/bin/init
 COPY --from=util /updman out/bin/updman
 COPY --from=util /dhcman out/bin/dhcman
 COPY --from=util /cluman out/bin/cluman
+COPY --from=util /userman out/bin/userman
 RUN cd out && ln -sf bin sbin
 RUN printf '#!/bin/sh\nip link set lo up && ip addr add 127.0.0.1/8 dev lo\n' > out/etc/init/start/00-loopback \
     && chmod +x out/etc/init/start/00-loopback
 RUN cd out && ln -sf bin/dhcman etc/init/start/00-eth0
+RUN cd out && ln -sf bin/userman etc/init/start/login
+RUN cd out && ln -sf bin/userman etc/init/start/usersvc-local
 RUN cd out && ln -sf bin/buildkitd etc/init/start/buildkitd
 RUN cd out && ln -sf bin/containerd etc/init/start/containerd
 RUN cd out && ln -sf bin/sh etc/init/start/sh

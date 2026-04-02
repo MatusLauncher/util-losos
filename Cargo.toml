@@ -30,3 +30,6 @@ mkbootimg = { git = "https://gitlab.com/mtos-v2/mkbootimg" }
 lto = true
 codegen-units = 1
 strip = true
+
+[profile.dev]
+codegen-units = 16
