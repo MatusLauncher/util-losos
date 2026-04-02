@@ -807,24 +807,28 @@ fn sequential_tasks_are_executed_in_fifo_order() {
 
     server.mock(|when, then| {
         when.method(GET).path("/task");
-        then.status(200)
-            .header("Content-Type", "application/json")
-            // httpmock will serve these in round-robin / sequence.
-            .respond_with(move |_: &httpmock::HttpMockRequest| {
+        // Use only respond_with — mixing static Then setters (status, header)
+        // with respond_with in httpmock 0.8 is unreliable: the closure body
+        // may be ignored and the client receives an empty 200, causing JSON
+        // parse failures and the executor never being called.
+        then.respond_with(move |_: &httpmock::HttpMockRequest| {
+            // Release the mutex before building the response to avoid
+            // holding the lock across the HttpMockResponse construction.
+            let next: Option<String> = {
                 let mut q = responses.lock().unwrap();
-                let body_bytes = if let Some(body) = q.first().cloned() {
-                    q.remove(0);
-                    body.into_bytes()
-                } else {
-                    // Queue exhausted — return 204 equivalent body (status
-                    // remains 200 here; the test only checks executor calls).
-                    b"{}".to_vec()
-                };
-                HttpMockResponse::builder()
+                if q.is_empty() { None } else { Some(q.remove(0)) }
+            };
+            match next {
+                Some(body) => HttpMockResponse::builder()
                     .status(200)
-                    .body(body_bytes.as_slice())
-                    .build()
-            });
+                    .header("Content-Type", "application/json")
+                    .body(body.as_bytes())
+                    .build(),
+                None => HttpMockResponse::builder()
+                    .status(204)
+                    .build(),
+            }
+        });
     });
 
     let opts = cmdline_opts(&server.base_url(), Ipv4Addr::LOCALHOST);

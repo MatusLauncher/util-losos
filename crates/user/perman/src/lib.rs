@@ -1,104 +1,65 @@
-//! `perman` — permission enforcement via `LD_PRELOAD`.
+//! `perman` — permission enforcement via Linux Landlock LSM.
 //!
-//! Compiles as a `cdylib` meant to be injected with `LD_PRELOAD`.  It
-//! intercepts the C `chdir(2)` syscall wrapper and validates the destination
-//! against the calling user's `allowed_dirs` list stored in the userman
-//! daemon before forwarding to the real libc `chdir`.
+//! Exports [`apply_session_policy`], which installs a Landlock ruleset
+//! restricting `READ_DIR` access (which covers `chdir(2)`) to the supplied
+//! list of allowed directories.  The ruleset is inherited across `exec(2)`,
+//! so calling this before exec'ing a shell enforces the policy for the entire
+//! user session without any dynamic-linker tricks.
 //!
-//! The daemon address is read once from the kernel command line (`usvc_ip`)
-//! and cached in [`USVC_IP`].  If the daemon is unreachable the call is
-//! **denied** (fail-closed).
+//! Passing an empty slice is a no-op (unrestricted), preserving the existing
+//! semantics where an empty `allowed_dirs` means no restriction.
 
-use std::{
-    ffi::{CStr, c_char, c_int},
-    mem,
-    net::{IpAddr, Ipv4Addr},
-    path::Path,
-    str::FromStr,
-    sync::LazyLock,
-};
+use std::path::PathBuf;
 
-use actman::cmdline::CmdLineOptions;
-use userman::daemon::UserAPI;
+use landlock::{AccessFs, PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetStatus};
+use miette::IntoDiagnostic;
+use tracing::warn;
 
-static USVC_IP: LazyLock<IpAddr> = LazyLock::new(|| {
-    match CmdLineOptions::new()
-        .ok()
-        .and_then(|c| c.opts().get("usvc_ip").cloned())
-    {
-        Some(addr) => IpAddr::from_str(&addr).unwrap_or_else(|_| Ipv4Addr::LOCALHOST.into()),
-        None => Ipv4Addr::LOCALHOST.into(),
-    }
-});
-
-/// Determine the username of the calling process.
+/// Install a Landlock filesystem policy for the current process.
 ///
-/// Tries `getlogin()` first (covers TTY-attached sessions), then falls back
-/// to the `LOGNAME` and `USER` environment variables in that order.
-fn current_username() -> Option<String> {
-    // SAFETY: getlogin() returns a pointer to static storage; we copy it immediately.
-    let ptr = unsafe { libc::getlogin() };
-    if !ptr.is_null() {
-        return unsafe { CStr::from_ptr(ptr) }
-            .to_str()
-            .ok()
-            .map(str::to_owned);
-    }
-    std::env::var("LOGNAME")
-        .ok()
-        .or_else(|| std::env::var("USER").ok())
-}
-
-/// Returns `true` if `path` is permitted for `username` according to the
-/// userman daemon.  An empty `allowed_dirs` list means no restriction.
-/// If the daemon cannot be reached the call is denied (fail-closed).
-fn path_is_allowed(path: &Path, username: &str) -> bool {
-    let mut api = UserAPI::new();
-    api.set_addr(*USVC_IP);
-    match api.user(username) {
-        Ok(schema) => {
-            let dirs = schema.allowed_dirs();
-            dirs.is_empty() || dirs.iter().any(|d| path.starts_with(d))
-        }
-        Err(_) => false,
-    }
-}
-
-/// LD_PRELOAD intercept for `chdir(2)`.
+/// After this call the kernel denies any `chdir(2)` (or directory `open(2)`)
+/// whose target is outside the union of `allowed_dirs`.  The restriction is
+/// inherited by all processes spawned via `exec(2)`, making it suitable for
+/// session-level enforcement when called from a `login` binary before it
+/// exec's the user's shell.
 ///
-/// Validates the destination against the calling user's `allowed_dirs` before
-/// delegating to the real libc `chdir` via `dlsym(RTLD_NEXT)`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn chdir(path: *const c_char) -> c_int {
-    if path.is_null() {
-        unsafe { *libc::__errno_location() = libc::EINVAL };
-        return -1;
+/// # Arguments
+///
+/// * `allowed_dirs` — directories to permit.  If empty, returns `Ok(())`
+///   immediately without installing any policy (unrestricted access).
+///
+/// # Errors
+///
+/// Returns an error if the kernel rejects ruleset creation, rule addition, or
+/// `landlock_restrict_self(2)`.  If the kernel does not enforce Landlock
+/// (`CONFIG_SECURITY_LANDLOCK` not set, Linux < 5.13) a warning is logged and
+/// `Ok(())` is returned so boot continues unimpeded.
+pub fn apply_session_policy(allowed_dirs: &[PathBuf]) -> miette::Result<()> {
+    if allowed_dirs.is_empty() {
+        return Ok(());
     }
 
-    let path_cstr = unsafe { CStr::from_ptr(path) };
-    let path_str = match path_cstr.to_str() {
-        Ok(s) => s,
-        Err(_) => {
-            unsafe { *libc::__errno_location() = libc::EINVAL };
-            return -1;
-        }
-    };
+    let mut ruleset = Ruleset::default()
+        .handle_access(AccessFs::ReadDir)
+        .into_diagnostic()?
+        .create()
+        .into_diagnostic()?;
 
-    if let Some(username) = current_username()
-        && !path_is_allowed(Path::new(path_str), &username)
-    {
-        unsafe { *libc::__errno_location() = libc::EACCES };
-        return -1;
+    for dir in allowed_dirs {
+        let fd = PathFd::new(dir).into_diagnostic()?;
+        ruleset = ruleset
+            .add_rule(PathBeneath::new(fd, AccessFs::ReadDir))
+            .into_diagnostic()?;
     }
 
-    // Resolve the real chdir through the dynamic linker.
-    let sym = unsafe { libc::dlsym(libc::RTLD_NEXT, c"chdir".as_ptr() as *const c_char) };
-    if sym.is_null() {
-        unsafe { *libc::__errno_location() = libc::ENOSYS };
-        return -1;
+    let status = ruleset.restrict_self().into_diagnostic()?;
+
+    if status.ruleset == RulesetStatus::NotEnforced {
+        warn!(
+            "Landlock is not enforced by this kernel \
+             (requires CONFIG_SECURITY_LANDLOCK, Linux ≥ 5.13) — session policy not applied"
+        );
     }
-    // SAFETY: dlsym(RTLD_NEXT, "chdir") returns the next "chdir" symbol in the
-    // dynamic-linker chain, which has exactly this signature per POSIX.
-    let real_chdir: unsafe extern "C" fn(*const c_char) -> c_int = unsafe { mem::transmute(sym) };
-    unsafe { real_chdir(path) }
+
+    Ok(())
 }

@@ -142,7 +142,9 @@ echo "    CPUs:      $CPUS"
 echo ""
 
 KVM_FLAG=()
-[[ "${KVM:-1}" -eq 1 ]] && KVM_FLAG=(-enable-kvm) || true
+if [[ "${KVM:-1}" -eq 1 ]]; then
+    KVM_FLAG=(-enable-kvm)
+fi
 
 exec qemu-system-x86_64 \
     -kernel "$KERNEL" \

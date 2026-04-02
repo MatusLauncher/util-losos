@@ -4,10 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-actman = { version = "0.1.0", path = "../../actman" }
-libc = "0.2"
-ureq.workspace = true
-userman = { version = "0.1.0", path = "../userman" }
-
-[lib]
-crate-type = ["cdylib"]
+landlock = "0.4"
+miette = { workspace = true }
+tracing = { workspace = true }

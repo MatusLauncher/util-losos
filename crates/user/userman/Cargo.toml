@@ -23,3 +23,5 @@ ureq = {workspace = true, features = ["json"]}
 ratatui = "0.29"
 crossterm = "0.28"
 ctrlc = "3.5.2"
+perman = { version = "0.1.0", path = "../perman" }
+rustix = { workspace = true, features = ["mount"] }

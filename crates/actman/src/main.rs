@@ -48,5 +48,6 @@ fn main() -> miette::Result<()> {
                 .collect::<Vec<_>>()
         ),
     }
+    
     Ok(())
 }

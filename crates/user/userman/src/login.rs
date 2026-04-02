@@ -8,7 +8,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use miette::IntoDiagnostic;
+use miette::{IntoDiagnostic, miette};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
@@ -101,7 +101,7 @@ impl Drop for TerminalGuard {
 // Public entry point
 // ---------------------------------------------------------------------------
 
-pub fn run_login_screen(daemon_api: &UserAPI) -> miette::Result<()> {
+pub fn run_login_screen(daemon_api: &UserAPI) -> miette::Result<UserSchema> {
     // Ensure the terminal is restored even on a panic.
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -114,6 +114,7 @@ pub fn run_login_screen(daemon_api: &UserAPI) -> miette::Result<()> {
     let mut app = LoginScreen::default();
 
     loop {
+        guard.terminal.clear().into_diagnostic()?;
         guard.terminal.draw(|f| ui(f, &app)).into_diagnostic()?;
         if app.screen == Screen::Done {
             break;
@@ -131,7 +132,8 @@ pub fn run_login_screen(daemon_api: &UserAPI) -> miette::Result<()> {
         unlock_home(device, &app.password, &app.username)?;
     }
 
-    Ok(())
+    app.authenticated_user
+        .ok_or_else(|| miette!("login cancelled"))
 }
 
 // ---------------------------------------------------------------------------

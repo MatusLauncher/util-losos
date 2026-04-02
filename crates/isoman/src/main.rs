@@ -4,13 +4,12 @@ mod build;
 mod container;
 mod gsi;
 
-use std::{env::current_dir, fs, path::PathBuf, process::Command, str::FromStr};
+use std::{env::current_dir, path::PathBuf, process::Command, str::FromStr};
 
 use clap::{Parser, ValueEnum};
 use cluman::schemas::Mode;
-use isoman::{GSI_FASTBOOT_DEFAULT, GSI_ODIN_DEFAULT, resolve_output, schema::ContMode};
+use isoman::{GSI_FASTBOOT_DEFAULT, GSI_ODIN_DEFAULT, resolve_output};
 use miette::IntoDiagnostic;
-use std::env::temp_dir;
 use tracing::info;
 use tracing_subscriber::fmt;
 use walkdir::WalkDir;
@@ -233,14 +232,13 @@ fn main() -> miette::Result<()> {
     // When --build is requested we produce the initramfs ourselves into a
     // temp file, then use that path for the ISO assembly step.
     let stage = std::env::temp_dir().join(format!("isoman-{}", std::process::id()));
+    std::fs::create_dir_all(&stage).into_diagnostic()?;
 
     let initramfs: PathBuf = if args.build {
         let build_context = args
             .build_context
             .clone()
             .unwrap_or_else(|| current_dir().into_diagnostic().unwrap().clone());
-
-        std::fs::create_dir_all(&stage).into_diagnostic()?;
         let initramfs_out = stage.join(format!("os-{}.initramfs.tar.gz", args.mode));
 
         info!(
@@ -300,20 +298,6 @@ fn main() -> miette::Result<()> {
                 gsi::build_gsi_fastboot(&kernel, &initramfs, &fastboot_out, &stage)?;
                 gsi::build_gsi_odin(&kernel, &initramfs, &odin_out, &stage)?;
             }
-        }
-        if !initramfs.exists() {
-            info!("Initramfs doesn't exist, assembling one...");
-            let contf = ContMode::new().set_mode(args.mode).return_final_contf();
-            fs::write(temp_dir().join("cfile"), &contf).into_diagnostic()?;
-            Command::new("podman")
-                .arg("build")
-                .arg(temp_dir().join(contf))
-                .arg("-t")
-                .arg("mdl/os")
-                .arg("-o")
-                .arg(initramfs)
-                .status()
-                .into_diagnostic()?;
         }
     } else {
         info!(

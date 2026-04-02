@@ -2,13 +2,16 @@ use std::{
     env::args,
     io::{BufRead, Write, stdin, stdout},
     net::IpAddr,
+    os::unix::process::CommandExt,
     path::Path,
+    process::Command,
     str::FromStr,
 };
 
 use actman::cmdline::CmdLineOptions;
 use clap::Parser;
 use miette::{IntoDiagnostic, miette};
+use perman::apply_session_policy;
 use tracing_subscriber::fmt;
 use userman::{
     cli::{ArgsParse, Mode},
@@ -109,7 +112,9 @@ async fn main() -> miette::Result<()> {
             if !userdb_addr.is_empty() {
                 daemon_api.set_addr(IpAddr::from_str(&userdb_addr).into_diagnostic()?);
             }
-            run_login_screen(&daemon_api)?;
+            let user = run_login_screen(&daemon_api)?;
+            apply_session_policy(user.allowed_dirs())?;
+            exec_shell()?;
         }
     }
     Ok(())
@@ -123,6 +128,13 @@ fn prompt(label: &str) -> miette::Result<String> {
     let mut buf = String::new();
     stdin().lock().read_line(&mut buf).into_diagnostic()?;
     Ok(buf.trim_end_matches(['\n', '\r']).to_string())
+}
+
+/// Replace the current process image with `/bin/sh`, inheriting the
+/// environment.  Only returns if `execve` fails (login is over either way).
+fn exec_shell() -> miette::Result<()> {
+    let err = Command::new("/bin/sh").exec();
+    Err(miette!("execve(/bin/sh) failed: {err}"))
 }
 
 /// Handle `--twofa` for both `create` and `update` subcommands.

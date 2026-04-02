@@ -10,8 +10,8 @@
 //! | Stage | Base image | Purpose |
 //! |-------|-----------|---------|
 //! | `stage0` | `alpine:latest` | Downloads `busybox-static` and the latest `nerdctl` full bundle; creates the target filesystem tree under `out/`. |
-//! | `util`   | `rust:alpine`   | Installs Zig + clang-dev (LIBCLANG_STATIC=1), then compiles all workspace binaries and `libperman.so` for `x86_64-unknown-linux-musl`. |
-//! | `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, copies `libperman.so` to `lib/`, sets `LD_PRELOAD` in `/etc/profile`, and packs everything into a newc cpio archive compressed as `os.tar.gz`. |
+//! | `util`   | `rust:alpine`   | Compiles all workspace binaries for `x86_64-unknown-linux-musl`.  `perman` is compiled as an `rlib` and linked statically into `userman` — no shared library is produced. |
+//! | `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, and packs everything into a newc cpio archive compressed as `os.tar.gz`. |
 //! | *(final)* | `scratch`      | Exports `os.tar.gz` as `os.initramfs.tar.gz`, the sole artifact consumed by the ISO assembly step. |
 
 /// Zig release used as the musl C compiler / linker inside the build container.
@@ -46,20 +46,14 @@ RUN tar -xpf nerdctl*.tar.gz -C out/ \
 RUN cd out/bin && for applet in $(/out/bin/busybox --list); do ln -sf busybox "$applet"; done
 "#;
 
-/// Build stage: compiles all workspace binaries and `libperman.so` for
-/// `x86_64-unknown-linux-musl` in two passes.
+/// Build stage: compiles all workspace binaries for `x86_64-unknown-linux-musl`.
 ///
-/// **Pass 1** — static MUSL (default linker): builds every workspace member
-/// except `perman`.  The default linker in `rust:alpine` uses Rust's
-/// self-contained musl CRT; no external linker is needed.
-///
-/// **Pass 2** — dynamic MUSL (Zig linker): builds only `perman` as a `cdylib`.
-/// The compiled `.rlib` artifacts from pass 1 are reused; Zig is only invoked
-/// for the final `perman` shared-library link (`-shared`).  A `cdylib` link
-/// never injects startup CRT objects, so there is no `_start`/`_init` conflict.
+/// `perman` is compiled as a regular `rlib` and linked statically into
+/// `userman`; no separate shared-library artifact is produced.
 const STAGE_UTIL: &str = r#"
 # init + package manager
 FROM rust:alpine as util
+RUN apk add pkgconfig eudev-dev linux-headers
 COPY . /mdl
 RUN cd /mdl \
     && cargo build --release --target x86_64-unknown-linux-musl --workspace --exclude isoman \
@@ -68,7 +62,6 @@ RUN cd /mdl \
     && cp target/x86_64-unknown-linux-musl/release/dhcman /dhcman \
     && cp target/x86_64-unknown-linux-musl/release/cluman /cluman \
     && cp target/x86_64-unknown-linux-musl/release/userman /userman \
-    && cp target/x86_64-unknown-linux-musl/release/libperman.so /libperman.so \
     && rm -rf target /root/.cargo/registry
 "#;
 
@@ -86,28 +79,23 @@ COPY --from=util /updman out/bin/updman
 COPY --from=util /dhcman out/bin/dhcman
 COPY --from=util /cluman out/bin/cluman
 COPY --from=util /userman out/bin/userman
-COPY --from=util /libperman.so out/lib/libperman.so
 RUN cd out && ln -sf bin sbin
 RUN printf '#!/bin/sh\nip link set lo up && ip addr add 127.0.0.1/8 dev lo\n' > out/etc/init/start/00-loopback \
     && chmod +x out/etc/init/start/00-loopback
-RUN cd out && ln -sf bin/dhcman etc/init/start/00-eth0
-RUN cd out && ln -sf bin/userman etc/init/start/login
-RUN cd out && ln -sf bin/userman etc/init/start/usersvc-local
-RUN cd out && ln -sf bin/buildkitd etc/init/start/buildkitd
-RUN cd out && ln -sf bin/containerd etc/init/start/containerd
-RUN cd out && ln -sf bin/sh etc/init/start/sh
-RUN cd out && ln -sf bin/nerdctl bin/docker
-RUN cd out && ln -sf bin/nerdctl bin/podman
-RUN cd out && ln -sf bin/init bin/poweroff
-RUN cd out && ln -sf bin/init bin/reboot
+RUN cd out && ln -sf /bin/dhcman etc/init/start/00-eth0
+RUN cd out && ln -sf /bin/userman etc/init/start/login
+RUN cd out && ln -sf /bin/userman etc/init/start/usersvc-local
+RUN cd out && ln -sf /bin/buildkitd etc/init/start/buildkitd
+RUN cd out && ln -sf /bin/containerd etc/init/start/containerd
+RUN cd out && ln -sf nerdctl bin/docker
+RUN cd out && ln -sf nerdctl bin/podman
+RUN cd out && ln -sf init bin/poweroff
+RUN cd out && ln -sf init bin/reboot
 RUN cd out && ln -sf bin/init init
 # cluman mode — the binary dispatches on argv[0], so symlink it to the mode name.
 # client/server are boot-time daemons started by init; controller is a one-shot
 # CLI tool and is only installed as a named symlink without an init entry.
-RUN cd out && ln -sf bin/cluman etc/init/start/$MODE
-# perman: inject LD_PRELOAD into /etc/profile so every login shell and its
-# children have the chdir permission intercept active.
-RUN printf 'export LD_PRELOAD=/lib/libperman.so\n' > out/etc/profile
+RUN cd out && ln -sf /bin/cluman etc/init/start/$MODE
 RUN apk add fakeroot
 RUN fakeroot sh -c 'mknod out/dev/console c 5 1 && cd out && find . | cpio -o -H newc | gzip > ../os.tar.gz'
 "#;
