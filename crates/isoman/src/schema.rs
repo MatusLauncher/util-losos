@@ -64,13 +64,12 @@ const STAGE_UTIL: &str = r#"
 FROM rust:alpine as util
 COPY . /mdl
 RUN cd /mdl \
-    && cargo build --release --target x86_64-unknown-linux-musl --workspace --exclude perman --exclude isoman \
+    && cargo build --release --target x86_64-unknown-linux-musl --workspace --exclude isoman \
     && cp target/x86_64-unknown-linux-musl/release/actman /actman \
     && cp target/x86_64-unknown-linux-musl/release/updman /updman \
     && cp target/x86_64-unknown-linux-musl/release/dhcman /dhcman \
     && cp target/x86_64-unknown-linux-musl/release/cluman /cluman \
     && cp target/x86_64-unknown-linux-musl/release/userman /userman \
-    && cargo build -p perman --release --target x86_64-unknown-linux-musl \
     && cp target/x86_64-unknown-linux-musl/release/libperman.so /libperman.so \
     && rm -rf target /root/.cargo/registry
 "#;
