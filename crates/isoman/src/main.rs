@@ -3,7 +3,6 @@
 mod build;
 mod container;
 mod gsi;
-mod toolchain;
 
 use std::{env::current_dir, fs, path::PathBuf, process::Command, str::FromStr};
 
@@ -129,36 +128,6 @@ struct Args {
     /// Only meaningful when `--gsi` is set.
     #[arg(long, env = "ODIN_OUT", default_value = GSI_ODIN_DEFAULT, requires = "gsi")]
     odin_out: String,
-
-    /// Build `perman` as a musl cdylib using the Zig cross-compiler toolchain.
-    ///
-    /// Downloads the Zig compiler (cached in `~/.cache/isoman/zig/<version>/`),
-    /// writes a `zigcc` wrapper, installs the musl rustup target, and runs
-    /// `cargo build -p perman --release --target x86_64-unknown-linux-musl`.
-    #[arg(long, default_value_t = false)]
-    build_perman: bool,
-
-    /// Path to the root of the `util-mdl-user` Cargo workspace that contains
-    /// the `perman` crate member.
-    ///
-    /// Required when `--build-perman` is set.
-    #[arg(long, requires = "build_perman")]
-    perman_src: Option<PathBuf>,
-
-    /// Destination path for the compiled `libperman.so`.
-    ///
-    /// Defaults to `libperman.so` in the current working directory.
-    #[arg(long, env = "PERMAN_OUT", default_value = "libperman.so")]
-    perman_out: String,
-
-    /// Zig compiler version to use as the musl cross-linker.
-    ///
-    /// Must match a release available at
-    /// `https://ziglang.org/download/<version>/zig-linux-x86_64-<version>.tar.xz`.
-    ///
-    /// Only meaningful when `--build-perman` is set.
-    #[arg(long, default_value = "0.13.0", requires = "build_perman")]
-    zig_version: String,
 }
 
 fn parse_mode(s: &str) -> Result<Mode, String> {
@@ -355,21 +324,6 @@ fn main() -> miette::Result<()> {
             "Assembling ISO (Limine)"
         );
         build::build_iso(&kernel, &initramfs, &output, &stage, &args.mode)?;
-    }
-
-    if args.build_perman {
-        let perman_workspace = args.perman_src.ok_or_else(|| {
-            miette::miette!("--perman-src is required when --build-perman is set")
-        })?;
-        let cwd = std::env::current_dir().into_diagnostic()?;
-        let perman_out = resolve_output(&cwd, &args.perman_out);
-        info!(
-            workspace = %perman_workspace.display(),
-            out       = %perman_out.display(),
-            zig       = %args.zig_version,
-            "Building perman cdylib"
-        );
-        toolchain::build_perman(&perman_workspace, &perman_out, &args.zig_version)?;
     }
 
     Ok(())

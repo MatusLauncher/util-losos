@@ -10,11 +10,14 @@
 //! | Stage | Base image | Purpose |
 //! |-------|-----------|---------|
 //! | `stage0` | `alpine:latest` | Downloads `busybox-static` and the latest `nerdctl` full bundle; creates the target filesystem tree under `out/`. |
-//! | `util`   | `rust:alpine`   | Compiles all workspace binaries (`actman`, `updman`, `dhcman`, `cluman`) for `x86_64-unknown-linux-musl`. |
-//! | `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, creates symlinks, and packs everything into a newc cpio archive compressed as `os.tar.gz`. |
+//! | `util`   | `rust:alpine`   | Installs Zig as a musl cross-linker, then compiles all workspace binaries and `libperman.so` for `x86_64-unknown-linux-musl`. |
+//! | `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, copies `libperman.so` to `lib/`, sets `LD_PRELOAD` in `/etc/profile`, and packs everything into a newc cpio archive compressed as `os.tar.gz`. |
 //! | *(final)* | `scratch`      | Exports `os.tar.gz` as `os.initramfs.tar.gz`, the sole artifact consumed by the ISO assembly step. |
 
 use cluman::schemas::Mode;
+
+/// Zig release used as the musl C compiler / linker inside the build container.
+const ZIG_VERSION: &str = "0.13.0";
 
 /// Scaffolding stage: sets up the base filesystem tree and downloads nerdctl.
 const STAGE0: &str = r#"# check=skip=FromAsCasing
@@ -29,6 +32,7 @@ RUN mkdir -p \
     out/tmp \
     out/home \
     out/bin \
+    out/lib \
     out/etc/init/start \
     out/etc/init/stop
 RUN cp /bin/busybox.static out/bin/busybox
@@ -44,13 +48,28 @@ RUN tar -xpf nerdctl*.tar.gz -C out/ \
 RUN cd out/bin && for applet in $(/out/bin/busybox --list); do ln -sf busybox "$applet"; done
 "#;
 
-/// Build stage: compiles all workspace binaries for `x86_64-unknown-linux-musl`.
+/// Build stage: installs the Zig cross-linker, then compiles all workspace
+/// binaries (static) and `libperman.so` (musl cdylib) for
+/// `x86_64-unknown-linux-musl`.
+///
+/// Zig is used as the C compiler/linker for every target crate so that
+/// `cdylib` outputs (shared libraries) are linked correctly against musl.
 const STAGE_UTIL: &str = r#"
 # init + package manager
 FROM rust:alpine as util
+RUN apk add curl tar xz
+RUN curl -L -o /tmp/zig.tar.xz \
+        https://ziglang.org/download/ZIG_VERSION/zig-linux-x86_64-ZIG_VERSION.tar.xz \
+    && tar -xJf /tmp/zig.tar.xz -C /usr/local \
+    && printf '#!/bin/sh\nexec /usr/local/zig-linux-x86_64-ZIG_VERSION/zig cc -target x86_64-linux-musl "$@"\n' \
+       > /usr/local/bin/zigcc \
+    && chmod +x /usr/local/bin/zigcc \
+    && rm /tmp/zig.tar.xz
 COPY . /mdl
 RUN cd /mdl \
-    && cargo build --release --target x86_64-unknown-linux-musl \
+    && CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=zigcc \
+       CC_x86_64_unknown_linux_musl=zigcc \
+       cargo build --release --target x86_64-unknown-linux-musl \
     && cp target/x86_64-unknown-linux-musl/release/actman /actman \
     && cp target/x86_64-unknown-linux-musl/release/updman /updman \
     && cp target/x86_64-unknown-linux-musl/release/dhcman /dhcman \
@@ -67,15 +86,14 @@ RUN cd /mdl \
 const STAGE1: &str = r#"
 # packaging
 FROM alpine:latest as stage1
-ARG MODEfeat: Migrate crates/user workspace into root Cargo workspace
-
-# Move `userman` and `perman` crates from `crates/user/` into the root workspace as proper members, eliminating the nested workspace structure. Consolidate their Cargo dependencies and manifests.
+ARG MODE
 COPY --from=stage0 out out
 COPY --from=util /actman out/bin/init
 COPY --from=util /updman out/bin/updman
 COPY --from=util /dhcman out/bin/dhcman
 COPY --from=util /cluman out/bin/cluman
 COPY --from=util /userman out/bin/userman
+COPY --from=util /libperman.so out/lib/libperman.so
 RUN cd out && ln -sf bin sbin
 RUN printf '#!/bin/sh\nip link set lo up && ip addr add 127.0.0.1/8 dev lo\n' > out/etc/init/start/00-loopback \
     && chmod +x out/etc/init/start/00-loopback
@@ -94,6 +112,9 @@ RUN cd out && ln -sf bin/init init
 # client/server are boot-time daemons started by init; controller is a one-shot
 # CLI tool and is only installed as a named symlink without an init entry.
 RUN cd out && ln -sf bin/cluman etc/init/start/$MODE
+# perman: inject LD_PRELOAD into /etc/profile so every login shell and its
+# children have the chdir permission intercept active.
+RUN printf 'export LD_PRELOAD=/lib/libperman.so\n' > out/etc/profile
 RUN apk add fakeroot
 RUN fakeroot sh -c 'mknod out/dev/console c 5 1 && cd out && find . | cpio -o -H newc | gzip > ../os.tar.gz'
 "#;
@@ -152,11 +173,14 @@ impl ContMode {
 
     /// Returns the fully rendered Containerfile as an owned [`String`].
     ///
-    /// Replaces the bare `ARG MODE` declaration in [`STAGE1`] with
-    /// `ARG MODE=<mode>`, so `podman build` does not require an explicit
-    /// `--build-arg MODE=…` flag.
+    /// - Replaces the bare `ARG MODE` declaration in [`STAGE1`] with
+    ///   `ARG MODE=<mode>`, so `podman build` does not require an explicit
+    ///   `--build-arg MODE=…` flag.
+    /// - Substitutes `ZIG_VERSION` placeholders in [`STAGE_UTIL`] with the
+    ///   [`ZIG_VERSION`] constant.
     pub fn return_final_contf(&self) -> String {
+        let util = STAGE_UTIL.replace("ZIG_VERSION", ZIG_VERSION);
         let stage1 = STAGE1.replace("ARG MODE", &format!("ARG MODE={}", self.mode));
-        format!("{STAGE0}{STAGE_UTIL}{stage1}{STAGE_FINAL}")
+        format!("{STAGE0}{util}{stage1}{STAGE_FINAL}")
     }
 }
