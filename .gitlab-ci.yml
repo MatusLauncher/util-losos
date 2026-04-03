@@ -55,6 +55,8 @@ pages:
   extends: .rust_with_sys_deps
   stage: deploy
   image: rust:slim
+  variables:
+    CARGO_TARGET_DIR: target
   script:
     # Build docs for each submodule individually
     - for crate in actman updman pakman cluman isoman dhcman testman; do
