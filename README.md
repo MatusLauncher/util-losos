@@ -14,6 +14,7 @@
 | [`userman`](#userman) | User manager — CLI client, HTTP daemon, and login screen with 2FA (TOTP / password / FIDO2) and LUKS home encryption |
 | [`perman`](#perman) | Permission enforcement — `cdylib` that intercepts `chdir` via `LD_PRELOAD` to enforce per-user allowed directories |
 | [`pakman`](#pakman) | Package manager — installs, removes, and runs programs packaged as Nix-based container images stored on the data drive |
+| [`sshman`](#sshman) | SSH server — authenticates against userman, spawns Landlock-sandboxed PTY sessions |
 | [`testman`](#testman) | Integration test framework — boots the initramfs in QEMU and asserts expected log output |
 | [`bench`](#bench) | Smoke tests and micro-benchmarks for all crates |
 
@@ -251,6 +252,25 @@ Key source files:
 
 - `crates/user/perman/src/lib.rs` — `chdir` intercept and `userman` API call
 
+### sshman
+
+`sshman` is an SSH daemon built on [`russh`](https://docs.rs/russh). It authenticates users against the `userman` HTTP daemon (password, SSH public key, TOTP/second-password 2FA via keyboard-interactive) and spawns PTY sessions with Landlock filesystem sandboxing.
+
+Like other LosOS binaries, it uses symlink polymorphism — `argv[0]` selects the mode:
+
+| Basename | Mode |
+|----------|------|
+| `sshman` / `sshd` | Daemon — listens on port 22, serves SSH connections |
+
+On first boot it generates an Ed25519 host key at `/etc/ssh/host_key` (mode `0600`). Subsequent boots reuse the existing key for host identity verification.
+
+Key source files:
+
+- `crates/sshman/src/auth.rs` — password, TOTP, second password, and public key verification
+- `crates/sshman/src/handler.rs` — per-connection `russh::server::Handler` with full auth + channel lifecycle
+- `crates/sshman/src/session.rs` — PTY allocation, fork, Landlock policy, shell/exec spawning
+- `crates/sshman/src/server.rs` — server setup and connection factory
+
 ### pakman
 
 `pakman` is a minimal package manager that leverages `nerdctl` and a NixOS base image to install arbitrary programs into the running system without modifying the read-only initramfs. Programs are stored as saved container image tarballs on a persistent data drive.
@@ -373,6 +393,7 @@ Init scripts installed at boot time:
 | `/etc/init/start/usersvc-local` | symlink → `userman` | Local user management daemon |
 | `/etc/init/start/buildkitd` | symlink → `buildkitd` | BuildKit daemon for container builds |
 | `/etc/init/start/containerd` | symlink → `containerd` | containerd runtime |
+| `/etc/init/start/sshd` | symlink → `sshman` | SSH daemon |
 | `/etc/init/start/sh` | symlink → `sh` | Fallback shell |
 | `/etc/init/start/<mode>` | symlink → `cluman` | `cluman` in the baked-in mode |
 

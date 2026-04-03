@@ -41,3 +41,4 @@ path = "benches/pakman.rs"
 [[test]]
 name = "isoman"
 path = "benches/isoman.rs"
+
