@@ -1,3 +1,27 @@
 [submodule "book"]
 	path = book
 	url = https://gitlab.com/mtos-v2/docs.git
+[submodule "crates/actman"]
+	path = crates/actman
+	url = https://gitlab.com/mtos-v2/actman.git
+[submodule "crates/updman"]
+	path = crates/updman
+	url = https://gitlab.com/mtos-v2/updman.git
+[submodule "crates/pakman"]
+	path = crates/pakman
+	url = https://gitlab.com/mtos-v2/pakman.git
+[submodule "crates/cluman"]
+	path = crates/cluman
+	url = https://gitlab.com/mtos-v2/cluman.git
+[submodule "crates/isoman"]
+	path = crates/isoman
+	url = https://gitlab.com/mtos-v2/isoman.git
+[submodule "crates/dhcman"]
+	path = crates/dhcman
+	url = https://gitlab.com/mtos-v2/dhcman.git
+[submodule "crates/testman"]
+	path = crates/testman
+	url = https://gitlab.com/mtos-v2/testman.git
+[submodule "crates/user"]
+	path = crates/user
+	url = https://gitlab.com/mtos-v2/userman.git

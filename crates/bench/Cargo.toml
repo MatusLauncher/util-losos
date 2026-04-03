@@ -6,17 +6,17 @@ publish = false
 autobenches = false
 
 [dev-dependencies]
-actman      = { version = "0.1.0", path = "../actman" }
-rustix.workspace = true
-cluman      = { version = "0.1.0", path = "../cluman" }
-dhcman      = { version = "0.1.0", path = "../dhcman" }
-updman      = { version = "0.1.0", path = "../updman" }
-pakman      = { version = "0.1.0", path = "../pakman" }
-isoman      = { version = "0.1.0", path = "../isoman" }
-mkbootimg   = { workspace = true }
-tempfile.workspace = true
-serde_json.workspace = true
-walkdir.workspace    = true
+actman = { workspace = true }
+rustix = { workspace = true }
+cluman = { workspace = true }
+dhcman = { workspace = true }
+updman = { workspace = true }
+pakman = { workspace = true }
+isoman = { workspace = true }
+mkbootimg = { workspace = true }
+tempfile = { workspace = true }
+serde_json = { workspace = true }
+walkdir = { workspace = true }
 
 [[test]]
 name = "actman"

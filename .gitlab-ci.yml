@@ -1,3 +1,6 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
 stages:
   - check
   - test
@@ -53,9 +56,16 @@ pages:
   stage: deploy
   image: rust:slim
   script:
-    - cargo doc --no-deps --workspace
+    # Build docs for each submodule individually
+    - for crate in actman updman pakman cluman isoman dhcman testman; do
+        cargo doc --no-deps --manifest-path "crates/$crate/Cargo.toml";
+      done
+    - cargo doc --no-deps --manifest-path crates/user/crates/userman/Cargo.toml
+    - cargo doc --no-deps --manifest-path crates/user/crates/perman/Cargo.toml
+    # Bench workspace docs
+    - cargo doc --no-deps
     - mv target/doc public
-    # Root index that redirects visitors to the actman crate as a landing page
+    # Root index page
     - |
       cat > public/index.html <<'EOF'
       <!DOCTYPE html>
@@ -79,6 +89,8 @@ pages:
             <li><a href="dhcman/index.html">dhcman</a> — DHCP manager</li>
             <li><a href="isoman/index.html">isoman</a> — ISO manager</li>
             <li><a href="testman/index.html">testman</a> — integration test runner</li>
+            <li><a href="userman/index.html">userman</a> — user management</li>
+            <li><a href="perman/index.html">perman</a> — permission enforcement</li>
           </ul>
         </body>
       </html>

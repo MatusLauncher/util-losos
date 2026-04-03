@@ -1,36 +1,20 @@
 [workspace]
 resolver = "3"
-members = [
-            "crates/actman", 
-            "crates/updman", 
-            "crates/dhcman", 
-            "crates/testman", 
-            "crates/isoman", 
-            "crates/cluman", 
-            "crates/bench", 
-            "crates/pakman",
-            "crates/user/userman",
-            "crates/user/perman"
-          ]
+members = ["crates/bench"]
 
 [workspace.dependencies]
-miette = { version = "*", features = ["fancy"] }
-tracing = "*"
-tracing-subscriber = "*"
-walkdir = "*"
-fastrand = "2"
-clap = { version = "4.6.0", features = ["derive", "env"] }
+actman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/actman" }
+cluman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/cluman" }
+dhcman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/dhcman" }
+updman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/updman" }
+pakman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/pakman" }
+isoman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/isoman" }
+mkbootimg = { git = "https://gitlab.com/mtos-v2/mkbootimg" }
 rustix = { version = "1.1.4", features = ["system", "mount", "process"] }
-strum = { version = "0.28.0", features = ["derive"] }
-serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 tempfile = "3"
-mkbootimg = { git = "https://gitlab.com/mtos-v2/mkbootimg" }
-luks = "*"
-expressjs = "0.9.2"
-tokio = {version = "*", features = ["rt-multi-thread"]}
-ureq = {version = "*", features = ["json"]}
-overlayfs_fuse = "*"
+walkdir = "*"
+
 [profile.release]
 lto = true
 codegen-units = 1

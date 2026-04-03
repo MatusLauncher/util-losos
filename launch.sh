@@ -118,7 +118,7 @@ if [[ "$TEST" -eq 1 ]]; then
         MEMORY="$MEMORY" \
         CPUS="$CPUS" \
         KVM="${KVM:-1}" \
-        cargo test -p testman -- --test-threads=1 --include-ignored
+        cargo test --manifest-path crates/testman/Cargo.toml -- --test-threads=1 --include-ignored
 fi
 
 if [[ "$ISO" -eq 1 ]]; then
@@ -131,7 +131,7 @@ if [[ "$ISO" -eq 1 ]]; then
         KERNEL="$KERNEL" \
         INITRAMFS="$INITRAMFS" \
         OUTPUT="${OUTPUT:-os.iso}" \
-        cargo run -p isoman
+        cargo run --manifest-path crates/isoman/Cargo.toml
 fi
 
 echo "==> Launching initramfs"
