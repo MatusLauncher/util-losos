@@ -114,7 +114,7 @@ async fn main() -> miette::Result<()> {
             }
             let user = run_login_screen(&daemon_api)?;
             apply_session_policy(user.allowed_dirs())?;
-            exec_shell()?;
+            exec_shell(user.name())?;
         }
     }
     Ok(())
@@ -130,10 +130,16 @@ fn prompt(label: &str) -> miette::Result<String> {
     Ok(buf.trim_end_matches(['\n', '\r']).to_string())
 }
 
-/// Replace the current process image with `/bin/sh`, inheriting the
-/// environment.  Only returns if `execve` fails (login is over either way).
-fn exec_shell() -> miette::Result<()> {
-    let err = Command::new("/bin/sh").exec();
+/// Replace the current process image with `/bin/sh -l`, inheriting the
+/// environment.  Sets `HOME` and `PS1` so the shell prompt shows
+/// `username:/current/path$ `.  Only returns if `execve` fails.
+fn exec_shell(username: &str) -> miette::Result<()> {
+    let home = format!("/home/{username}");
+    unsafe {
+        std::env::set_var("HOME", &home);
+        std::env::set_var("PS1", format!("{username}:$PWD$ "));
+    }
+    let err = Command::new("/bin/sh").arg("-l").exec();
     Err(miette!("execve(/bin/sh) failed: {err}"))
 }
 

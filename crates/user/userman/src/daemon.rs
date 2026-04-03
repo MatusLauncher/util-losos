@@ -264,6 +264,26 @@ impl Daemon {
             ..Default::default()
         }
     }
+    /// Seed a default `user` account when the database is empty or missing.
+    ///
+    /// Called once at daemon startup so first boot is immediately usable.
+    /// Subsequent starts with an existing, non-empty database are a no-op.
+    fn seed_default_user(&self) -> miette::Result<()> {
+        let users: Users = read_to_string(&self.save_location)
+            .ok()
+            .and_then(|f| serde_json::from_str(&f).ok())
+            .unwrap_or_default();
+        if users.uschemas.is_empty() {
+            info!("No users found — seeding default user 'user'");
+            let mut schema = UserSchema::default();
+            schema
+                .set_user("user".to_string())
+                .set_pass("user".to_string())
+                .set_allowed_dirs(vec![]);
+            self.create(schema)?;
+        }
+        Ok(())
+    }
     /// Read the database from disk and return the schema for `user`.
     fn get(&self, user: String) -> miette::Result<UserSchema> {
         let f = read_to_string(&self.save_location).into_diagnostic()?;
@@ -364,6 +384,7 @@ impl Daemon {
     ///
     /// [`validate_location`]: Daemon::validate_location
     pub async fn run(&self) -> miette::Result<()> {
+        self.seed_default_user()?;
         let mut app = express();
 
         app.get("/healthcheck", async move |_, res: Response| {

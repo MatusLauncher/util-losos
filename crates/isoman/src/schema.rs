@@ -96,6 +96,7 @@ RUN cd out && ln -sf bin/init init
 # client/server are boot-time daemons started by init; controller is a one-shot
 # CLI tool and is only installed as a named symlink without an init entry.
 RUN cd out && ln -sf /bin/cluman etc/init/start/$MODE
+RUN printf 'export PS1="$USER:$PWD$ "\n' > out/etc/profile
 RUN apk add fakeroot
 RUN fakeroot sh -c 'mknod out/dev/console c 5 1 && cd out && find . | cpio -o -H newc | gzip > ../os.tar.gz'
 "#;

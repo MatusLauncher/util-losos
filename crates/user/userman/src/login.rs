@@ -523,7 +523,7 @@ fn draw_single_input(
 
     let input_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow));
+        .border_style(Style::default().fg(Color::Blue));
     let input_inner = input_block.inner(chunks[2]);
     f.render_widget(input_block, chunks[2]);
     let display = if mask {
@@ -573,7 +573,7 @@ fn draw_message(f: &mut Frame, area: Rect, title: &str, msg: &str) {
 
 fn focused_style(focused: bool) -> Style {
     if focused {
-        Style::default().fg(Color::Yellow)
+        Style::default().fg(Color::Blue)
     } else {
         Style::default()
     }
