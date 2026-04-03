@@ -10,6 +10,7 @@ exclude = [
     "crates/dhcman",
     "crates/testman",
     "crates/user",
+    "crates/sshman",
 ]
 
 [workspace.dependencies]
@@ -19,6 +20,7 @@ dhcman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/dhcman" }
 updman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/updman" }
 pakman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/pakman" }
 isoman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/isoman" }
+sshman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/sshman" }
 mkbootimg = { git = "https://gitlab.com/mtos-v2/mkbootimg" }
 rustix = { version = "1.1.4", features = ["system", "mount", "process"] }
 serde_json = "1.0.149"

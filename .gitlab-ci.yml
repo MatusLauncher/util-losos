@@ -58,18 +58,31 @@ pages:
   variables:
     CARGO_TARGET_DIR: target
   script:
-    # Build docs for each submodule individually
-    - for crate in actman updman pakman cluman isoman dhcman testman; do
-        cargo doc --no-deps --manifest-path "crates/$crate/Cargo.toml";
-      done
-    - cargo doc --no-deps --manifest-path crates/user/crates/userman/Cargo.toml
-    - cargo doc --no-deps --manifest-path crates/user/crates/perman/Cargo.toml
-    # Bench workspace docs
-    - cargo doc --no-deps
-    - mv target/doc public
-    # Root index page
     - |
-      cat > public/index.html <<'EOF'
+      CRATES="
+      actman|crates/actman/Cargo.toml|init system (PID 1)
+      updman|crates/updman/Cargo.toml|update manager
+      pakman|crates/pakman/Cargo.toml|package manager
+      cluman|crates/cluman/Cargo.toml|cluster manager
+      dhcman|crates/dhcman/Cargo.toml|DHCP manager
+      isoman|crates/isoman/Cargo.toml|ISO manager
+      testman|crates/testman/Cargo.toml|integration test runner
+      userman|crates/user/crates/userman/Cargo.toml|user management
+      perman|crates/user/crates/perman/Cargo.toml|permission enforcement
+      "
+
+      # Build docs for each crate
+      echo "$CRATES" | while IFS='|' read -r name manifest desc; do
+        [ -z "$name" ] && continue
+        cargo doc --no-deps --manifest-path "$manifest"
+      done
+
+      # Bench workspace docs
+      cargo doc --no-deps
+      mv target/doc public
+
+      # Generate root index page
+      cat > public/index.html <<'HEADER'
       <!DOCTYPE html>
       <html>
         <head>
@@ -84,19 +97,18 @@ pages:
         <body>
           <h1>util-mdl — API documentation</h1>
           <ul>
-            <li><a href="actman/index.html">actman</a> — init system (PID 1)</li>
-            <li><a href="updman/index.html">updman</a> — update manager</li>
-            <li><a href="pakman/index.html">pakman</a> — package manager</li>
-            <li><a href="cluman/index.html">cluman</a> — cluster manager</li>
-            <li><a href="dhcman/index.html">dhcman</a> — DHCP manager</li>
-            <li><a href="isoman/index.html">isoman</a> — ISO manager</li>
-            <li><a href="testman/index.html">testman</a> — integration test runner</li>
-            <li><a href="userman/index.html">userman</a> — user management</li>
-            <li><a href="perman/index.html">perman</a> — permission enforcement</li>
+      HEADER
+
+      echo "$CRATES" | while IFS='|' read -r name manifest desc; do
+        [ -z "$name" ] && continue
+        echo "        <li><a href=\"${name}/index.html\">${name}</a> — ${desc}</li>" >> public/index.html
+      done
+
+      cat >> public/index.html <<'FOOTER'
           </ul>
         </body>
       </html>
-      EOF
+      FOOTER
   artifacts:
     paths:
       - public
