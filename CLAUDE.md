@@ -17,6 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `crates/testman` | [mtos-v2/testman](https://gitlab.com/mtos-v2/testman) | Integration test harness |
 | `crates/user` | [mtos-v2/userman](https://gitlab.com/mtos-v2/userman) | User management (userman + perman) |
 | `crates/sshman` | [mtos-v2/sshman](https://gitlab.com/mtos-v2/sshman) | SSH server |
+| `crates/gpuman` | [mtos-v2/gpuman](https://gitlab.com/mtos-v2/gpuman) | GPU/NPU accelerator manager |
 | `book` | [mtos-v2/docs](https://gitlab.com/mtos-v2/docs) | Documentation |
 
 The `crates/bench` directory is the only in-tree crate — it contains integration benchmarks that depend on all other crates via git dependencies.
@@ -95,6 +96,7 @@ actman (core library, no deps)
   └─→ userman (also depends on perman via path within same repo)
 
 sshman (depends on actman + userman)
+gpuman (depends on actman)
 dhcman (standalone)
 testman (standalone)
 bench (in-tree, depends on all via git deps)
@@ -121,6 +123,10 @@ CLI tool for installing, removing, and running programs inside the initramfs env
 
 SSH daemon built on `russh`. Authenticates users against the userman HTTP daemon (password, SSH public key, TOTP/second-password 2FA via keyboard-interactive). Spawns PTY sessions with Landlock filesystem sandboxing. Auto-generates an Ed25519 host key at `/etc/ssh/host_key` on first boot. Uses symlink polymorphism: `sshman` or `sshd` → Daemon mode.
 
+### gpuman — GPU/NPU Accelerator Manager
+
+Detects GPUs and neural accelerators at boot via sysfs (`/sys/class/drm/card*` for GPUs, `/sys/class/accel/accel*` for NPUs) and launches vendor-specific containers with the full driver/runtime stack. Supports NVIDIA (CUDA), AMD (ROCm), and Intel (oneAPI). Container images are configurable via kernel command-line parameters (`gpu_nvidia_image=`, `gpu_amd_image=`, `gpu_intel_image=`). Uses symlink polymorphism: `gpuman` → Daemon mode (detect + launch), `gpuctl` → CLI query tool. The initramfs includes GPU firmware from `linux-firmware` so the kernel can initialise the hardware.
+
 ### Error Handling and Logging
 
 All fallible operations return `miette::Result<()>` using `IntoDiagnostic` trait conversions. Structured logging via the `tracing` crate (`info!()` macro throughout).
@@ -128,7 +134,7 @@ All fallible operations return `miette::Result<()>` using `IntoDiagnostic` trait
 ### Container Build (Containerfile)
 
 Multi-stage OCI build:
-1. **stage0**: Alpine + busybox-static + nerdctl download
+1. **stage0**: Alpine + busybox-static + nerdctl download + GPU/NPU firmware (linux-firmware)
 2. **util**: Rust + musl — compiles crates for `x86_64-unknown-linux-musl`
 3. **stage1**: Assembles final filesystem hierarchy, creates cpio archive → `os.initramfs.tar.gz`
 

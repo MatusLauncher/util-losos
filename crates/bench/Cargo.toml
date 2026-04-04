@@ -7,15 +7,22 @@ autobenches = false
 
 [dev-dependencies]
 actman = { workspace = true }
-rustix = { workspace = true }
+base64 = { workspace = true }
 cluman = { workspace = true }
 dhcman = { workspace = true }
-updman = { workspace = true }
-pakman = { workspace = true }
+gpuman = { workspace = true }
 isoman = { workspace = true }
 mkbootimg = { workspace = true }
-tempfile = { workspace = true }
+pakman = { workspace = true }
+russh-keys = { workspace = true }
+rustix = { workspace = true }
 serde_json = { workspace = true }
+ssh-key = { workspace = true }
+sshman = { workspace = true }
+tempfile = { workspace = true }
+totp-rs = { workspace = true }
+updman = { workspace = true }
+userman = { workspace = true }
 walkdir = { workspace = true }
 
 [[test]]
@@ -41,4 +48,12 @@ path = "benches/pakman.rs"
 [[test]]
 name = "isoman"
 path = "benches/isoman.rs"
+
+[[test]]
+name = "sshman"
+path = "benches/sshman.rs"
+
+[[test]]
+name = "gpuman"
+path = "benches/gpuman.rs"
 
