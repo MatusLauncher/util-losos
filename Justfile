@@ -10,8 +10,8 @@
 
 # ── Configurable variables (override via env or 'just var=value recipe') ──────
 
-kernel    := env_var_or_default("KERNEL",    `find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print -quit 2>/dev/null`)
-initramfs := env_var_or_default("INITRAMFS", `find . -maxdepth 2 -name "*.initramfs.tar.gz" -print -quit 2>/dev/null`)
+kernel    := env_var_or_default("KERNEL",    `find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print -quit 2>/dev/null || true`)
+initramfs := env_var_or_default("INITRAMFS", `find . -maxdepth 2 -name "*.initramfs.tar.gz" -print -quit 2>/dev/null || true`)
 memory    := env_var_or_default("MEMORY",    "2G")
 cpus      := env_var_or_default("CPUS",      "2")
 kvm       := env_var_or_default("KVM",       "1")
