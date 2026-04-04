@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::hint::black_box;
 
-use gpuman::container::{build_container_spec, GpuContainerSpec};
+use gpuman::container::build_container_spec;
 use gpuman::detect::{DeviceClass, GpuDevice, GpuVendor, vendors_present};
 use gpuman::mode::ModeOfOperation;
 

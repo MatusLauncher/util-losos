@@ -22,6 +22,7 @@ sshman = { workspace = true }
 tempfile = { workspace = true }
 totp-rs = { workspace = true }
 updman = { workspace = true }
+ureq = { workspace = true }
 userman = { workspace = true }
 walkdir = { workspace = true }
 

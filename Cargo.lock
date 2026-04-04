@@ -5,11 +5,13 @@ version = 4
 [[package]]
 name = "actman"
 version = "0.1.0"
-source = "git+https://gitlab.com/mtos-v2/actman#d849e5beef9f218e22ceaf49e1d2910b16e9cc57"
 dependencies = [
+ "base64",
+ "luks",
  "miette",
  "overlayfs_fuse",
  "rustix",
+ "serde_json",
  "strum 0.28.0",
  "tracing",
  "tracing-subscriber",
@@ -389,6 +391,7 @@ dependencies = [
  "tempfile",
  "totp-rs",
  "updman",
+ "ureq 3.3.0",
  "userman",
  "walkdir",
 ]
@@ -803,8 +806,27 @@ version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ddef33a339a91ea89fb53151bd0a4689cfce27055c291dfa69945475d22c747"
 dependencies = [
+ "percent-encoding",
  "time",
  "version_check",
+]
+
+[[package]]
+name = "cookie_store"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15b2c103cf610ec6cae3da84a766285b42fd16aad564758459e6ecf128c75206"
+dependencies = [
+ "cookie",
+ "document-features",
+ "idna 1.1.0",
+ "indexmap",
+ "log",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "time",
+ "url",
 ]
 
 [[package]]
@@ -1512,7 +1534,7 @@ dependencies = [
  "sha2",
  "temp_testdir",
  "thiserror 1.0.69",
- "ureq",
+ "ureq 2.12.1",
 ]
 
 [[package]]
@@ -3135,7 +3157,6 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "perman"
 version = "0.1.0"
-source = "git+https://gitlab.com/mtos-v2/userman#1a2ba80ad18e097cc202fa98a69230f1bcef39a7"
 dependencies = [
  "landlock",
  "miette",
@@ -4964,10 +4985,40 @@ dependencies = [
  "once_cell",
  "rustls",
  "rustls-pki-types",
- "serde",
- "serde_json",
  "url",
  "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "ureq"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dea7109cdcd5864d4eeb1b58a1648dc9bf520360d7af16ec26d0a9354bafcfc0"
+dependencies = [
+ "base64",
+ "cookie_store",
+ "flate2",
+ "log",
+ "percent-encoding",
+ "rustls",
+ "rustls-pki-types",
+ "serde",
+ "serde_json",
+ "ureq-proto",
+ "utf8-zero",
+ "webpki-roots 1.0.6",
+]
+
+[[package]]
+name = "ureq-proto"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e994ba84b0bd1b1b0cf92878b7ef898a5c1760108fe7b6010327e274917a808c"
+dependencies = [
+ "base64",
+ "http",
+ "httparse",
+ "log",
 ]
 
 [[package]]
@@ -4991,7 +5042,6 @@ checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 [[package]]
 name = "userman"
 version = "0.1.0"
-source = "git+https://gitlab.com/mtos-v2/userman#1a2ba80ad18e097cc202fa98a69230f1bcef39a7"
 dependencies = [
  "actman",
  "base64",
@@ -5013,8 +5063,14 @@ dependencies = [
  "totp-rs",
  "tracing",
  "tracing-subscriber",
- "ureq",
+ "ureq 3.3.0",
 ]
+
+[[package]]
+name = "utf8-zero"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8c0a043c9540bae7c578c88f91dda8bd82e59ae27c21baca69c8b191aaf5a6e"
 
 [[package]]
 name = "utf8_iter"
