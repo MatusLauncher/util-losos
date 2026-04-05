@@ -18,7 +18,6 @@ russh-keys = { workspace = true }
 rustix = { workspace = true }
 serde_json = { workspace = true }
 ssh-key = { workspace = true }
-sshman = { workspace = true }
 tempfile = { workspace = true }
 totp-rs = { workspace = true }
 updman = { workspace = true }
@@ -49,10 +48,6 @@ path = "benches/pakman.rs"
 [[test]]
 name = "isoman"
 path = "benches/isoman.rs"
-
-[[test]]
-name = "sshman"
-path = "benches/sshman.rs"
 
 [[test]]
 name = "gpuman"

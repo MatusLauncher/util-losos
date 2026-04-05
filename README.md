@@ -14,7 +14,6 @@
 | [`userman`](#userman) | User manager — CLI client, HTTP daemon, and login screen with 2FA (TOTP / password / FIDO2) and LUKS home encryption |
 | [`perman`](#perman) | Permission enforcement — `cdylib` that intercepts `chdir` via `LD_PRELOAD` to enforce per-user allowed directories |
 | [`pakman`](#pakman) | Package manager — installs, removes, and runs programs packaged as Nix-based container images stored on the data drive |
-| [`sshman`](#sshman) | SSH server — authenticates against userman, spawns Landlock-sandboxed PTY sessions |
 | [`gpuman`](#gpuman) | GPU/NPU accelerator manager — detects GPUs and NPUs at boot via sysfs and launches vendor-specific driver containers (CUDA, ROCm, oneAPI) |
 | [`testman`](#testman) | Integration test framework — boots the initramfs in QEMU and asserts expected log output |
 | [`bench`](#bench) | Smoke tests and micro-benchmarks for all crates |
@@ -253,25 +252,6 @@ Key source files:
 
 - `crates/user/perman/src/lib.rs` — `chdir` intercept and `userman` API call
 
-### sshman
-
-`sshman` is an SSH daemon built on [`russh`](https://docs.rs/russh). It authenticates users against the `userman` HTTP daemon (password, SSH public key, TOTP/second-password 2FA via keyboard-interactive) and spawns PTY sessions with Landlock filesystem sandboxing.
-
-Like other LosOS binaries, it uses symlink polymorphism — `argv[0]` selects the mode:
-
-| Basename | Mode |
-|----------|------|
-| `sshman` / `sshd` | Daemon — listens on port 22, serves SSH connections |
-
-On first boot it generates an Ed25519 host key at `/etc/ssh/host_key` (mode `0600`). Subsequent boots reuse the existing key for host identity verification.
-
-Key source files:
-
-- `crates/sshman/src/auth.rs` — password, TOTP, second password, and public key verification
-- `crates/sshman/src/handler.rs` — per-connection `russh::server::Handler` with full auth + channel lifecycle
-- `crates/sshman/src/session.rs` — PTY allocation, fork, Landlock policy, shell/exec spawning
-- `crates/sshman/src/server.rs` — server setup and connection factory
-
 ### gpuman
 
 `gpuman` detects GPUs and neural processing units at boot via sysfs and launches vendor-specific driver/runtime containers. It uses symlink polymorphism:
@@ -405,7 +385,7 @@ The multi-stage Containerfile (embedded in `isoman`) produces `os-<mode>.initram
 | Stage | Base | Purpose |
 |-------|------|---------|
 | `stage0` | `alpine:latest` | Downloads `busybox-static` and the latest `nerdctl` full bundle; builds the target filesystem tree under `out/`, including `out/lib/` for shared libraries |
-| `util` | `rust:alpine` | Compiles `actman`, `updman`, `dhcman`, `cluman`, `userman`, `sshman`, `gpuman`, and `libperman.so` for `x86_64-unknown-linux-musl`. Static binaries use the default Rust musl linker; `perman` is linked as a `cdylib` |
+| `util` | `rust:alpine` | Compiles `actman`, `updman`, `dhcman`, `cluman`, `userman`, `gpuman`, and `libperman.so` for `x86_64-unknown-linux-musl`. Static binaries use the default Rust musl linker; `perman` is linked as a `cdylib` |
 | `stage1` | `alpine:latest` | Assembles the final filesystem, writes init scripts, copies `libperman.so` to `out/lib/`, sets `LD_PRELOAD` in `/etc/profile`, installs the mode-selected `cluman` symlink under `/etc/init/start/`, and packs everything into a newc cpio archive |
 | *(final)* | `scratch` | Exports `os.tar.gz` as `os.initramfs.tar.gz` |
 
@@ -421,7 +401,7 @@ Init scripts installed at boot time:
 | `/etc/init/start/usersvc-local` | symlink → `userman` | Local user management daemon |
 | `/etc/init/start/buildkitd` | symlink → `buildkitd` | BuildKit daemon for container builds |
 | `/etc/init/start/containerd` | symlink → `containerd` | containerd runtime |
-| `/etc/init/start/sshd` | symlink → `sshman` | SSH daemon |
+| `/etc/init/start/sshd` | symlink → `cluman` | SSH daemon |
 | `/etc/init/start/gpuman` | symlink → `gpuman` | GPU/NPU accelerator manager |
 | `/etc/init/start/sh` | symlink → `sh` | Fallback shell |
 | `/etc/init/start/<mode>` | symlink → `cluman` | `cluman` in the baked-in mode |

@@ -16,7 +16,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `crates/dhcman` | [mtos-v2/dhcman](https://gitlab.com/mtos-v2/dhcman) | DHCP client |
 | `crates/testman` | [mtos-v2/testman](https://gitlab.com/mtos-v2/testman) | Integration test harness |
 | `crates/user` | [mtos-v2/userman](https://gitlab.com/mtos-v2/userman) | User management (userman + perman) |
-| `crates/sshman` | [mtos-v2/sshman](https://gitlab.com/mtos-v2/sshman) | SSH server |
 | `crates/gpuman` | [mtos-v2/gpuman](https://gitlab.com/mtos-v2/gpuman) | GPU/NPU accelerator manager |
 | `book` | [mtos-v2/docs](https://gitlab.com/mtos-v2/docs) | Documentation |
 
@@ -95,7 +94,6 @@ actman (core library, no deps)
   │   └─→ isoman
   └─→ userman (also depends on perman via path within same repo)
 
-sshman (depends on actman + userman)
 gpuman (depends on actman)
 dhcman (standalone)
 testman (standalone)
@@ -118,10 +116,6 @@ Reads `/etc/update.json` (`base_url`, `image_tag`, `hash`) → runs `nerdctl sav
 ### pakman — Package Manager
 
 CLI tool for installing, removing, and running programs inside the initramfs environment. Uses NixOS container images built with `nerdctl` and stores the resulting tarballs on a persistent data drive.
-
-### sshman — SSH Server
-
-SSH daemon built on `russh`. Authenticates users against the userman HTTP daemon (password, SSH public key, TOTP/second-password 2FA via keyboard-interactive). Spawns PTY sessions with Landlock filesystem sandboxing. Auto-generates an Ed25519 host key at `/etc/ssh/host_key` on first boot. Uses symlink polymorphism: `sshman` or `sshd` → Daemon mode.
 
 ### gpuman — GPU/NPU Accelerator Manager
 
