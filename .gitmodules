@@ -25,9 +25,6 @@
 [submodule "crates/user"]
 	path = crates/user
 	url = https://gitlab.com/mtos-v2/userman.git
-[submodule "crates/sshman"]
-	path = crates/sshman
-	url = https://gitlab.com/mtos-v2/sshman
 [submodule "crates/gpuman"]
 	path = crates/gpuman
 	url = https://gitlab.com/mtos-v2/gpuman

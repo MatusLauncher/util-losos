@@ -10,7 +10,6 @@ exclude = [
     "crates/dhcman",
     "crates/testman",
     "crates/user",
-    "crates/sshman",
     "crates/gpuman",
 ]
 
@@ -21,7 +20,6 @@ dhcman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/dhcman" }
 updman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/updman" }
 pakman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/pakman" }
 isoman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/isoman" }
-sshman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/sshman" }
 gpuman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/gpuman", branch = "master" }
 mkbootimg = { git = "https://gitlab.com/mtos-v2/mkbootimg" }
 base64 = "0.22.1"
