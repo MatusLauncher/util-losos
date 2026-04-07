@@ -1784,7 +1784,6 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 [[package]]
 name = "gpuman"
 version = "0.1.0"
-source = "git+https://gitlab.com/mtos-v2/gpuman?branch=master#d539b7994a67a51512cd2c1a12554db02655ef1d"
 dependencies = [
  "actman",
  "miette",

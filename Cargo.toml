@@ -40,6 +40,9 @@ actman = { path = "crates/actman" }
 userman = { path = "crates/user/crates/userman" }
 perman = { path = "crates/user/crates/perman" }
 
+[patch."https://gitlab.com/mtos-v2/gpuman"]
+gpuman = { path = "crates/gpuman" }
+
 [profile.release]
 lto = true
 codegen-units = 1

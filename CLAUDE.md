@@ -78,7 +78,7 @@ Integration tests run via `testman` — boots the initramfs in QEMU and asserts 
 KVM=0 ./launch.sh --test
 ```
 
-`testman` respects env vars: `KERNEL`, `INITRAMFS`, `MEMORY` (default `2G`), `CPUS` (default `2`), `KVM` (default `1`).
+`testman` respects env vars: `KERNEL`, `INITRAMFS`, `ISO` (default `os.iso`), `MEMORY` (default `2G`), `CPUS` (default `2`), `KVM` (default `1`), `TEST_MODE` (`qemu` (default) or `container` to run QEMU inside Docker via testcontainers).
 
 ## Architecture
 

@@ -317,7 +317,10 @@ mod build_container_spec_cmdline_override {
     fn nvidia_image_override() {
         let devices = nvidia_devices(1);
         let mut opts = HashMap::new();
-        opts.insert("gpu_nvidia_image".to_string(), "custom/cuda:latest".to_string());
+        opts.insert(
+            "gpu_nvidia_image".to_string(),
+            "custom/cuda:latest".to_string(),
+        );
         let spec = build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
         assert_eq!(black_box(&spec.image), "custom/cuda:latest");
     }
@@ -326,7 +329,10 @@ mod build_container_spec_cmdline_override {
     fn amd_image_override() {
         let devices = vec![make_device(GpuVendor::Amd, "0000:01:00.0")];
         let mut opts = HashMap::new();
-        opts.insert("gpu_amd_image".to_string(), "custom/rocm:latest".to_string());
+        opts.insert(
+            "gpu_amd_image".to_string(),
+            "custom/rocm:latest".to_string(),
+        );
         let spec = build_container_spec(&GpuVendor::Amd, &devices, &opts).unwrap();
         assert_eq!(black_box(&spec.image), "custom/rocm:latest");
     }
