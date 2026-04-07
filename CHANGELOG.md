@@ -115,6 +115,7 @@
 
 ### Miscellaneous
 
+- Update cluman submodule to include round-robin storage balancing
 - Remove unused dependencies across multiple crates
 - Update cluman and isoman submodule pointers
 - Remove all sshman references (merged into cluman)
