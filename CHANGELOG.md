@@ -34,6 +34,7 @@
 
 ### Documentation
 
+- Add auto commit and push workflow to CLAUDE.md
 - Add LICENSE and README files to all submodules
 - Update book submodule with submodule architecture docs
 - Remove unnecessary `unsafe` and `static mut` from CONT_F
