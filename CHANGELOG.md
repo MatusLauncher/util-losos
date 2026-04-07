@@ -42,6 +42,7 @@
 
 ### Features
 
+- Add git-cliff configuration and pre-commit hook for automated changelog generation
 - Update agent documentation
 - Merge cluman and sshman.
 - Replace launch.sh with Justfile
