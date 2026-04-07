@@ -42,6 +42,7 @@
 
 ### Features
 
+- Hook isoman config to updman via file-based configuration
 - Add git-cliff configuration and pre-commit hook for automated changelog generation
 - Update agent documentation
 - Merge cluman and sshman.

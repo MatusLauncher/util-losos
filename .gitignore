@@ -1,4 +1,5 @@
 /target
 .claude
+.qwen
 os*.initramfs.tar.gz
 os*.iso
