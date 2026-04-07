@@ -33,15 +33,6 @@ ureq = { version = "3", features = ["json"] }
 userman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/userman" }
 walkdir = "*"
 
-[patch."https://gitlab.com/mtos-v2/actman"]
-actman = { path = "crates/actman" }
-
-[patch."https://gitlab.com/mtos-v2/userman"]
-userman = { path = "crates/user/crates/userman" }
-perman = { path = "crates/user/crates/perman" }
-
-[patch."https://gitlab.com/mtos-v2/gpuman"]
-gpuman = { path = "crates/gpuman" }
 
 [profile.release]
 lto = true

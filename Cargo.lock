@@ -5,6 +5,7 @@ version = 4
 [[package]]
 name = "actman"
 version = "0.1.0"
+source = "git+https://gitlab.com/mtos-v2/actman#3da2075946b74f8080d87b7223ed725ca85bf416"
 dependencies = [
  "base64",
  "luks",
@@ -318,7 +319,7 @@ dependencies = [
  "actman",
  "cluman",
  "dhcman",
- "gpuman",
+ "gpuman 0.1.0 (git+https://gitlab.com/mtos-v2/gpuman?branch=master)",
  "isoman",
  "mkbootimg",
  "pakman",
@@ -573,7 +574,7 @@ dependencies = [
  "clap",
  "either",
  "expressjs",
- "gpuman",
+ "gpuman 0.1.0 (git+https://gitlab.com/mtos-v2/gpuman)",
  "ipnet",
  "miette",
  "minreq",
@@ -1415,6 +1416,20 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 [[package]]
 name = "gpuman"
 version = "0.1.0"
+source = "git+https://gitlab.com/mtos-v2/gpuman?branch=master#ca206befbd0b174c88a3fbd705e3f680197b1bab"
+dependencies = [
+ "actman",
+ "miette",
+ "serde",
+ "tracing",
+ "tracing-subscriber",
+ "walkdir",
+]
+
+[[package]]
+name = "gpuman"
+version = "0.1.0"
+source = "git+https://gitlab.com/mtos-v2/gpuman#ca206befbd0b174c88a3fbd705e3f680197b1bab"
 dependencies = [
  "actman",
  "miette",
@@ -4684,11 +4699,3 @@ name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
-
-[[patch.unused]]
-name = "perman"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "userman"
-version = "0.1.0"
