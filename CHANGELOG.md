@@ -116,6 +116,7 @@
 
 ### Miscellaneous
 
+- Update all submodules with hooks migration
 - Update cluman submodule with fast_rsync implementation
 - Update cluman submodule with content synchronisation
 - Update cluman submodule to include round-robin storage balancing
