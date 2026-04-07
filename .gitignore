@@ -1,5 +1,7 @@
 /target
 .claude
 .qwen
+initramfs*
+vmlinuz*
 os*.initramfs.tar.gz
 os*.iso

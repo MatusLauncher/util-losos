@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Add Qwen to .gitignore
 - Add missing gpuman submodule and update submodule pointers
 - Justfile backtick exit-code crash on missing kernel/initramfs
 - Update user and isoman submodules to fix default login credentials

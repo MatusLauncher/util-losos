@@ -26,7 +26,9 @@ default: run
 # Build the initramfs image from the Containerfile
 build:
     @echo "==> Building initramfs..."
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --with-cache --output os.iso 
+    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --with-cache --output os.iso
+    @echo "==> Extracting kernel and initramfs from ISO..."
+    7z x -y os.iso boot/vmlinuz boot/initramfs.gz >/dev/null 2>&1 && mv boot/vmlinuz vmlinuz && mv boot/initramfs.gz initramfs.gz && rm -rf boot || true
     @echo "==> Initramfs written to os.initramfs.tar.gz"
 
 # Build initramfs then launch in QEMU
@@ -34,34 +36,6 @@ build-run: build run
 
 # Build initramfs then run integration tests
 build-test: build test
-
-# Launch initramfs in QEMU
-run:
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    echo "==> Launching initramfs"
-    echo "    ISO:       {{output}}"
-    echo "    Memory:    {{memory}}"
-    echo "    CPUs:      {{cpus}}"
-    [[ -n "{{disk}}" ]] && echo "    Disk:      {{disk}} (→ /dev/vda)"
-    echo ""
-
-    kvm_flag=()
-    [[ "{{kvm}}" -eq 1 ]] && kvm_flag=(-enable-kvm)
-
-    disk_args=()
-    [[ -n "{{disk}}" ]] && disk_args=(-drive "file={{disk}},format=raw,if=virtio")
-
-    exec qemu-system-x86_64 \
-        -m "{{memory}}" \
-        -smp "{{cpus}}" \
-        -cdrom "{{output}}" \
-        -nic user \
-        -netdev user,id=n0 \
-        -device virtio-net-pci,netdev=n0 \
-        "${disk_args[@]}" \
-        "${kvm_flag[@]}"
 
 # Run testman integration tests
 test:
@@ -80,4 +54,40 @@ test:
         CPUS="{{cpus}}" \
         KVM="{{kvm}}" \
         cargo test --manifest-path crates/testman/Cargo.toml -- --test-threads=1 --include-ignored
+
+# Launch initramfs in QEMU (using direct kernel+initramfs boot since ISO is UEFI-only)
+run:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "==> Launching initramfs"
+    echo "    ISO:       {{output}}"
+    echo "    Memory:    {{memory}}"
+    echo "    CPUs:      {{cpus}}"
+    [[ -n "{{disk}}" ]] && echo "    Disk:      {{disk}} (→ /dev/vda)"
+    echo ""
+
+    kvm_flag=()
+    [[ "{{kvm}}" -eq 1 ]] && kvm_flag=(-enable-kvm)
+
+    disk_args=()
+    [[ -n "{{disk}}" ]] && disk_args=(-drive "file={{disk}},format=raw,if=virtio")
+
+    # Use direct kernel+initramfs boot (ISO is UEFI-only)
+    if [[ -f vmlinuz && -f initramfs.gz ]]; then
+        kernel_args=(-kernel vmlinuz -initrd initramfs.gz -append "console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0")
+    else
+        kernel_args=(-cdrom "{{output}}" -boot d)
+    fi
+
+    exec qemu-system-x86_64 \
+        -m "{{memory}}" \
+        -smp "{{cpus}}" \
+        "${kernel_args[@]}" \
+        -nographic \
+        -nic user \
+        -netdev user,id=n0 \
+        -device virtio-net-pci,netdev=n0 \
+        "${disk_args[@]}" \
+        "${kvm_flag[@]}"
 
