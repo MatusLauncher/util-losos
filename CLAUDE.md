@@ -80,6 +80,84 @@ KVM=0 ./launch.sh --test
 
 `testman` respects env vars: `KERNEL`, `INITRAMFS`, `ISO` (default `os.iso`), `MEMORY` (default `2G`), `CPUS` (default `2`), `KVM` (default `1`), `TEST_MODE` (`qemu` (default) or `container` to run QEMU inside Docker via testcontainers).
 
+## Git Workflow — Auto Commit and Push
+
+**Always commit and push changes automatically after making modifications.** Follow these rules:
+
+### For Submodule Changes (crates/*, book)
+
+When you modify files inside a submodule (e.g., `crates/cluman/src/*.rs`):
+
+```bash
+# 1. Navigate to the submodule
+cd crates/<submodule-name>
+
+# 2. Stage all changes
+git add -A
+
+# 3. Commit with a descriptive message
+git commit -m "<type>: <description>
+
+<detailed explanation of changes>"
+
+# 4. Push to remote
+git push
+
+# 5. Return to root and update submodule reference
+cd ../..
+git add crates/<submodule-name>
+git commit -m "chore: update <submodule-name> submodule"
+git push
+```
+
+### For Root Repository Changes
+
+When you modify files in the root repository (e.g., `Cargo.lock`, `README.md`):
+
+```bash
+# 1. Stage changes
+git add -A
+
+# 2. Commit with descriptive message
+git commit -m "<type>: <description>
+
+<detailed explanation>"
+
+# 3. Push to remote
+git push
+```
+
+### Commit Message Conventions
+
+Use conventional commit format:
+
+| Type | When to Use |
+|------|-------------|
+| `feat` | New feature or capability |
+| `fix` | Bug fix |
+| `refactor` | Code restructuring without behavior change |
+| `docs` | Documentation only |
+| `test` | Adding or modifying tests |
+| `chore` | Maintenance tasks, dependency updates, submodule bumps |
+
+### Important Notes
+
+- **Always commit submodules first**, then update the parent repository
+- **Never push without committing** — ensure all changes are committed
+- **Use `git add -A`** to stage all changes including deletions
+- **Check `git status`** before committing to verify what will be included
+- **Run tests** (`cargo test`) before committing code changes
+- **Run linting** (`cargo clippy`, `cargo fmt --check`) before committing Rust code
+
+### Pre-commit Checklist
+
+Before pushing, verify:
+1. ✅ Code compiles (`cargo build` or `cargo build --manifest-path crates/<name>/Cargo.toml`)
+2. ✅ Tests pass (`cargo test`)
+3. ✅ No clippy warnings (`cargo clippy`)
+4. ✅ Code is formatted (`cargo fmt`)
+5. ✅ Documentation updated if API changed
+
 ## Architecture
 
 ### Submodule Structure
