@@ -116,6 +116,7 @@
 
 ### Miscellaneous
 
+- Update isoman submodule with lbman feature flag
 - Update isoman submodule with sh init script fix
 - Update dhcman submodule with lbman load balancer
 - Update submodules to point to losos-linux
