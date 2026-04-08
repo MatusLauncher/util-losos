@@ -18,12 +18,12 @@ const BASE_URL_SHORT: &str = "registry.example.com";
 const IMAGE_TAG_SHORT: &str = "util-mdl:latest";
 const HASH_SHORT: &str = "sha256:deadbeef";
 
-const BASE_URL_MEDIUM: &str = "registry.example.com/mtos-v2";
+const BASE_URL_MEDIUM: &str = "registry.example.com/losos-linux";
 const IMAGE_TAG_MEDIUM: &str = "util-mdl:1.2.3";
 const HASH_MEDIUM: &str = "sha256:deadbeefcafe0123456789abcdef0123456789abcdef0123456789abcdef0123";
 
 const BASE_URL_LONG: &str =
-    "registry.gitlab.com/organisation/group/subgroup/project/images/mtos-v2";
+    "registry.gitlab.com/organisation/group/subgroup/project/images/losos-linux";
 const IMAGE_TAG_LONG: &str = "util-mdl-x86_64-musl:1.23.456-rc.7+build.20240101";
 const HASH_LONG: &str =
     "sha256:aaaaaabbbbbbccccccddddddeeeeeeffffffgggggghhhhhhiiiiiijjjjjjkkkkkkllllll";

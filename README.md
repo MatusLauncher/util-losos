@@ -196,7 +196,7 @@ Key source files:
 
 2. **Assemble the ISO** — clone the Limine bootloader, copy the kernel and initramfs into a staging directory, and call `xorriso` to produce a hybrid BIOS+UEFI ISO. Output defaults to `os-<mode>.iso`.
 
-3. **Build a GSI** — use the [`mkbootimg`](https://gitlab.com/mtos-v2/mkbootimg) Rust library (wrapping the upstream Android `mkbootimg` C tool) to bundle the kernel and initramfs into an Android boot image. Supports two output formats:
+3. **Build a GSI** — use the [`mkbootimg`](https://gitlab.com/losos-linux/mkbootimg) Rust library (wrapping the upstream Android `mkbootimg` C tool) to bundle the kernel and initramfs into an Android boot image. Supports two output formats:
    - **Fastboot** — raw `boot.img` flashable via `fastboot flash boot`.
    - **Odin** — `AP_losos.tar.md5` archive for Samsung Odin / `heimdall`.
 

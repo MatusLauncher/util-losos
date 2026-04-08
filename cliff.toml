@@ -32,7 +32,7 @@ footer = """
 trim = true
 # postprocessors
 postprocessors = [
-    # { pattern = '<REPO>', replace = "https://gitlab.com/mtos-v2/mdl/util-mdl" },
+    # { pattern = '<REPO>', replace = "https://gitlab.com/losos-linux/mdl/util-mdl" },
 ]
 
 [git]

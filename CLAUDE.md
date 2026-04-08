@@ -4,20 +4,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`util-mdl` is a minimal, container-native OS init system and update manager packaged as a bootable initramfs. Each component lives in its own Git repository under the `mtos-v2` namespace and is linked here as a git submodule:
+`util-mdl` is a minimal, container-native OS init system and update manager packaged as a bootable initramfs. Each component lives in its own Git repository under the `losos-linux` namespace and is linked here as a git submodule:
 
 | Submodule path | Repository | Description |
 |---|---|---|
-| `crates/actman` | [mtos-v2/actman](https://gitlab.com/mtos-v2/actman) | Init system (PID 1) |
-| `crates/updman` | [mtos-v2/updman](https://gitlab.com/mtos-v2/updman) | Update manager |
-| `crates/pakman` | [mtos-v2/pakman](https://gitlab.com/mtos-v2/pakman) | Package manager |
-| `crates/cluman` | [mtos-v2/cluman](https://gitlab.com/mtos-v2/cluman) | Cluster/container manager |
-| `crates/isoman` | [mtos-v2/isoman](https://gitlab.com/mtos-v2/isoman) | ISO/initramfs builder |
-| `crates/dhcman` | [mtos-v2/dhcman](https://gitlab.com/mtos-v2/dhcman) | DHCP client |
-| `crates/testman` | [mtos-v2/testman](https://gitlab.com/mtos-v2/testman) | Integration test harness |
-| `crates/user` | [mtos-v2/userman](https://gitlab.com/mtos-v2/userman) | User management (userman + perman) |
-| `crates/gpuman` | [mtos-v2/gpuman](https://gitlab.com/mtos-v2/gpuman) | GPU/NPU accelerator manager |
-| `book` | [mtos-v2/docs](https://gitlab.com/mtos-v2/docs) | Documentation |
+| `crates/actman` | [losos-linux/actman](https://gitlab.com/losos-linux/actman) | Init system (PID 1) |
+| `crates/updman` | [losos-linux/updman](https://gitlab.com/losos-linux/updman) | Update manager |
+| `crates/pakman` | [losos-linux/pakman](https://gitlab.com/losos-linux/pakman) | Package manager |
+| `crates/cluman` | [losos-linux/cluman](https://gitlab.com/losos-linux/cluman) | Cluster/container manager |
+| `crates/isoman` | [losos-linux/isoman](https://gitlab.com/losos-linux/isoman) | ISO/initramfs builder |
+| `crates/dhcman` | [losos-linux/dhcman](https://gitlab.com/losos-linux/dhcman) | DHCP client |
+| `crates/testman` | [losos-linux/testman](https://gitlab.com/losos-linux/testman) | Integration test harness |
+| `crates/user` | [losos-linux/userman](https://gitlab.com/losos-linux/userman) | User management (userman + perman) |
+| `crates/gpuman` | [losos-linux/gpuman](https://gitlab.com/losos-linux/gpuman) | GPU/NPU accelerator manager |
+| `book` | [losos-linux/docs](https://gitlab.com/losos-linux/docs) | Documentation |
 
 The `crates/bench` directory is the only in-tree crate — it contains integration benchmarks that depend on all other crates via git dependencies.
 
@@ -25,7 +25,7 @@ The `crates/bench` directory is the only in-tree crate — it contains integrati
 
 ```bash
 # Clone with all submodules
-git clone --recurse-submodules https://gitlab.com/mtos-v2/util-mdl.git
+git clone --recurse-submodules https://gitlab.com/losos-linux/util-mdl.git
 
 # Or initialize submodules after cloning
 git submodule update --init --recursive

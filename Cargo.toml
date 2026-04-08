@@ -14,14 +14,14 @@ exclude = [
 ]
 
 [workspace.dependencies]
-actman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/actman" }
-cluman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/cluman" }
-dhcman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/dhcman" }
-updman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/updman" }
-pakman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/pakman" }
-isoman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/isoman" }
-gpuman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/gpuman", branch = "master" }
-mkbootimg = { git = "https://gitlab.com/mtos-v2/mkbootimg" }
+actman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/actman" }
+cluman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/cluman" }
+dhcman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/dhcman" }
+updman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/updman" }
+pakman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/pakman" }
+isoman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/isoman" }
+gpuman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/gpuman", branch = "master" }
+mkbootimg = { git = "https://gitlab.com/losos-linux/mkbootimg" }
 base64 = "0.22.1"
 russh-keys = "0.49"
 rustix = { version = "1.1.4", features = ["system", "mount", "process"] }
@@ -30,7 +30,7 @@ ssh-key = { version = "0.6", features = ["ed25519", "rand_core"] }
 tempfile = "3"
 totp-rs = { version = "5", features = ["otpauth"] }
 ureq = { version = "3", features = ["json"] }
-userman = { version = "0.1.0", git = "https://gitlab.com/mtos-v2/userman" }
+userman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/userman" }
 walkdir = "*"
 
 

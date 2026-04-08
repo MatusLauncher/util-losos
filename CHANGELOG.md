@@ -116,6 +116,7 @@
 
 ### Miscellaneous
 
+- Update all submodules to latest
 - Update all submodules with hooks migration
 - Update cluman submodule with fast_rsync implementation
 - Update cluman submodule with content synchronisation
