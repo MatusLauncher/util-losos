@@ -44,6 +44,7 @@
 
 ### Features
 
+- Add bootenv crate and Secure Boot / encrypted boot support
 - Add container cache mounts and CI cargo cache
 - Hook isoman config to updman via file-based configuration
 - Add git-cliff configuration and pre-commit hook for automated changelog generation
