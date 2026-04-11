@@ -116,6 +116,7 @@
 
 ### Miscellaneous
 
+- Update submodules and increase default CPUS to 4
 - Update isoman submodule with serial console fix
 - Update isoman submodule with lbman feature flag
 - Update isoman submodule with sh init script fix
