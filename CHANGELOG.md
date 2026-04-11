@@ -118,6 +118,7 @@
 
 ### Miscellaneous
 
+- Update isoman submodule — embed SB key as LUKS keyfile
 - Update isoman submodule with symlink fix
 - Update cluman and isoman submodules with simplify fixes
 - Update submodules with bug fixes and hardening
