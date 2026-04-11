@@ -146,6 +146,7 @@
 
 ### Refactor
 
+- Strip bootenv to data_drive= only, remove stage2/luks/switch_root
 - Refactor CmdLineOptions::param_search to accept &str
 - *(ci)* Refactor CI/CD pipeline into discrete stages
 - *(ci)* Build ISO with isoman, add comprehensive tests
