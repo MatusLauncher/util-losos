@@ -103,3 +103,24 @@ run:
         "${disk_args[@]}" \
         "${kvm_flag[@]}"
 
+# ── Documentation (Docusaurus + Aceternity UI) ────────────────────────────────
+
+# Install documentation dependencies
+docs-install:
+    cd book && bun install
+
+# Start documentation dev server with hot reload
+docs-dev:
+    cd book && bun run start
+
+# Build documentation for production
+docs-build:
+    cd book && bun run build
+
+# Serve built documentation locally
+docs-serve:
+    cd book && bun run serve
+
+# Build and serve documentation
+docs-build-serve: docs-build docs-serve
+

@@ -1,6 +1,3 @@
-[submodule "book"]
-	path = book
-	url = https://gitlab.com/losos-linux/docs.git
 [submodule "crates/actman"]
 	path = crates/actman
 	url = https://gitlab.com/losos-linux/actman.git
@@ -31,3 +28,6 @@
 [submodule "crates/bootenv"]
 	path = crates/bootenv
 	url = https://gitlab.com/losos-linux/bootenv.git
+[submodule "book"]
+	path = book
+	url = https://gitlab.com/losos-linux/docs

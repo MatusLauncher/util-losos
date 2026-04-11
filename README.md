@@ -375,7 +375,7 @@ Coverage by target:
 | Target | What is exercised |
 |--------|-------------------|
 | `actman` | `CmdLineOptions` parsing, `RebootCMD` dispatch |
-| `cluman` | `IpRange` parsing/expansion, `CluManSchema`, `Tasks`, `ServerState`, `Mode` conversions, `Task` serde |
+| `cluman` | `IpRange` parsing/expansion, `CluManSchema`, `Tasks` (priority-aware), `ServerState`, `Mode` conversions, `Task` serde, `NicClass`, `NetworkInterface`, NIC detection, VLAN management |
 | `dhcman` | DORA message construction, netconf helpers |
 | `updman` | `UpdMan` schema parsing, `image_ref` construction |
 | `pakman` | `PackageInstallation` queue, Dockerfile template rendering, `WalkDir` scan, `nerdctl` command construction |
@@ -407,6 +407,7 @@ Init scripts installed at boot time:
 |------|--------|---------|
 | `/etc/init/start/00-loopback` | inline shell | Brings up `lo` with `127.0.0.1/8` |
 | `/etc/init/start/00-eth0` | symlink → `dhcman` | DHCP on `eth0` |
+| `/etc/init/start/01-vlans` | inline shell | Creates VLAN interfaces from cmdline params (`vlan_base=`, `vlan_ids=`) |
 | `/etc/init/start/login` | symlink → `userman` | Interactive login screen |
 | `/etc/init/start/usersvc-local` | symlink → `userman` | Local user management daemon |
 | `/etc/init/start/buildkitd` | symlink → `buildkitd` | BuildKit daemon for container builds |
@@ -417,6 +418,23 @@ Init scripts installed at boot time:
 | `/etc/init/start/<mode>` | symlink → `cluman` | `cluman` in the baked-in mode |
 
 ---
+
+## Documentation
+
+The full documentation is built with [Docusaurus](https://docusaurus.io/) + [Aceternity UI](https://ui.aceternity.com/).
+
+```bash
+# Install dependencies
+just docs-install
+
+# Start dev server with hot reload
+just docs-dev
+
+# Build for production
+just docs-build
+```
+
+The documentation is served via GitLab Pages at `https://losos.gitlab.io/losos-linux/docs/`.
 
 ## AI Disclosure
 

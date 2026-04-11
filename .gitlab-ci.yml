@@ -4,6 +4,7 @@ variables:
 stages:
   - check
   - test
+  - build-docs
   - deploy
 
 # ── shared ─────────────────────────────────────────────────────────────────────
@@ -67,68 +68,48 @@ bench:
   script:
     - cargo bench
 
+# ── docs build ─────────────────────────────────────────────────────────────────
+
+docs:
+  stage: build-docs
+  image: node:22-alpine
+  cache:
+    key:
+      files:
+        - book/package.json
+    paths:
+      - book/node_modules
+  script:
+    - cd book
+    - corepack enable
+    - bun install
+    - bun run build
+  artifacts:
+    paths:
+      - book/build
+    expire_in: 1 week
+  rules:
+    - changes:
+        - book/**/*
+      when: always
+
 # ── pages ──────────────────────────────────────────────────────────────────────
 
 pages:
-  extends:
-    - .rust_with_sys_deps
-    - .cargo_cache
   stage: deploy
-  image: rust:slim
-  variables:
-    CARGO_TARGET_DIR: target
+  image: node:22-alpine
+  cache:
+    key:
+      files:
+        - book/package.json
+    paths:
+      - book/node_modules
   script:
-    - |
-      CRATES="
-      actman|crates/actman/Cargo.toml|init system (PID 1)
-      updman|crates/updman/Cargo.toml|update manager
-      pakman|crates/pakman/Cargo.toml|package manager
-      cluman|crates/cluman/Cargo.toml|cluster manager
-      dhcman|crates/dhcman/Cargo.toml|DHCP manager
-      isoman|crates/isoman/Cargo.toml|ISO manager
-      testman|crates/testman/Cargo.toml|integration test runner
-      userman|crates/user/crates/userman/Cargo.toml|user management
-      perman|crates/user/crates/perman/Cargo.toml|permission enforcement
-      "
-
-      # Build docs for each crate
-      echo "$CRATES" | while IFS='|' read -r name manifest desc; do
-        [ -z "$name" ] && continue
-        cargo doc --no-deps --manifest-path "$manifest"
-      done
-
-      # Bench workspace docs
-      cargo doc --no-deps
-      mv target/doc public
-
-      # Generate root index page
-      cat > public/index.html <<'HEADER'
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>LosOS — crate docs</title>
-          <style>
-            body { font-family: sans-serif; max-width: 640px; margin: 4rem auto; }
-            h1   { font-size: 1.4rem; }
-            ul   { line-height: 2; }
-          </style>
-        </head>
-        <body>
-          <h1>LosOS — API documentation</h1>
-          <ul>
-      HEADER
-
-      echo "$CRATES" | while IFS='|' read -r name manifest desc; do
-        [ -z "$name" ] && continue
-        echo "        <li><a href=\"${name}/index.html\">${name}</a> — ${desc}</li>" >> public/index.html
-      done
-
-      cat >> public/index.html <<'FOOTER'
-          </ul>
-        </body>
-      </html>
-      FOOTER
+    - cd book
+    - corepack enable
+    - bun install
+    - bun run build
+    - mv build ../public
   artifacts:
     paths:
       - public

@@ -118,6 +118,7 @@
 
 ### Miscellaneous
 
+- Update dhcman, isoman, testman submodules — auto-detect network interfaces
 - Update submodules — gpuman (NVLink/topology/MIG/CDI/per-GPU), cluman (GPU scheduling), docs (GPU scaling)
 - Update isoman submodule — embed SB key as LUKS keyfile
 - Update isoman submodule with symlink fix
