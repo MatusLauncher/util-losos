@@ -164,9 +164,16 @@ Key source files:
 
 | Basename | Mode | Description |
 |----------|------|-------------|
-| `client` | Boot-time daemon | Registers with the server, polls for tasks, and executes Docker Compose files |
-| `server` | Boot-time daemon | Maintains a client registry and a FIFO task queue; exposes an HTTP API on port 9999 |
-| `controller` | One-shot CLI | Sends commands to the server (register, push tasks, query state) |
+| `client` | Boot-time daemon | Registers with the server, polls for tasks, executes Docker Compose with GPU + NIC injection |
+| `server` | Boot-time daemon | Maintains a client registry and a **priority-aware** task queue; exposes an HTTP API on port 9999 |
+| `controller` | One-shot CLI | Sends commands to the server (push tasks with priority, VLAN, and preemption flags) |
+
+**New scaling features:**
+- **Priority dispatch** — Tasks carry priority 0-255; higher priority tasks dispatched first
+- **Task preemption** — High-priority tasks can preempt `preemptible` running tasks
+- **NIC detection** — Automatic discovery of all network interfaces at boot (sysfs + netlink)
+- **VLAN isolation** — Per-service VLAN tagging for network isolation between compose services
+- **Multi-server HA** — Server peer configuration for basic leader/follower failover
 
 Client and server read configuration from `/proc/cmdline` at startup. The controller is configured entirely via `clap` CLI arguments.
 
@@ -174,10 +181,13 @@ The `Executor` trait abstracts `docker compose` execution, making the client ful
 
 Key source files:
 
-- `crates/cluman/src/schemas.rs` — `Mode`, `Task`, `Tasks`, `ServerState`, `ClientState`, `IpRange`
-- `crates/cluman/src/server.rs` — Tokio HTTP server
-- `crates/cluman/src/client.rs` — client polling loop + `Executor` trait
-- `crates/cluman/src/controller.rs` — one-shot controller
+- `crates/cluman/src/schemas.rs` — `Mode`, `Task`, `Tasks`, `ServerState`, `ClientState`, `NetworkInterface`, `NicRequirements`, `IpRange`
+- `crates/cluman/src/server.rs` — Tokio HTTP server with priority dispatch and preemption
+- `crates/cluman/src/client.rs` — client polling loop + `Executor` trait + NIC detection + VLAN setup
+- `crates/cluman/src/controller.rs` — one-shot controller with `--priority`, `--preemptible`, `--vlan-id` flags
+- `crates/cluman/src/compose.rs` — GPU + NIC compose file rewriter
+- `crates/cluman/src/detect.rs` — Netlink + sysfs NIC detection
+- `crates/cluman/src/vlan.rs` — VLAN interface management
 
 ### updman
 
