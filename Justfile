@@ -17,6 +17,8 @@ kvm       := env("KVM",       "1")
 disk      := env("DISK",      "")
 append    := env("APPEND",    "")
 output    := env("OUTPUT",    "os.iso")
+ovmf_code := env("OVMF_CODE", "/usr/share/edk2/ovmf/OVMF_CODE.fd")
+ovmf_vars := env("OVMF_VARS", "/usr/share/edk2/ovmf/OVMF_VARS.fd")
 
 # ── Public recipes ────────────────────────────────────────────────────────────
 
@@ -73,11 +75,21 @@ run:
     disk_args=()
     [[ -n "{{disk}}" ]] && disk_args=(-drive "file={{disk}},format=raw,if=virtio")
 
-    # Use direct kernel+initramfs boot (ISO is UEFI-only)
+    # Prefer direct kernel+initramfs boot; fall back to UEFI ISO boot via OVMF.
     if [[ -f vmlinuz && -f initramfs.gz ]]; then
-        kernel_args=(-kernel \"{{kernel}}\" -initrd initramfs.gz -append "console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0")
+        kernel_args=(-kernel vmlinuz -initrd initramfs.gz -append "console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0")
     else
-        kernel_args=(-cdrom "{{output}}" -boot d)
+        # ISO is UEFI-only — load OVMF firmware via pflash so QEMU can boot it.
+        # OVMF_VARS must be writable (firmware writes EFI variables at runtime);
+        # use a temp copy to avoid mutating the system-wide file.
+        tmp_vars=$(mktemp --suffix=.fd)
+        cp "{{ovmf_vars}}" "$tmp_vars"
+        trap "rm -f $tmp_vars" EXIT
+        kernel_args=(
+            -drive "if=pflash,format=raw,readonly=on,file={{ovmf_code}}"
+            -drive "if=pflash,format=raw,file=$tmp_vars"
+            -cdrom "{{output}}"
+        )
     fi
 
     exec qemu-system-x86_64 \

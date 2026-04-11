@@ -116,6 +116,7 @@
 
 ### Miscellaneous
 
+- Update cluman and isoman submodules with simplify fixes
 - Update submodules with bug fixes and hardening
 - Update submodules and increase default CPUS to 4
 - Update isoman submodule with serial console fix
