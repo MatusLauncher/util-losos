@@ -118,6 +118,7 @@
 
 ### Miscellaneous
 
+- Update Justfile to reflect isoman CLI simplification
 - Migrate docs pipeline to Docusaurus/Bun; update submodules
 - Update dhcman, isoman, testman submodules — auto-detect network interfaces
 - Update submodules — gpuman (NVLink/topology/MIG/CDI/per-GPU), cluman (GPU scheduling), docs (GPU scaling)

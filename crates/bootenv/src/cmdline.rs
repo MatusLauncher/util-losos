@@ -64,6 +64,15 @@ impl BootCmdline {
         self.boot_luks().is_some()
     }
 
+    /// Returns the `data_drive` parameter — semicolon-separated list of
+    /// block-device or NFS URIs that describe the persistent data volume.
+    ///
+    /// Returns `None` when the parameter is absent (RAM-only mode).
+    #[must_use]
+    pub fn data_drive(&self) -> Option<&str> {
+        self.raw.get("data_drive").map(String::as_str)
+    }
+
     /// Parses a raw cmdline string into a `HashMap`, splitting on whitespace
     /// then on `=`. Bare flags (no `=`) are discarded.
     fn parse(content: &str) -> HashMap<String, String> {
@@ -124,5 +133,23 @@ mod tests {
     fn bare_flags_are_discarded() {
         let map = BootCmdline::parse("quiet ro stage2=/dev/sda2");
         assert_eq!(map.len(), 1);
+    }
+
+    #[test]
+    fn data_drive_absent_returns_none() {
+        let bc = BootCmdline {
+            raw: BootCmdline::parse("stage2=/dev/sda2"),
+        };
+        assert!(bc.data_drive().is_none());
+    }
+
+    #[test]
+    fn data_drive_present_returns_value() {
+        let bc = BootCmdline {
+            raw: BootCmdline::parse(
+                "stage2=/dev/sda2 data_drive=luks:///dev/sdb1",
+            ),
+        };
+        assert_eq!(bc.data_drive(), Some("luks:///dev/sdb1"));
     }
 }

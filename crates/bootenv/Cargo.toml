@@ -7,6 +7,7 @@ description = "Minimal stage-1 initramfs boot environment with LUKS unlock suppo
 rust-version = "1.85"
 
 [dependencies]
+actman = { path = "../actman" }
 flate2 = "1.0"
 miette = { version = "*", features = ["fancy"] }
 rustix = { version = "1.1.4", features = ["mount", "termios", "process"] }

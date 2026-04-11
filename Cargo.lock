@@ -5,6 +5,22 @@ version = 4
 [[package]]
 name = "actman"
 version = "0.1.0"
+dependencies = [
+ "base64",
+ "luks",
+ "miette",
+ "overlayfs_fuse",
+ "rustix",
+ "serde_json",
+ "strum",
+ "tracing",
+ "tracing-subscriber",
+ "walkdir",
+]
+
+[[package]]
+name = "actman"
+version = "0.1.0"
 source = "git+https://gitlab.com/losos-linux/actman#16cebb30a9bdec9608eada5f5dac4b56ed4d1b48"
 dependencies = [
  "base64",
@@ -530,6 +546,7 @@ dependencies = [
 name = "bootenv"
 version = "0.1.0"
 dependencies = [
+ "actman 0.1.0",
  "flate2",
  "luks",
  "miette",
