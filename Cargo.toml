@@ -1,12 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/bench"]
+members = ["crates/bench", "crates/bootenv", "crates/isoman"]
 exclude = [
     "crates/actman",
     "crates/updman",
     "crates/pakman",
     "crates/cluman",
-    "crates/isoman",
     "crates/dhcman",
     "crates/testman",
     "crates/user",

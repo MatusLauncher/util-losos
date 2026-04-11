@@ -27,4 +27,7 @@
 	url = https://gitlab.com/losos-linux/userman.git
 [submodule "crates/gpuman"]
 	path = crates/gpuman
-	url = https://gitlab.com/losos-linux/gpuman
+	url = https://gitlab.com/losos-linux/gpuman.git
+[submodule "crates/bootenv"]
+	path = crates/bootenv
+	url = https://gitlab.com/losos-linux/bootenv.git
