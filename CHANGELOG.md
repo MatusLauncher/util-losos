@@ -116,6 +116,7 @@
 
 ### Miscellaneous
 
+- Update isoman submodule with serial console fix
 - Update isoman submodule with lbman feature flag
 - Update isoman submodule with sh init script fix
 - Update dhcman submodule with lbman load balancer

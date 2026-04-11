@@ -12,7 +12,7 @@
 
 kernel    := env("KERNEL",    `find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print -quit 2>/dev/null || true`)
 memory    := env("MEMORY",    "2G")
-cpus      := env("CPUS",      "2")
+cpus      := env("CPUS",      "4")
 kvm       := env("KVM",       "1")
 disk      := env("DISK",      "")
 append    := env("APPEND",    "")
@@ -75,7 +75,7 @@ run:
 
     # Use direct kernel+initramfs boot (ISO is UEFI-only)
     if [[ -f vmlinuz && -f initramfs.gz ]]; then
-        kernel_args=(-kernel vmlinuz -initrd initramfs.gz -append "console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0")
+        kernel_args=(-kernel \"{{kernel}}\" -initrd initramfs.gz -append "console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0")
     else
         kernel_args=(-cdrom "{{output}}" -boot d)
     fi
