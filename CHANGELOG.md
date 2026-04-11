@@ -119,6 +119,7 @@
 
 ### Miscellaneous
 
+- Update bootenv, isoman, docs submodules — UKI disk image, data_drive= only
 - Update actman, bootenv, docs submodules — move mounting to bootenv
 - Update Justfile to reflect isoman CLI simplification
 - Migrate docs pipeline to Docusaurus/Bun; update submodules

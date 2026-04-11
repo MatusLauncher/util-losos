@@ -1,13 +1,12 @@
 # util-mdl — build, launch, and test the initramfs OS.
 #
 # Recipes:
-#   just build               Build initramfs from Containerfile
+#   just build               Build OS disk image (LUKS2-encrypted P3, default)
 #   just build-config        Build from a JSON config file (ISOMAN_CONFIG)
 #   just build-gsi           Build a GSI (Fastboot + Odin)
 #   just build-gsi-fastboot  Build a Fastboot-only GSI boot.img
 #   just build-secure-boot   Build with Secure Boot signing
-#   just build-encrypted     Build with encrypted boot partition
-#   just run                 Launch in QEMU (default)
+#   just run                 Launch in QEMU (UEFI via OVMF)
 #   just test                Run testman integration tests
 #   just build-run           Build then launch
 #   just build-test          Build then test
@@ -20,7 +19,7 @@ cpus         := env("CPUS",         "4")
 kvm          := env("KVM",          "1")
 disk         := env("DISK",         "")
 append       := env("APPEND",       "")
-output       := env("OUTPUT",       "os.iso")
+output       := env("OUTPUT",       "os-client.img")
 ovmf_code    := env("OVMF_CODE",    "/usr/share/edk2/ovmf/OVMF_CODE.fd")
 ovmf_vars    := env("OVMF_VARS",    "/usr/share/edk2/ovmf/OVMF_VARS.fd")
 isoman_config := env("ISOMAN_CONFIG", "")
@@ -30,13 +29,11 @@ isoman_config := env("ISOMAN_CONFIG", "")
 # Launch initramfs in QEMU (default)
 default: run
 
-# Build the initramfs image from the Containerfile (caching always enabled)
+# Build the OS disk image (GPT with LUKS2-encrypted initramfs partition)
 build:
-    @echo "==> Building initramfs..."
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --output os.iso
-    @echo "==> Extracting kernel and initramfs from ISO..."
-    7z x -y os.iso boot/vmlinuz boot/initramfs.gz >/dev/null 2>&1 && mv boot/vmlinuz vmlinuz && mv boot/initramfs.gz initramfs.gz && rm -rf boot || true
-    @echo "==> Initramfs written to os-<mode>.initramfs.tar.gz"
+    @echo "==> Building OS disk image (LUKS2-encrypted P3)..."
+    cargo run --manifest-path crates/isoman/Cargo.toml -- --build
+    @echo "==> Disk image written to os-<mode>.img"
 
 # Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
 build-config config_path=isoman_config:
@@ -56,11 +53,6 @@ build-gsi-fastboot:
 build-secure-boot:
     @echo "==> Building with Secure Boot signing..."
     cargo run --manifest-path crates/isoman/Cargo.toml -- --build --output "{{output}}" --secure-boot
-
-# Build with encrypted boot partition (two-stage initramfs)
-build-encrypted:
-    @echo "==> Building with encrypted boot partition..."
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --output "{{output}}" --encrypt-boot
 
 # Build initramfs then launch in QEMU
 build-run: build run
@@ -86,70 +78,41 @@ test:
         KVM="{{kvm}}" \
         cargo test --manifest-path crates/testman/Cargo.toml -- --test-threads=1 --include-ignored
 
-# Launch initramfs in QEMU (using direct kernel+initramfs boot since ISO is UEFI-only)
+# Launch OS disk image in QEMU via UEFI (OVMF pflash + virtio drive)
 run:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    echo "==> Launching initramfs"
-    echo "    ISO:       {{output}}"
+    echo "==> Launching OS disk image"
+    echo "    Image:     {{output}}"
     echo "    Memory:    {{memory}}"
     echo "    CPUs:      {{cpus}}"
-    [[ -n "{{disk}}" ]] && echo "    Disk:      {{disk}} (→ /dev/vda)"
+    [[ -n "{{disk}}" ]] && echo "    Data disk: {{disk}} (→ /dev/vdb)"
     echo ""
 
     kvm_flag=()
     [[ "{{kvm}}" -eq 1 ]] && kvm_flag=(-enable-kvm)
 
-    disk_args=()
-    [[ -n "{{disk}}" ]] && disk_args=(-drive "file={{disk}},format=raw,if=virtio")
+    # Extra data disk (e.g. for persistent storage).  The OS image is /dev/vda;
+    # the optional data disk appears as /dev/vdb.
+    data_disk_args=()
+    [[ -n "{{disk}}" ]] && data_disk_args=(-drive "file={{disk}},format=raw,if=virtio")
 
-    # Prefer direct kernel+initramfs boot; fall back to UEFI ISO boot via OVMF.
-    if [[ -f vmlinuz && -f initramfs.gz ]]; then
-        kernel_args=(-kernel vmlinuz -initrd initramfs.gz -append "console=ttyS0 earlyprintk=ttyS0 net.ifnames=0 biosdevname=0")
-    else
-        # ISO is UEFI-only — load OVMF firmware via pflash so QEMU can boot it.
-        # OVMF_VARS must be writable (firmware writes EFI variables at runtime);
-        # use a temp copy to avoid mutating the system-wide file.
-        tmp_vars=$(mktemp --suffix=.fd)
-        cp "{{ovmf_vars}}" "$tmp_vars"
-        trap "rm -f $tmp_vars" EXIT
-        kernel_args=(
-            -drive "if=pflash,format=raw,readonly=on,file={{ovmf_code}}"
-            -drive "if=pflash,format=raw,file=$tmp_vars"
-            -cdrom "{{output}}"
-        )
-    fi
+    # OVMF_VARS must be writable; use a temp copy to avoid mutating the
+    # system-wide file.
+    tmp_vars=$(mktemp --suffix=.fd)
+    cp "{{ovmf_vars}}" "$tmp_vars"
+    trap "rm -f $tmp_vars" EXIT
 
     exec qemu-system-x86_64 \
         -m "{{memory}}" \
         -smp "{{cpus}}" \
-        "${kernel_args[@]}" \
+        -drive "if=pflash,format=raw,readonly=on,file={{ovmf_code}}" \
+        -drive "if=pflash,format=raw,file=$tmp_vars" \
+        -drive "file={{output}},format=raw,if=virtio" \
         -nographic \
         -nic user \
         -netdev user,id=n0 \
         -device virtio-net-pci,netdev=n0 \
-        "${disk_args[@]}" \
+        "${data_disk_args[@]}" \
         "${kvm_flag[@]}"
-
-# ── Documentation (Docusaurus + Aceternity UI) ────────────────────────────────
-
-# Install documentation dependencies
-docs-install:
-    cd book && bun install
-
-# Start documentation dev server with hot reload
-docs-dev:
-    cd book && bun run start
-
-# Build documentation for production
-docs-build:
-    cd book && bun run build
-
-# Serve built documentation locally
-docs-serve:
-    cd book && bun run serve
-
-# Build and serve documentation
-docs-build-serve: docs-build docs-serve
-
