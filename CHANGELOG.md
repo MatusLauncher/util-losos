@@ -116,6 +116,7 @@
 
 ### Miscellaneous
 
+- Update isoman submodule with symlink fix
 - Update cluman and isoman submodules with simplify fixes
 - Update submodules with bug fixes and hardening
 - Update submodules and increase default CPUS to 4

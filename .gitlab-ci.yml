@@ -12,9 +12,21 @@ stages:
   before_script:
     - apt-get update -qq && apt-get install -y --no-install-recommends pkg-config libudev-dev libclang-dev
 
+.cargo_cache:
+  cache:
+    key:
+      files:
+        - Cargo.lock
+    paths:
+      - ~/.cargo/registry/index
+      - ~/.cargo/registry/cache
+      - ~/.cargo/git/db
+      - target
+
 # ── fmt ────────────────────────────────────────────────────────────────────────
 
 fmt:
+  extends: .cargo_cache
   stage: check
   image: rust:slim
   script:
@@ -24,7 +36,9 @@ fmt:
 # ── clippy ─────────────────────────────────────────────────────────────────────
 
 clippy:
-  extends: .rust_with_sys_deps
+  extends:
+    - .rust_with_sys_deps
+    - .cargo_cache
   stage: check
   image: rust:slim
   script:
@@ -34,7 +48,9 @@ clippy:
 # ── test ───────────────────────────────────────────────────────────────────────
 
 test:
-  extends: .rust_with_sys_deps
+  extends:
+    - .rust_with_sys_deps
+    - .cargo_cache
   stage: test
   image: rust:slim
   script:
@@ -43,7 +59,9 @@ test:
 # ── bench ──────────────────────────────────────────────────────────────────────
 
 bench:
-  extends: .rust_with_sys_deps
+  extends:
+    - .rust_with_sys_deps
+    - .cargo_cache
   stage: test
   image: rust:slim
   script:
@@ -52,7 +70,9 @@ bench:
 # ── pages ──────────────────────────────────────────────────────────────────────
 
 pages:
-  extends: .rust_with_sys_deps
+  extends:
+    - .rust_with_sys_deps
+    - .cargo_cache
   stage: deploy
   image: rust:slim
   variables:
