@@ -1,37 +1,66 @@
 # util-mdl — build, launch, and test the initramfs OS.
 #
 # Recipes:
-#   just build        Build initramfs from Containerfile
-#   just run          Launch in QEMU (default)
-#   just test         Run testman integration tests
-#   just iso          Create bootable ISO
-#   just build-run    Build then launch
-#   just build-test   Build then test
+#   just build               Build initramfs from Containerfile
+#   just build-config        Build from a JSON config file (ISOMAN_CONFIG)
+#   just build-gsi           Build a GSI (Fastboot + Odin)
+#   just build-gsi-fastboot  Build a Fastboot-only GSI boot.img
+#   just build-secure-boot   Build with Secure Boot signing
+#   just build-encrypted     Build with encrypted boot partition
+#   just run                 Launch in QEMU (default)
+#   just test                Run testman integration tests
+#   just build-run           Build then launch
+#   just build-test          Build then test
 
 # ── Configurable variables (override via env or 'just var=value recipe') ──────
 
-kernel    := env("KERNEL",    `find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print -quit 2>/dev/null || true`)
-memory    := env("MEMORY",    "2G")
-cpus      := env("CPUS",      "4")
-kvm       := env("KVM",       "1")
-disk      := env("DISK",      "")
-append    := env("APPEND",    "")
-output    := env("OUTPUT",    "os.iso")
-ovmf_code := env("OVMF_CODE", "/usr/share/edk2/ovmf/OVMF_CODE.fd")
-ovmf_vars := env("OVMF_VARS", "/usr/share/edk2/ovmf/OVMF_VARS.fd")
+kernel       := env("KERNEL",       `find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print -quit 2>/dev/null || true`)
+memory       := env("MEMORY",       "2G")
+cpus         := env("CPUS",         "4")
+kvm          := env("KVM",          "1")
+disk         := env("DISK",         "")
+append       := env("APPEND",       "")
+output       := env("OUTPUT",       "os.iso")
+ovmf_code    := env("OVMF_CODE",    "/usr/share/edk2/ovmf/OVMF_CODE.fd")
+ovmf_vars    := env("OVMF_VARS",    "/usr/share/edk2/ovmf/OVMF_VARS.fd")
+isoman_config := env("ISOMAN_CONFIG", "")
 
 # ── Public recipes ────────────────────────────────────────────────────────────
 
 # Launch initramfs in QEMU (default)
 default: run
 
-# Build the initramfs image from the Containerfile
+# Build the initramfs image from the Containerfile (caching always enabled)
 build:
     @echo "==> Building initramfs..."
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --with-cache --output os.iso
+    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --output os.iso
     @echo "==> Extracting kernel and initramfs from ISO..."
     7z x -y os.iso boot/vmlinuz boot/initramfs.gz >/dev/null 2>&1 && mv boot/vmlinuz vmlinuz && mv boot/initramfs.gz initramfs.gz && rm -rf boot || true
-    @echo "==> Initramfs written to os.initramfs.tar.gz"
+    @echo "==> Initramfs written to os-<mode>.initramfs.tar.gz"
+
+# Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
+build-config config_path=isoman_config:
+    @echo "==> Building from config: {{config_path}}"
+    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --config "{{config_path}}"
+
+# Build a GSI (Fastboot + Odin) instead of a bootable ISO
+build-gsi:
+    @echo "==> Building GSI (Fastboot + Odin)..."
+    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --gsi
+
+# Build a Fastboot-only GSI boot.img
+build-gsi-fastboot:
+    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --gsi --gsi-fastboot
+
+# Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
+build-secure-boot:
+    @echo "==> Building with Secure Boot signing..."
+    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --output "{{output}}" --secure-boot
+
+# Build with encrypted boot partition (two-stage initramfs)
+build-encrypted:
+    @echo "==> Building with encrypted boot partition..."
+    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --output "{{output}}" --encrypt-boot
 
 # Build initramfs then launch in QEMU
 build-run: build run
