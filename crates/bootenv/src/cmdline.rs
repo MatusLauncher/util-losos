@@ -5,9 +5,7 @@
 //!
 //! | Parameter | Description |
 //! |-----------|-------------|
-//! | `stage2`  | Path to the stage-2 archive (`.tar.gz` / `.tar.zst`) or block device containing the real root filesystem. |
-//! | `boot_luks` | Optional: path to a LUKS-encrypted boot partition to unlock before loading stage 2. |
-//! | `boot_luks_keyfile` | Optional: path to a keyfile for the LUKS boot partition. |
+//! | `data_drive` | Semicolon-separated list of block/NFS URIs for the persistent data volume. |
 
 use std::{collections::HashMap, fs::read_to_string};
 
@@ -29,39 +27,6 @@ impl BootCmdline {
         let raw = Self::parse(&content);
         info!(?raw, "Parsed boot cmdline");
         Ok(Self { raw })
-    }
-
-    /// Returns the `stage2` parameter — the path to the real root filesystem.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if `stage2` is not present in the command line.
-    pub fn stage2(&self) -> miette::Result<String> {
-        self.raw.get("stage2").cloned().ok_or_else(|| {
-            miette::miette!("stage2 parameter not found in /proc/cmdline")
-        })
-    }
-
-    /// Returns the `boot_luks` parameter — path to an encrypted boot partition.
-    ///
-    /// Returns `None` if the parameter is absent (boot partition is not encrypted).
-    #[must_use]
-    pub fn boot_luks(&self) -> Option<String> {
-        self.raw.get("boot_luks").cloned()
-    }
-
-    /// Returns the `boot_luks_keyfile` parameter — path to a LUKS keyfile.
-    ///
-    /// Returns `None` if the parameter is absent (console prompt fallback).
-    #[must_use]
-    pub fn boot_luks_keyfile(&self) -> Option<String> {
-        self.raw.get("boot_luks_keyfile").cloned()
-    }
-
-    /// Returns `true` when a LUKS boot partition is configured.
-    #[must_use]
-    pub fn has_boot_luks(&self) -> bool {
-        self.boot_luks().is_some()
     }
 
     /// Returns the `data_drive` parameter — semicolon-separated list of
@@ -92,53 +57,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_stage2() {
-        let map = BootCmdline::parse(
-            "console=ttyS0 stage2=/dev/sda2 boot_luks=/dev/sda1",
-        );
-        assert_eq!(map.get("stage2"), Some(&"/dev/sda2".to_string()));
-        assert_eq!(map.get("boot_luks"), Some(&"/dev/sda1".to_string()));
-    }
-
-    #[test]
-    fn stage2_missing_is_error() {
-        let bc = BootCmdline {
-            raw: BootCmdline::parse("console=ttyS0 quiet"),
-        };
-        assert!(bc.stage2().is_err());
-    }
-
-    #[test]
-    fn boot_luks_absent_returns_none() {
-        let bc = BootCmdline {
-            raw: BootCmdline::parse("stage2=/dev/sda2"),
-        };
-        assert!(!bc.has_boot_luks());
-        assert!(bc.boot_luks().is_none());
-    }
-
-    #[test]
-    fn boot_luks_present() {
-        let bc = BootCmdline {
-            raw: BootCmdline::parse(
-                "stage2=/real_root stage2=/dev/sda2 boot_luks=/dev/sda1 boot_luks_keyfile=/key.bin",
-            ),
-        };
-        assert!(bc.has_boot_luks());
-        assert_eq!(bc.boot_luks().as_deref(), Some("/dev/sda1"));
-        assert_eq!(bc.boot_luks_keyfile().as_deref(), Some("/key.bin"));
-    }
-
-    #[test]
     fn bare_flags_are_discarded() {
-        let map = BootCmdline::parse("quiet ro stage2=/dev/sda2");
+        let map = BootCmdline::parse("quiet ro console=ttyS0");
         assert_eq!(map.len(), 1);
     }
 
     #[test]
     fn data_drive_absent_returns_none() {
         let bc = BootCmdline {
-            raw: BootCmdline::parse("stage2=/dev/sda2"),
+            raw: BootCmdline::parse("console=ttyS0"),
         };
         assert!(bc.data_drive().is_none());
     }
@@ -147,9 +74,22 @@ mod tests {
     fn data_drive_present_returns_value() {
         let bc = BootCmdline {
             raw: BootCmdline::parse(
-                "stage2=/dev/sda2 data_drive=luks:///dev/sdb1",
+                "console=ttyS0 data_drive=luks:///dev/sdb1",
             ),
         };
         assert_eq!(bc.data_drive(), Some("luks:///dev/sdb1"));
+    }
+
+    #[test]
+    fn data_drive_nfs_uri_preserved() {
+        let bc = BootCmdline {
+            raw: BootCmdline::parse(
+                "data_drive=nfs://fileserver/data?opts=nolock,vers=4",
+            ),
+        };
+        assert_eq!(
+            bc.data_drive(),
+            Some("nfs://fileserver/data?opts=nolock,vers=4")
+        );
     }
 }

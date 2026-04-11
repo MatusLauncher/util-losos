@@ -119,6 +119,7 @@
 
 ### Miscellaneous
 
+- Update actman, bootenv, docs submodules — move mounting to bootenv
 - Update Justfile to reflect isoman CLI simplification
 - Migrate docs pipeline to Docusaurus/Bun; update submodules
 - Update dhcman, isoman, testman submodules — auto-detect network interfaces
