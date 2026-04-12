@@ -120,6 +120,7 @@
 
 ### Miscellaneous
 
+- Add preflight to workspace exclude; update submodule ref
 - Update book submodule
 - Update isoman, testman submodules — fix loopback shebang + ISO test isolation
 - Update isoman, updman submodules; clean up Justfile
