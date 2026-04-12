@@ -120,6 +120,7 @@
 
 ### Miscellaneous
 
+- Update isoman and book submodules — kconfig extraction
 - Update isoman and book submodules to latest
 - Update isoman submodule — server ISO CI job
 - Add preflight to workspace exclude; update submodule ref
