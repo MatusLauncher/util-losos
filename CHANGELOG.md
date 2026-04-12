@@ -119,6 +119,7 @@
 
 ### Miscellaneous
 
+- Update isoman, updman submodules; clean up Justfile
 - Update bootenv, isoman, docs submodules — UKI disk image, data_drive= only
 - Update actman, bootenv, docs submodules — move mounting to bootenv
 - Update Justfile to reflect isoman CLI simplification
