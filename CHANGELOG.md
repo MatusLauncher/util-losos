@@ -35,6 +35,7 @@
 
 ### Documentation
 
+- Add iptman chapter to book and update cluman docs
 - Add auto commit and push workflow to CLAUDE.md
 - Add LICENSE and README files to all submodules
 - Update book submodule with submodule architecture docs
