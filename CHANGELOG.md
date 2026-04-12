@@ -120,6 +120,7 @@
 
 ### Miscellaneous
 
+- Update isoman submodule — server ISO CI job
 - Add preflight to workspace exclude; update submodule ref
 - Update book submodule
 - Update isoman, testman submodules — fix loopback shebang + ISO test isolation
