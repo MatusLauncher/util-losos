@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Fix ISO not booting in test mode
 - Add Qwen to .gitignore
 - Add missing gpuman submodule and update submodule pointers
 - Justfile backtick exit-code crash on missing kernel/initramfs

@@ -95,7 +95,7 @@ run:
     # Extra data disk (e.g. for persistent storage).  The OS image is /dev/vda;
     # the optional data disk appears as /dev/vdb.
     data_disk_args=()
-    [[ -n "{{ disk }}" ]] && data_disk_args=(-drive "file={{ disk }},format=raw,if=virtio")
+    [[ -n "{{ disk }}" ]] && data_disk_args=(-drive "file={{ disk }},format=raw,if=virtio,${data_disk_args[@]}")
 
     # OVMF_VARS must be writable; use a temp copy to avoid mutating the
     # system-wide file.
