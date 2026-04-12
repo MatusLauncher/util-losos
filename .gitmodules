@@ -31,3 +31,6 @@
 [submodule "book"]
 	path = book
 	url = https://gitlab.com/losos-linux/docs
+[submodule "crates/preflight"]
+	path = crates/preflight
+	url = https://gitlab.com/losos-linux/preflight

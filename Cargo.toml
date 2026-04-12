@@ -10,6 +10,7 @@ exclude = [
     "crates/testman",
     "crates/user",
     "crates/gpuman",
+    "crates/preflight",
 ]
 
 [workspace.dependencies]
