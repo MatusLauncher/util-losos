@@ -25,6 +25,7 @@ fn make_device(vendor: GpuVendor, slot: &str) -> GpuDevice {
         render_node: Some(format!("/dev/dri/renderD{}", slot.len() + 128)),
         accel_node: None,
         sysfs_path: format!("/sys/class/drm/card{}", slot.len()),
+        ..Default::default()
     }
 }
 
@@ -36,6 +37,7 @@ fn make_device_with_accel(vendor: GpuVendor, slot: &str) -> GpuDevice {
         render_node: None,
         accel_node: Some(format!("/dev/accel/accel{}", slot.len())),
         sysfs_path: format!("/sys/class/accel/accel{}", slot.len()),
+        ..Default::default()
     }
 }
 
@@ -172,6 +174,7 @@ mod device_display {
             render_node: None,
             accel_node: None,
             sysfs_path: String::new(),
+            ..Default::default()
         };
         let s = black_box(format!("{dev}"));
         assert!(s.contains("AMD"));

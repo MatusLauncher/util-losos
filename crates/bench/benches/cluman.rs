@@ -1,4 +1,4 @@
-//! Smoke tests for the `cluman` crate.
+//! Smoke tokio::tests for the `cluman` crate.
 //!
 //! Exercises:
 //! * `IpRange::from_str`  — parsing all three notations.
@@ -15,14 +15,14 @@ use std::str::FromStr;
 
 use cluman::schemas::{CluManSchema, IpRange, Mode, ServerState, Task, Tasks};
 
-fn make_task(idx: usize) -> Task {
+async fn make_task(idx: usize) -> Task {
     Task::new(
         format!("compose-{idx:04}.yml"),
         format!("services:\n  svc{idx}:\n    image: nginx:{idx}\n"),
     )
 }
 
-fn make_task_large(idx: usize) -> Task {
+async fn make_task_large(idx: usize) -> Task {
     let services: String = (0..64)
         .map(|s| {
             format!(
@@ -38,38 +38,38 @@ fn make_task_large(idx: usize) -> Task {
 mod ip_range_from_str {
     use super::*;
 
-    #[test]
-    fn single_ip() {
+    #[tokio::test]
+    async fn single_ip() {
         black_box(IpRange::from_str("10.0.0.42").unwrap());
     }
 
-    #[test]
-    fn cidr_slash24() {
+    #[tokio::test]
+    async fn cidr_slash24() {
         black_box(IpRange::from_str("192.168.1.0/24").unwrap());
     }
 
-    #[test]
-    fn cidr_slash16() {
+    #[tokio::test]
+    async fn cidr_slash16() {
         black_box(IpRange::from_str("10.0.0.0/16").unwrap());
     }
 
-    #[test]
-    fn dash_range_small() {
+    #[tokio::test]
+    async fn dash_range_small() {
         black_box(IpRange::from_str("10.0.0.1-10.0.0.10").unwrap());
     }
 
-    #[test]
-    fn dash_range_large() {
+    #[tokio::test]
+    async fn dash_range_large() {
         black_box(IpRange::from_str("10.0.0.1-10.0.3.255").unwrap());
     }
 
-    #[test]
-    fn err_invalid_single() {
+    #[tokio::test]
+    async fn err_invalid_single() {
         black_box(IpRange::from_str("999.999.999.999").unwrap_err());
     }
 
-    #[test]
-    fn err_reversed_dash_range() {
+    #[tokio::test]
+    async fn err_reversed_dash_range() {
         black_box(IpRange::from_str("10.0.0.20-10.0.0.1").unwrap_err());
     }
 }
@@ -77,50 +77,50 @@ mod ip_range_from_str {
 mod ip_range_hosts {
     use super::*;
 
-    #[test]
-    fn single() {
+    #[tokio::test]
+    async fn single() {
         let r = IpRange::Single(Ipv4Addr::new(10, 0, 0, 1));
         black_box(r.hosts());
     }
 
-    #[test]
-    fn cidr_slash30() {
+    #[tokio::test]
+    async fn cidr_slash30() {
         let r = IpRange::from_str("192.168.0.0/30").unwrap();
         black_box(r.hosts());
     }
 
-    #[test]
-    fn cidr_slash28() {
+    #[tokio::test]
+    async fn cidr_slash28() {
         let r = IpRange::from_str("192.168.0.0/28").unwrap();
         black_box(r.hosts());
     }
 
-    #[test]
-    fn cidr_slash24() {
+    #[tokio::test]
+    async fn cidr_slash24() {
         let r = IpRange::from_str("10.0.1.0/24").unwrap();
         black_box(r.hosts());
     }
 
-    #[test]
-    fn cidr_slash16() {
+    #[tokio::test]
+    async fn cidr_slash16() {
         let r = IpRange::from_str("172.16.0.0/16").unwrap();
         black_box(r.hosts());
     }
 
-    #[test]
-    fn dash_range_5() {
+    #[tokio::test]
+    async fn dash_range_5() {
         let r = IpRange::DashRange(Ipv4Addr::new(10, 0, 0, 1), Ipv4Addr::new(10, 0, 0, 5));
         black_box(r.hosts());
     }
 
-    #[test]
-    fn dash_range_256() {
+    #[tokio::test]
+    async fn dash_range_256() {
         let r = IpRange::DashRange(Ipv4Addr::new(10, 0, 0, 0), Ipv4Addr::new(10, 0, 0, 255));
         black_box(r.hosts());
     }
 
-    #[test]
-    fn dash_range_1024() {
+    #[tokio::test]
+    async fn dash_range_1024() {
         let r = IpRange::DashRange(Ipv4Addr::new(10, 0, 0, 0), Ipv4Addr::new(10, 0, 3, 255));
         black_box(r.hosts());
     }
@@ -129,8 +129,8 @@ mod ip_range_hosts {
 mod ip_range_hosts_scaling {
     use super::*;
 
-    #[test]
-    fn scaling() {
+    #[tokio::test]
+    async fn scaling() {
         for n in [1u32, 10, 100, 256, 1_000, 10_000, 65_534] {
             let start = Ipv4Addr::from(0x0A000001u32);
             let end = Ipv4Addr::from(0x0A000001u32 + n - 1);
@@ -143,15 +143,15 @@ mod ip_range_hosts_scaling {
 mod cluman_schema_add {
     use super::*;
 
-    #[test]
-    fn first_add_from_right() {
+    #[tokio::test]
+    async fn first_add_from_right() {
         let mut schema = CluManSchema::registration(Ipv4Addr::new(10, 0, 0, 1), Mode::Client);
         schema.add(Ipv4Addr::new(10, 0, 0, 2), Mode::Server);
         black_box(schema);
     }
 
-    #[test]
-    fn add_to_small_map_10() {
+    #[tokio::test]
+    async fn add_to_small_map_10() {
         let mut s = CluManSchema::default();
         for i in 0..10u8 {
             s.add(Ipv4Addr::new(10, 0, 0, i), Mode::Client);
@@ -160,8 +160,8 @@ mod cluman_schema_add {
         black_box(s);
     }
 
-    #[test]
-    fn add_to_medium_map_100() {
+    #[tokio::test]
+    async fn add_to_medium_map_100() {
         let mut s = CluManSchema::default();
         for i in 0u32..100 {
             s.add(Ipv4Addr::from(0x0A000000u32 + i), Mode::Client);
@@ -170,8 +170,8 @@ mod cluman_schema_add {
         black_box(s);
     }
 
-    #[test]
-    fn add_to_large_map_1000() {
+    #[tokio::test]
+    async fn add_to_large_map_1000() {
         let mut s = CluManSchema::default();
         for i in 0u32..1_000 {
             s.add(Ipv4Addr::from(0x0A000000u32 + i), Mode::Client);
@@ -184,8 +184,8 @@ mod cluman_schema_add {
 mod cluman_schema_add_scaling {
     use super::*;
 
-    #[test]
-    fn scaling() {
+    #[tokio::test]
+    async fn scaling() {
         for n in [1usize, 10, 50, 100, 500] {
             let mut s = CluManSchema::default();
             for i in 0u32..n as u32 {
@@ -199,15 +199,15 @@ mod cluman_schema_add_scaling {
 mod tasks_single_ops {
     use super::*;
 
-    #[test]
-    fn push_to_empty() {
+    #[tokio::test]
+    async fn push_to_empty() {
         let mut q = Tasks::default();
         q.push(make_task(0));
         black_box(q);
     }
 
-    #[test]
-    fn push_to_1000() {
+    #[tokio::test]
+    async fn push_to_1000() {
         let mut q = Tasks::default();
         for i in 0..1_000 {
             q.push(make_task(i));
@@ -216,15 +216,15 @@ mod tasks_single_ops {
         black_box(q);
     }
 
-    #[test]
-    fn pop_from_1() {
+    #[tokio::test]
+    async fn pop_from_1() {
         let mut q = Tasks::default();
         q.push(make_task(0));
         black_box(q.pop());
     }
 
-    #[test]
-    fn pop_from_1000() {
+    #[tokio::test]
+    async fn pop_from_1000() {
         let mut q = Tasks::default();
         for i in 0..1_000 {
             q.push(make_task(i));
@@ -232,15 +232,15 @@ mod tasks_single_ops {
         black_box(q.pop());
     }
 
-    #[test]
-    fn is_empty_false() {
+    #[tokio::test]
+    async fn is_empty_false() {
         let mut q = Tasks::default();
         q.push(make_task(0));
         black_box(q.is_empty());
     }
 
-    #[test]
-    fn len_1000() {
+    #[tokio::test]
+    async fn len_1000() {
         let mut q = Tasks::default();
         for i in 0..1_000 {
             q.push(make_task(i));
@@ -252,31 +252,31 @@ mod tasks_single_ops {
 mod tasks_throughput {
     use super::*;
 
-    #[test]
-    fn push_n() {
+    #[tokio::test]
+    async fn push_n() {
         for n in [10usize, 100, 1_000] {
             let mut q = Tasks::default();
             for i in 0..n {
-                q.push(make_task(i));
+                q.push(make_task(i).await);
             }
             black_box(q);
         }
     }
 
-    #[test]
-    fn drain_n() {
+    #[tokio::test]
+    async fn drain_n() {
         for n in [10usize, 100, 1_000] {
             let mut q = Tasks::default();
             for i in 0..n {
-                q.push(make_task(i));
+                q.push(make_task(i).await);
             }
             while q.pop().is_some() {}
             black_box(q);
         }
     }
 
-    #[test]
-    fn interleaved_push_pop_1000() {
+    #[tokio::test]
+    async fn interleaved_push_pop_1000() {
         let mut q = Tasks::default();
         for i in 0..1_000usize {
             q.push(make_task(i));
@@ -289,11 +289,11 @@ mod tasks_throughput {
 mod tasks_new {
     use super::*;
 
-    #[test]
-    fn from_vec() {
+    #[tokio::test]
+    async fn from_vec() {
         for n in [10usize, 100, 1_000] {
             let v = (0..n).map(make_task).collect::<Vec<_>>();
-            black_box(Tasks::new(v));
+            black_box(Tasks::new(v.iter()));
         }
     }
 }
@@ -301,45 +301,45 @@ mod tasks_new {
 mod server_state {
     use super::*;
 
-    #[test]
-    fn push_task() {
+    #[tokio::test]
+    async fn push_task() {
         let s = ServerState::new();
-        black_box(s.push_task(make_task(0)));
+        black_box(s.push_task(make_task(0).await));
     }
 
-    #[test]
-    fn claim_task_from_nonempty() {
+    #[tokio::test]
+    async fn claim_task_from_nonempty() {
         let s = ServerState::new();
         for i in 0..1_000 {
-            s.push_task(make_task(i));
+            s.push_task(make_task(i).await);
         }
         black_box(s.claim_task());
     }
 
-    #[test]
-    fn claim_task_from_empty() {
+    #[tokio::test]
+    async fn claim_task_from_empty() {
         let s = ServerState::new();
         black_box(s.claim_task());
     }
 
-    #[test]
-    fn register_client() {
+    #[tokio::test]
+    async fn register_client() {
         let s = ServerState::new();
-        // Fixed IP used in place of fastrand — this is a smoke test, not a measurement.
+        // Fixed IP used in place of fastrand — this is a smoke tokio::test, not a measurement.
         black_box(s.register_client(Ipv4Addr::from(0x0A00_0064_u32)));
     }
 
-    #[test]
-    fn pending_count() {
+    #[tokio::test]
+    async fn pending_count() {
         let s = ServerState::new();
         for i in 0..100 {
-            s.push_task(make_task(i));
+            s.push_task(make_task(i).await);
         }
         black_box(s.pending_count());
     }
 
-    #[test]
-    fn client_addrs_100() {
+    #[tokio::test]
+    async fn client_addrs_100() {
         let s = ServerState::new();
         for i in 0u32..100 {
             s.register_client(Ipv4Addr::from(0x0A000000 + i));
@@ -347,10 +347,10 @@ mod server_state {
         black_box(s.client_addrs());
     }
 
-    #[test]
-    fn push_then_claim_roundtrip() {
+    #[tokio::test]
+    async fn push_then_claim_roundtrip() {
         let s = ServerState::new();
-        s.push_task(make_task(0));
+        s.push_task(make_task(0).await);
         black_box(s.claim_task());
     }
 }
@@ -358,43 +358,43 @@ mod server_state {
 mod mode_conversions {
     use super::*;
 
-    #[test]
-    fn from_str_client() {
+    #[tokio::test]
+    async fn from_str_client() {
         black_box(Mode::from_str("client").unwrap());
     }
 
-    #[test]
-    fn from_str_server() {
+    #[tokio::test]
+    async fn from_str_server() {
         black_box(Mode::from_str("server").unwrap());
     }
 
-    #[test]
-    fn from_str_controller() {
+    #[tokio::test]
+    async fn from_str_controller() {
         black_box(Mode::from_str("controller").unwrap());
     }
 
-    #[test]
-    fn from_str_cluman_alias() {
+    #[tokio::test]
+    async fn from_str_cluman_alias() {
         black_box(Mode::from_str("cluman").unwrap());
     }
 
-    #[test]
-    fn from_str_err_unknown() {
+    #[tokio::test]
+    async fn from_str_err_unknown() {
         black_box(Mode::from_str("unknown").unwrap_err());
     }
 
-    #[test]
-    fn display_client() {
+    #[tokio::test]
+    async fn display_client() {
         black_box(Mode::Client.to_string());
     }
 
-    #[test]
-    fn display_server() {
+    #[tokio::test]
+    async fn display_server() {
         black_box(Mode::Server.to_string());
     }
 
-    #[test]
-    fn display_controller() {
+    #[tokio::test]
+    async fn display_controller() {
         black_box(Mode::Controller.to_string());
     }
 }
@@ -402,38 +402,38 @@ mod mode_conversions {
 mod task_serde {
     use super::*;
 
-    #[test]
-    fn serialize_small() {
+    #[tokio::test]
+    async fn serialize_small() {
         let t = make_task(0);
         black_box(serde_json::to_string(&t).unwrap());
     }
 
-    #[test]
-    fn deserialize_small() {
+    #[tokio::test]
+    async fn deserialize_small() {
         let json = serde_json::to_string(&make_task(0)).unwrap();
         black_box(serde_json::from_str::<Task>(&json).unwrap());
     }
 
-    #[test]
-    fn serialize_large() {
+    #[tokio::test]
+    async fn serialize_large() {
         let t = make_task_large(0);
         black_box(serde_json::to_string(&t).unwrap());
     }
 
-    #[test]
-    fn deserialize_large() {
+    #[tokio::test]
+    async fn deserialize_large() {
         let json = serde_json::to_string(&make_task_large(0)).unwrap();
         black_box(serde_json::from_str::<Task>(&json).unwrap());
     }
 
-    #[test]
-    fn serialize_tasks_100() {
+    #[tokio::test]
+    async fn serialize_tasks_100() {
         let q = Tasks::new((0..100).map(make_task).collect::<Vec<_>>());
         black_box(serde_json::to_string(&q).unwrap());
     }
 
-    #[test]
-    fn deserialize_tasks_100() {
+    #[tokio::test]
+    async fn deserialize_tasks_100() {
         let q = Tasks::new((0..100).map(make_task).collect::<Vec<_>>());
         let json = serde_json::to_string(&q).unwrap();
         black_box(serde_json::from_str::<Tasks>(&json).unwrap());

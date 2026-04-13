@@ -10,6 +10,7 @@
 #   just test                Run testman integration tests
 #   just build-run           Build then launch
 #   just build-test          Build then test
+#   just dev                 Pull all submodules and build the workspace
 # ── Configurable variables (override via env or 'just var=value recipe') ──────
 
 kernel := env("KERNEL", `find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print -quit 2>/dev/null || true`)
@@ -24,6 +25,13 @@ ovmf_vars := env("OVMF_VARS", "/usr/share/edk2/ovmf/OVMF_VARS.fd")
 isoman_config := env("ISOMAN_CONFIG", "")
 
 # ── Public recipes ────────────────────────────────────────────────────────────
+
+# Pull all submodules to their latest remote commit and build the workspace
+dev:
+    @echo "==> Pulling submodules..."
+    git submodule update --remote --merge
+    @echo "==> Building workspace..."
+    cargo build
 
 # Launch initramfs in QEMU (default)
 default: run

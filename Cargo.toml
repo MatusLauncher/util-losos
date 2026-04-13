@@ -1,26 +1,30 @@
 [workspace]
 resolver = "3"
-members = ["crates/bench", "crates/bootenv", "crates/isoman"]
-exclude = [
-    "crates/actman",
+members = ["crates/bench", "crates/bootenv", "crates/isoman"
+
+    ,"crates/actman",
     "crates/updman",
     "crates/pakman",
     "crates/cluman",
     "crates/dhcman",
     "crates/testman",
-    "crates/user",
+    "crates/user/crates/perman",
+    "crates/user/crates/userman",
     "crates/gpuman",
     "crates/preflight",
 ]
+exclude = [
+]
 
 [workspace.dependencies]
-actman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/actman" }
-cluman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/cluman" }
-dhcman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/dhcman" }
-updman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/updman" }
-pakman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/pakman" }
-isoman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/isoman" }
-gpuman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/gpuman", branch = "master" }
+actman = { version = "0.1.0", path = "crates/actman" }
+cluman = { version = "0.1.0", path = "crates/cluman" }
+dhcman = { version = "0.1.0", path = "crates/dhcman" }
+updman = { version = "0.1.0", path = "crates/updman" }
+pakman = { version = "0.1.0", path = "crates/pakman" }
+isoman = { version = "0.1.0", path = "crates/isoman" }
+gpuman = { version = "0.1.0", path = "crates/gpuman" }
+iptman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/iptman" }
 mkbootimg = { git = "https://gitlab.com/losos-linux/mkbootimg" }
 base64 = "0.22.1"
 russh-keys = "0.49"

@@ -47,3 +47,6 @@ path = "benches/isoman.rs"
 name = "gpuman"
 path = "benches/gpuman.rs"
 
+[dependencies]
+tokio = { version = "1.51.1", features = ["macros", "rt-multi-thread"] }
+

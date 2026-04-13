@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Move bootenv to separate submodule
 - Fix ISO not booting in test mode
 - Add Qwen to .gitignore
 - Add missing gpuman submodule and update submodule pointers
