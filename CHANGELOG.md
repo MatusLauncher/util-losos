@@ -123,6 +123,7 @@
 
 ### Miscellaneous
 
+- Update bootenv submodule — testman integration tests
 - Update gpuman and cluman submodules — fix all clippy warnings
 - Update cluman submodule — Garage S3 sync, security fixes, version pins
 - Update submodule references — pinned wildcard dep versions, removed dead code
