@@ -1,6 +1,0 @@
-max_width = 80
-indent_style = "Block"
-reorder_imports = true
-doc_comment_code_block_width = 80
-wrap_comments = true
-unstable_features = true

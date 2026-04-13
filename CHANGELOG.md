@@ -121,6 +121,7 @@
 
 ### Miscellaneous
 
+- Update cluman submodule — Garage S3 sync, security fixes, version pins
 - Update submodule references — pinned wildcard dep versions, removed dead code
 - Update book submodule reference to iptman docs
 - Update isoman and book submodules — kconfig extraction

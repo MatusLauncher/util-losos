@@ -25,12 +25,12 @@
 [submodule "crates/gpuman"]
 	path = crates/gpuman
 	url = https://gitlab.com/losos-linux/gpuman.git
-[submodule "crates/bootenv"]
-	path = crates/bootenv
-	url = https://gitlab.com/losos-linux/bootenv.git
 [submodule "book"]
 	path = book
 	url = https://gitlab.com/losos-linux/docs
 [submodule "crates/preflight"]
 	path = crates/preflight
 	url = https://gitlab.com/losos-linux/preflight
+[submodule "crates/bootenv"]
+	path = crates/bootenv
+	url = https://gitlab.com/losos-linux/bootenv
