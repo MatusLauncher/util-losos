@@ -15,14 +15,14 @@ use std::str::FromStr;
 
 use cluman::schemas::{CluManSchema, IpRange, Mode, ServerState, Task, Tasks};
 
-async fn make_task(idx: usize) -> Task {
+fn make_task(idx: usize) -> Task {
     Task::new(
         format!("compose-{idx:04}.yml"),
         format!("services:\n  svc{idx}:\n    image: nginx:{idx}\n"),
     )
 }
 
-async fn make_task_large(idx: usize) -> Task {
+fn make_task_large(idx: usize) -> Task {
     let services: String = (0..64)
         .map(|s| {
             format!(
@@ -257,7 +257,7 @@ mod tasks_throughput {
         for n in [10usize, 100, 1_000] {
             let mut q = Tasks::default();
             for i in 0..n {
-                q.push(make_task(i).await);
+                q.push(make_task(i));
             }
             black_box(q);
         }
@@ -268,7 +268,7 @@ mod tasks_throughput {
         for n in [10usize, 100, 1_000] {
             let mut q = Tasks::default();
             for i in 0..n {
-                q.push(make_task(i).await);
+                q.push(make_task(i));
             }
             while q.pop().is_some() {}
             black_box(q);
@@ -292,8 +292,8 @@ mod tasks_new {
     #[tokio::test]
     async fn from_vec() {
         for n in [10usize, 100, 1_000] {
-            let v = (0..n).map(make_task).collect::<Vec<_>>();
-            black_box(Tasks::new(v.iter()));
+            let v: Vec<Task> = (0..n).map(make_task).collect();
+            black_box(Tasks::new(v));
         }
     }
 }
@@ -304,14 +304,14 @@ mod server_state {
     #[tokio::test]
     async fn push_task() {
         let s = ServerState::new();
-        black_box(s.push_task(make_task(0).await));
+        black_box(s.push_task(make_task(0)));
     }
 
     #[tokio::test]
     async fn claim_task_from_nonempty() {
         let s = ServerState::new();
         for i in 0..1_000 {
-            s.push_task(make_task(i).await);
+            s.push_task(make_task(i));
         }
         black_box(s.claim_task());
     }
@@ -333,7 +333,7 @@ mod server_state {
     async fn pending_count() {
         let s = ServerState::new();
         for i in 0..100 {
-            s.push_task(make_task(i).await);
+            s.push_task(make_task(i));
         }
         black_box(s.pending_count());
     }
@@ -350,7 +350,7 @@ mod server_state {
     #[tokio::test]
     async fn push_then_claim_roundtrip() {
         let s = ServerState::new();
-        s.push_task(make_task(0).await);
+        s.push_task(make_task(0));
         black_box(s.claim_task());
     }
 }
