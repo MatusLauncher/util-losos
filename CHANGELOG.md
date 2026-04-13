@@ -123,6 +123,7 @@
 
 ### Miscellaneous
 
+- Update preflight and user submodules — path traversal security fix
 - Update bootenv submodule — testman integration tests
 - Update gpuman and cluman submodules — fix all clippy warnings
 - Update cluman submodule — Garage S3 sync, security fixes, version pins
