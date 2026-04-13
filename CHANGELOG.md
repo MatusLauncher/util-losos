@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Fix test compilation errors in bench and preflight
 - Move bootenv to separate submodule
 - Fix ISO not booting in test mode
 - Add Qwen to .gitignore

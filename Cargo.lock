@@ -623,7 +623,9 @@ dependencies = [
  "actman 0.1.0",
  "miette",
  "rustix 1.1.4",
+ "serial_test",
  "tempfile",
+ "testman",
  "tracing",
  "tracing-subscriber",
 ]
