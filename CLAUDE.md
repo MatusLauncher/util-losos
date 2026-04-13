@@ -49,14 +49,14 @@ cargo build --release --target x86_64-unknown-linux-musl --manifest-path crates/
 # Build the full initramfs container image
 podman build --no-cache -t util-mdl-build .
 
-# Launch in QEMU (requires pre-built initramfs + kernel)
-./launch.sh
+# Launch in QEMU (requires pre-built initramfs + kernel) — via Justfile
+just run
 
-# Build initramfs then launch
-./launch.sh --build
+# Build initramfs then launch — via Justfile
+just build-run
 ```
 
-`launch.sh` respects env vars: `KERNEL` (path to vmlinuz), `MEMORY` (default `2G`), `CPUS` (default `2`).
+The Justfile is the primary interface for building, launching, and testing. It respects env vars: `KERNEL` (path to vmlinuz), `MEMORY` (default `2G`), `CPUS` (default `2`), `KVM` (default `1`), `DISK` (host disk image to attach).
 
 ## Lint and Test
 
@@ -68,14 +68,14 @@ cargo fmt --check
 Integration tests run via `testman` — boots the initramfs in QEMU and asserts expected log output:
 
 ```bash
-# Run tests against a pre-built initramfs
-./launch.sh --test
+# Run tests against a pre-built initramfs — via Justfile
+just test
 
 # Build initramfs first, then run tests
-./launch.sh --build --test
+just build-test
 
 # Disable KVM for CI environments
-KVM=0 ./launch.sh --test
+just KVM=0 test
 ```
 
 `testman` respects env vars: `KERNEL`, `INITRAMFS`, `ISO` (default `os.iso`), `MEMORY` (default `2G`), `CPUS` (default `2`), `KVM` (default `1`), `TEST_MODE` (`qemu` (default) or `container` to run QEMU inside Docker via testcontainers).

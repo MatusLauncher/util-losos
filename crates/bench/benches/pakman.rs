@@ -17,7 +17,7 @@ use std::{
     process::Command,
 };
 
-use pakman::{install::PackageInstallation, run::ProgRunner};
+use pm::container::{ContainerInstall as PackageInstallation, ProgRunner};
 use walkdir::WalkDir;
 
 const PKG_SHORT: &str = "jq";

@@ -4,7 +4,6 @@ members = ["crates/bench", "crates/bootenv", "crates/isoman"
 
     ,"crates/actman",
     "crates/updman",
-    "crates/pakman",
     "crates/cluman",
     "crates/dhcman",
     "crates/testman",
@@ -21,7 +20,7 @@ actman = { version = "0.1.0", path = "crates/actman" }
 cluman = { version = "0.1.0", path = "crates/cluman" }
 dhcman = { version = "0.1.0", path = "crates/dhcman" }
 updman = { version = "0.1.0", path = "crates/updman" }
-pakman = { version = "0.1.0", path = "crates/pakman" }
+pm = { version = "1.0.1", path = "crates/pcm" }
 isoman = { version = "0.1.0", path = "crates/isoman" }
 gpuman = { version = "0.1.0", path = "crates/gpuman" }
 iptman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/iptman" }

@@ -7,7 +7,7 @@
 #   just build-gsi-fastboot  Build a Fastboot-only GSI boot.img
 #   just build-secure-boot   Build with Secure Boot signing
 #   just build-prod          Build production-hardened image (loglevel=0 + mitigations)
-#   just build-prod-live     Build production live image (hardened + preflight autostart)
+#   just build-prod-live     Build production live image (hardened + container-ready for preflight)
 #   just run                 Launch in QEMU (UEFI via OVMF)
 #   just test                Run testman integration tests
 #   just build-run           Build then launch
@@ -41,39 +41,39 @@ default: run
 # Build the OS disk image (GPT with LUKS2-encrypted initramfs partition)
 build:
     @echo "==> Building OS disk image (LUKS2-encrypted P3)..."
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build
+    cargo run -p isoman -- --build
     @echo "==> Disk image written to os-<mode>.img"
 
 # Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
 build-config config_path=isoman_config:
     @echo "==> Building from config: {{ config_path }}"
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --config "{{ config_path }}"
+    cargo run -p isoman -- --build --config "{{ config_path }}"
 
 # Build a GSI (Fastboot + Odin) instead of a bootable ISO
 build-gsi:
     @echo "==> Building GSI (Fastboot + Odin)..."
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --gsi
+    cargo run -p isoman -- --build --gsi
 
 # Build a Fastboot-only GSI boot.img
 build-gsi-fastboot:
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --gsi --gsi-fastboot
+    cargo run -p isoman -- --build --gsi --gsi-fastboot
 
 # Build production-hardened OS image (loglevel=0 + security mitigations baked into UKI cmdline)
 build-prod:
     @echo "==> Building production OS disk image (hardened cmdline)..."
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --profile prod
+    cargo run -p isoman -- --build --profile prod
     @echo "==> Production disk image written to os-<mode>.img"
 
-# Build production live ISO (hardened cmdline + losos.preflight=autostart)
+# Build production live OS image (hardened cmdline + container-ready for preflight)
 build-prod-live:
-    @echo "==> Building production live OS disk image (preflight autostart)..."
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --profile prod-live
+    @echo "==> Building production live OS disk image (container-ready for preflight)..."
+    cargo run -p isoman -- --build --profile prod-live
     @echo "==> Production live disk image written to os-<mode>.img"
 
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
 build-secure-boot:
     @echo "==> Building with Secure Boot signing..."
-    cargo run --manifest-path crates/isoman/Cargo.toml -- --build --output "{{ output }}" --secure-boot
+    cargo run -p isoman -- --build --output "{{ output }}" --secure-boot
 
 # Build initramfs then launch in QEMU
 build-run: build run

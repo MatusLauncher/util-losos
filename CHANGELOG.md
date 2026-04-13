@@ -48,6 +48,7 @@
 
 ### Features
 
+- Add prod and prod-live ISO profiles to Justfile; update isoman
 - Mount data drive and virtual FS before switch_root
 - Add bootenv crate and Secure Boot / encrypted boot support
 - Add container cache mounts and CI cargo cache

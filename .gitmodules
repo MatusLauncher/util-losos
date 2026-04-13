@@ -4,9 +4,6 @@
 [submodule "crates/updman"]
 	path = crates/updman
 	url = https://gitlab.com/losos-linux/updman.git
-[submodule "crates/pakman"]
-	path = crates/pakman
-	url = https://gitlab.com/losos-linux/pakman.git
 [submodule "crates/cluman"]
 	path = crates/cluman
 	url = https://gitlab.com/losos-linux/cluman.git
@@ -34,3 +31,6 @@
 [submodule "crates/bootenv"]
 	path = crates/bootenv
 	url = https://gitlab.com/losos-linux/bootenv
+[submodule "crates/pcm"]
+	path = crates/pcm
+	url = https://gitlab.com/losos-linux/pcm/pcm

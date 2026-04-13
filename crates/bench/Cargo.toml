@@ -12,7 +12,7 @@ dhcman = { workspace = true }
 gpuman = { workspace = true }
 isoman = { workspace = true }
 mkbootimg = { workspace = true }
-pakman = { workspace = true }
+pm = { workspace = true }
 rustix = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

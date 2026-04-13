@@ -7,6 +7,7 @@
 | Crate | Description |
 |-------|-------------|
 | [`actman`](#actman) | PID 1 init system — mounts filesystems, spawns startup scripts, handles shutdown |
+| [`bootenv`](#bootenv) | Stage-1 boot environment — minimal PID 1 init that mounts data drive and execs actman |
 | [`dhcman`](#dhcman) | DHCP client — configures a network interface via a full DORA sequence |
 | [`cluman`](#cluman) | Cluster manager — client, server, and controller modes |
 | [`updman`](#updman) | OTA update manager — pulls a new initramfs from a container registry and swaps it onto the BOOT partition |
@@ -16,6 +17,8 @@
 | [`pakman`](#pakman) | Package manager — installs, removes, and runs programs packaged as Nix-based container images stored on the data drive |
 | [`gpuman`](#gpuman) | GPU/NPU accelerator manager — detects GPUs and NPUs at boot via sysfs and launches vendor-specific driver containers (CUDA, ROCm, oneAPI) |
 | [`testman`](#testman) | Integration test framework — boots the initramfs in QEMU and asserts expected log output |
+| [`preflight`](#preflight) | Interactive disk installer — partitions disks, sets up efistub boot, optional LUKS2 encryption, and seeds the initial user account |
+| [`pcm`](#pcm) | Generic package manager — multi-build-system package manager with TOML-based package definitions |
 | [`bench`](#bench) | Smoke tests and micro-benchmarks for all crates |
 
 ## Building
@@ -59,41 +62,64 @@ All `isoman` output paths default to a mode-stamped name so that client and serv
 
 Pass `--output`, `--initramfs`, `--fastboot-out`, or `--odin-out` to override any of these.
 
-### launch.sh
+### Justfile (primary interface)
 
-`launch.sh` is a convenience wrapper for local development and CI.
+The `Justfile` is the recommended interface for building, launching, and testing:
 
 ```bash
-# Launch the initramfs interactively in QEMU
-./launch.sh
+# Common recipes
+just build          # Build initramfs from Containerfile (via isoman)
+just run            # Launch initramfs interactively in QEMU
+just test           # Run testman integration tests
+just iso            # Create bootable ISO (alias for build)
+just build-run      # Build initramfs then launch in QEMU
+just build-test     # Build initramfs then run integration tests
 
-# Build initramfs first (via podman build), then launch
-./launch.sh --build
-
-# Run integration tests (testman)
-./launch.sh --test
-
-# Build initramfs then run tests
-./launch.sh --build --test
-
-# Build a bootable ISO from a pre-built initramfs
-./launch.sh --iso
-
-# Disable KVM (CI environments without nested virtualisation)
-KVM=0 ./launch.sh --test
+# With variable overrides
+just KVM=0 run              # Disable KVM (for CI environments)
+just MEMORY=4G test         # Run tests with more QEMU memory
+just DISK=/path/to.img run  # Attach a virtual disk
 ```
 
-`launch.sh` automatically builds a supplemental initrd containing decompressed `virtio_net`, `net_failover`, and `failover` kernel modules and prepends it to the initramfs so that the virtual NIC is available in QEMU even when the main image has no kernel modules.
-
-Environment variables respected by `launch.sh`:
+#### Justfile variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `KERNEL` | `/boot/vmlinuz-$(uname -r)` | Path to the kernel image |
+| `KERNEL` | auto-detected under `/boot` | Path to the kernel image |
+| `MEMORY` | `2G` | QEMU memory allocation |
+| `CPUS` | `2` | QEMU vCPU count |
+| `KVM` | `1` | Set to `0` to disable `-enable-kvm` |
+| `DISK` | *(empty)* | Host disk image to attach as `/dev/vda` in QEMU |
+| `OUTPUT` | `os.iso` | ISO output path |
+
+### launch.sh (legacy wrapper)
+
+> [!WARNING]
+> `launch.sh` is deprecated. Use the Justfile (`just build`, `just run`, `just test`) instead.
+
+`launch.sh` is an older convenience wrapper that predates the Justfile. It provides similar functionality:
+
+```bash
+./launch.sh                  # launch initramfs interactively in QEMU
+./launch.sh --build          # build initramfs first, then launch
+./launch.sh --test           # run integration tests (testman)
+./launch.sh --build --test   # build initramfs then run tests
+./launch.sh --iso            # assemble a bootable ISO
+KVM=0 ./launch.sh --test     # disable KVM acceleration (for CI)
+```
+
+Environment variables (same as Justfile):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KERNEL` | auto-detected under `/boot` | Path to the kernel image |
 | `MEMORY` | `2G` | QEMU memory |
 | `CPUS` | `2` | QEMU vCPU count |
 | `KVM` | `1` | Set to `0` to disable `-enable-kvm` |
+| `DISK` | *(empty)* | Host disk image to attach in QEMU |
 | `OUTPUT` | `os.iso` | ISO output path (used with `--iso`) |
+
+`launch.sh` automatically builds a supplemental initrd containing decompressed `virtio_net`, `net_failover`, and `failover` kernel modules and prepends it to the initramfs so that the virtual NIC is available in QEMU even when the main image has no kernel modules.
 
 ## Lint and Format
 
@@ -104,24 +130,35 @@ cargo fmt --check
 
 ## CI Pipeline
 
-The GitLab CI pipeline is split into focused stages:
+The GitLab CI pipeline runs the following stages:
 
-| Job | Stage | Description |
-|-----|-------|-------------|
-| `compile` | `build` | Compiles the `isoman` binary on the Podman image |
-| `initramfs` | `build` | Runs `podman build` to produce `os-<mode>.initramfs.tar.gz` |
-| `iso` | `assemble` | Assembles the hybrid ISO using `isoman` + Limine (skipped when `$KERNEL` is unset) |
-| `test-boot` | `test` | Boots the initramfs in QEMU via `testman` (manual, requires `$KERNEL`) |
-| `publish` | `publish` | Pushes the container image to the GitLab registry tagged as `<branch-slug>` |
-| `publish-latest` | `publish` | Re-tags the branch image as `:latest` (default branch only) |
+| Stage | Jobs | Description |
+|-------|------|-------------|
+| `check` | `fmt`, `clippy` | Code formatting and linting |
+| `test` | `test`, `bench` | Unit tests and benchmarks |
+| `build-docs` | `docs` | Builds the documentation book (runs on `book/**/*` changes) |
+| `deploy` | `pages` | Deploys documentation to GitLab Pages (default branch only) |
 
-`compile` and `initramfs` run in parallel (same `build` stage). `iso` and `test-boot` each `needs:` only the artifact they actually consume, so the pipeline parallelises where possible.
-
-Set `MODE` (CI/CD variable) to `client`, `server`, or `controller` to control which `cluman` mode is baked into the initramfs. Defaults to `client`.
+All submodule changes are automatically pulled via `GIT_SUBMODULE_STRATEGY: recursive`.
 
 ---
 
 ## Architecture
+
+### bootenv
+
+`bootenv` is the minimal stage-1 initramfs binary. It runs as PID 1 immediately after the kernel hands off execution, brings up hardware and filesystems, mounts the persistent data volume, and execs `actman`. The initramfs is the permanent root — no `switch_root` is performed.
+
+Key responsibilities:
+- Mount virtual filesystems (`devtmpfs`, `proc`, `sysfs`, `tmpfs`)
+- Parse `data_drive=` from `/proc/cmdline`
+- Activate block layers (LUKS → LVM → RAID) and mount the data volume to `/data`
+- Mount additional NFS entries if specified
+- Exec `/bin/init` (actman) — the initramfs remains the permanent root
+
+Key source files:
+- `crates/bootenv/src/main.rs` — entry point, boot flow, `mount_data_drive()`, `mount_virtual_filesystems()`
+- `crates/bootenv/src/cmdline.rs` — `BootCmdline` — parses `data_drive`
 
 ### actman
 
@@ -347,13 +384,13 @@ Key source files:
 
 ```bash
 # Run tests against a pre-built initramfs
-./launch.sh --test
+just test
 
 # Build then test
-./launch.sh --build --test
+just build-test
 
 # CI without KVM
-KVM=0 ./launch.sh --test
+just KVM=0 test
 ```
 
 Tests run sequentially against a single QEMU instance (mirroring real boot order). `testman` exits `0` on full pass, `1` on any failure or timeout — suitable for CI.
@@ -381,6 +418,28 @@ Coverage by target:
 | `pakman` | `PackageInstallation` queue, Dockerfile template rendering, `WalkDir` scan, `nerdctl` command construction |
 | `gpuman` | `ModeOfOperation` dispatch, `GpuVendor`/`DeviceClass` formatting, `vendors_present` deduplication, `build_container_spec` construction and cmdline overrides |
 | `isoman` | `build_gsi_fastboot` / `build_gsi_odin` end-to-end (boot image header validation, Odin MD5 trailer, monotonic size scaling), `MkbootimgParams` construction, `resolve_output` |
+
+### preflight
+
+`preflight` is an interactive disk installer that partitions disks, sets up EFI stub boot, optional LUKS2 encryption, and seeds the initial user account. It provides a guided installation workflow for deploying LosOS onto physical or virtual machines.
+
+Key source files:
+- `crates/preflight/src/main.rs` — interactive installer entry point
+
+### pcm
+
+`pcm` (package name `pm`) is a generic package manager that can manage systems without interference. It supports multiple build systems and languages with TOML-based package definitions.
+
+Key features:
+- Multi-language and multi-build-system support
+- TOML-based package configuration with source URLs, build/install steps, and checksums
+- CLI interface for package management
+
+> [!NOTE]
+> `pcm` is not part of the main workspace and lives in its own repository with independent build configuration.
+
+Key source files:
+- `crates/pcm/src/main.rs` — entry point and CLI
 
 ---
 
@@ -438,4 +497,4 @@ The documentation is served via GitLab Pages at `https://losos.gitlab.io/losos-l
 
 ## AI Disclosure
 
-This project uses generative AI (Claude Sonnet 4.6) to generate documentation and tests. It is also used for refactoring and regression fighting and will be used in the future to review MRs and manage issues.
+This project uses generative AI (Claude Sonnet 4) to generate documentation and tests. It is also used for refactoring and regression fighting and will be used in the future to review MRs and manage issues.
