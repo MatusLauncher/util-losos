@@ -72,21 +72,12 @@ bench:
 
 docs:
   stage: build-docs
-  image: node:22-alpine
-  cache:
-    key:
-      files:
-        - book/package.json
-    paths:
-      - book/node_modules
+  image: rustlang/mdbook
   script:
-    - cd book
-    - corepack enable
-    - bun install
-    - bun run build
+    - mdbook build book
   artifacts:
     paths:
-      - book/build
+      - book/html
     expire_in: 1 week
   rules:
     - changes:
@@ -97,19 +88,11 @@ docs:
 
 pages:
   stage: deploy
-  image: node:22-alpine
-  cache:
-    key:
-      files:
-        - book/package.json
-    paths:
-      - book/node_modules
+  image: rustlang/mdbook
   script:
-    - cd book
-    - corepack enable
-    - bun install
-    - bun run build
-    - mv build ../public
+    - mdbook build book
+    - mkdir -p public
+    - cp -r book/html/* public/
   artifacts:
     paths:
       - public

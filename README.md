@@ -18,7 +18,7 @@
 | [`gpuman`](#gpuman) | GPU/NPU accelerator manager — detects GPUs and NPUs at boot via sysfs and launches vendor-specific driver containers (CUDA, ROCm, oneAPI) |
 | [`testman`](#testman) | Integration test framework — boots the initramfs in QEMU and asserts expected log output |
 | [`preflight`](#preflight) | Interactive disk installer — partitions disks, sets up efistub boot, optional LUKS2 encryption, and seeds the initial user account |
-| [`pcm`](#pcm) | Generic package manager — multi-build-system package manager with TOML-based package definitions |
+| [`pcm`](#pcm) | Generic package manager — multi-build-system package manager with TOML-based package definitions _(independent project, not part of workspace)_ |
 | [`bench`](#bench) | Smoke tests and micro-benchmarks for all crates |
 
 ## Building
@@ -33,34 +33,36 @@ cargo build --release
 # Static MUSL target (used inside the initramfs)
 cargo build --release --target x86_64-unknown-linux-musl
 
-# Build initramfs + ISO in one step (requires podman)
-# Output files are mode-stamped: os-client.iso, os-server.iso, etc.
-cargo run -p isoman -- --build --mode <client|server|controller>
+# Build OS disk image (via Justfile, recommended)
+just build
 
-# Build only the initramfs, skip ISO assembly
-cargo run -p isoman -- --build --mode client --initramfs-out os-client.initramfs.tar.gz
+# Build production-hardened image
+just build-prod
 
-# Assemble ISO from a pre-built initramfs
-cargo run -p isoman -- --initramfs os-client.initramfs.tar.gz --mode client
+# Build with Secure Boot signing
+just build-secure-boot
 
-# Build an Android GSI (boot.img + Odin .tar.md5) instead of an ISO
-cargo run -p isoman -- --build --mode client --gsi
-cargo run -p isoman -- --build --mode client --gsi --gsi-format fastboot
-cargo run -p isoman -- --build --mode client --gsi --gsi-format odin
+# Build a GSI (Fastboot + Odin)
+just build-gsi
+
+# Build only the initramfs (manual isoman invocation)
+cargo run -p isoman -- --build
+
+# Build from a JSON config file
+ISOMAN_CONFIG=config.json just build-config
 ```
 
 ### Output filename conventions
 
-All `isoman` output paths default to a mode-stamped name so that client and server artifacts built in the same working directory never overwrite each other:
+All `isoman` output paths default to a mode-stamped name:
 
 | Artifact | Default path |
 |----------|-------------|
-| ISO | `os-<mode>.iso` (e.g. `os-client.iso`) |
-| Initramfs | `os-<mode>.initramfs.tar.gz` (e.g. `os-server.initramfs.tar.gz`) |
+| OS disk image | `os-<mode>.img` (e.g. `os-client.img`) |
 | Fastboot GSI | `boot.img` |
 | Odin GSI | `AP_losos.tar.md5` |
 
-Pass `--output`, `--initramfs`, `--fastboot-out`, or `--odin-out` to override any of these.
+Pass `--output` to override the output path.
 
 ### Justfile (primary interface)
 
@@ -68,12 +70,17 @@ The `Justfile` is the recommended interface for building, launching, and testing
 
 ```bash
 # Common recipes
-just build          # Build initramfs from Containerfile (via isoman)
-just run            # Launch initramfs interactively in QEMU
+just build          # Build OS disk image (LUKS2-encrypted P3)
+just run            # Launch in QEMU (UEFI via OVMF)
 just test           # Run testman integration tests
-just iso            # Create bootable ISO (alias for build)
-just build-run      # Build initramfs then launch in QEMU
-just build-test     # Build initramfs then run integration tests
+just build-run      # Build then launch
+just build-test     # Build then test
+just build-prod     # Build production-hardened image (loglevel=0 + mitigations)
+just build-prod-live  # Build production live image (hardened + container-ready)
+just build-secure-boot  # Build with Secure Boot signing
+just build-gsi      # Build a GSI (Fastboot + Odin)
+just build-gsi-fastboot  # Build a Fastboot-only GSI boot.img
+just dev            # Pull submodules and build workspace
 
 # With variable overrides
 just KVM=0 run              # Disable KVM (for CI environments)
@@ -87,39 +94,12 @@ just DISK=/path/to.img run  # Attach a virtual disk
 |----------|---------|-------------|
 | `KERNEL` | auto-detected under `/boot` | Path to the kernel image |
 | `MEMORY` | `2G` | QEMU memory allocation |
-| `CPUS` | `2` | QEMU vCPU count |
+| `CPUS` | `4` | QEMU vCPU count |
 | `KVM` | `1` | Set to `0` to disable `-enable-kvm` |
-| `DISK` | *(empty)* | Host disk image to attach as `/dev/vda` in QEMU |
-| `OUTPUT` | `os.iso` | ISO output path |
-
-### launch.sh (legacy wrapper)
-
-> [!WARNING]
-> `launch.sh` is deprecated. Use the Justfile (`just build`, `just run`, `just test`) instead.
-
-`launch.sh` is an older convenience wrapper that predates the Justfile. It provides similar functionality:
-
-```bash
-./launch.sh                  # launch initramfs interactively in QEMU
-./launch.sh --build          # build initramfs first, then launch
-./launch.sh --test           # run integration tests (testman)
-./launch.sh --build --test   # build initramfs then run tests
-./launch.sh --iso            # assemble a bootable ISO
-KVM=0 ./launch.sh --test     # disable KVM acceleration (for CI)
-```
-
-Environment variables (same as Justfile):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `KERNEL` | auto-detected under `/boot` | Path to the kernel image |
-| `MEMORY` | `2G` | QEMU memory |
-| `CPUS` | `2` | QEMU vCPU count |
-| `KVM` | `1` | Set to `0` to disable `-enable-kvm` |
-| `DISK` | *(empty)* | Host disk image to attach in QEMU |
-| `OUTPUT` | `os.iso` | ISO output path (used with `--iso`) |
-
-`launch.sh` automatically builds a supplemental initrd containing decompressed `virtio_net`, `net_failover`, and `failover` kernel modules and prepends it to the initramfs so that the virtual NIC is available in QEMU even when the main image has no kernel modules.
+| `DISK` | *(empty)* | Host disk image to attach as `/dev/vdb` in QEMU |
+| `OUTPUT` | `os-client.img` | OS disk image output path |
+| `OVMF_CODE` | `/usr/share/edk2/ovmf/OVMF_CODE.fd` | OVMF firmware code file |
+| `OVMF_VARS` | `/usr/share/edk2/ovmf/OVMF_VARS.fd` | OVMF firmware variables file |
 
 ## Lint and Format
 
@@ -480,20 +460,17 @@ Init scripts installed at boot time:
 
 ## Documentation
 
-The full documentation is built with [Docusaurus](https://docusaurus.io/) + [Aceternity UI](https://ui.aceternity.com/).
+The full documentation is built with [mdBook](https://rust-lang.github.io/mdBook/).
 
 ```bash
-# Install dependencies
-just docs-install
-
-# Start dev server with hot reload
-just docs-dev
+# Serve documentation locally with hot reload
+mdbook serve book --open
 
 # Build for production
-just docs-build
+mdbook build book
 ```
 
-The documentation is served via GitLab Pages at `https://losos.gitlab.io/losos-linux/docs/`.
+The documentation is served via GitLab Pages.
 
 ## AI Disclosure
 
