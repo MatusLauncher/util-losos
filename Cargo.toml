@@ -37,11 +37,12 @@ ureq = { version = "3", features = ["json"] }
 userman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/userman" }
 walkdir = "*"
 
-
 [profile.release]
+opt-level = "z"
+panic = "abort"
+strip = "symbols"
 lto = true
 codegen-units = 1
-strip = true
 
 [profile.dev]
 codegen-units = 16
