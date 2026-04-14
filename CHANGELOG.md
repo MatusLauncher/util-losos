@@ -125,6 +125,7 @@
 
 ### Miscellaneous
 
+- Update submodules
 - Update pcm submodule
 - Update preflight and user submodules — path traversal security fix
 - Update bootenv submodule — testman integration tests

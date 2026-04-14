@@ -36,7 +36,7 @@ dev:
     cargo build
 
 # Launch initramfs in QEMU (default)
-default: run
+default: build-secure-boot run
 
 # Build the OS disk image (GPT with LUKS2-encrypted initramfs partition)
 build:

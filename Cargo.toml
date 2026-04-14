@@ -23,6 +23,7 @@ updman = { version = "0.1.0", path = "crates/updman" }
 pm = { version = "1.0.1", path = "crates/pcm" }
 isoman = { version = "0.1.0", path = "crates/isoman" }
 gpuman = { version = "0.1.0", path = "crates/gpuman" }
+perman = { version = "0.1.0", path = "crates/user/crates/perman" }
 iptman = { version = "0.1.0", git = "https://gitlab.com/losos-linux/iptman" }
 mkbootimg = { git = "https://gitlab.com/losos-linux/mkbootimg" }
 base64 = "0.22.1"
