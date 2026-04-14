@@ -125,6 +125,7 @@
 
 ### Miscellaneous
 
+- Update pcm submodule
 - Update preflight and user submodules — path traversal security fix
 - Update bootenv submodule — testman integration tests
 - Update gpuman and cluman submodules — fix all clippy warnings
