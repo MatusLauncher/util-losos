@@ -15,7 +15,7 @@
 #   just dev                 Pull all submodules and build the workspace
 # ── Configurable variables (override via env or 'just var=value recipe') ──────
 
-kernel := env("KERNEL", `find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print -quit 2>/dev/null || true`)
+kernel := env("KERNEL", `find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print`)
 memory := env("MEMORY", "2G")
 cpus := env("CPUS", "4")
 kvm := env("KVM", "1")
@@ -31,8 +31,6 @@ isoman_config := env("ISOMAN_CONFIG", "")
 dev:
     @echo "==> Pulling submodules..."
     git submodule update --remote --merge
-    @echo "==> Building workspace..."
-    cargo build
 
 # Launch initramfs in QEMU (default)
 default: build-secure-boot run
@@ -60,19 +58,19 @@ build-gsi-fastboot:
 # Build production-hardened OS image (loglevel=0 + security mitigations baked into UKI cmdline)
 build-prod:
     @echo "==> Building production OS disk image (hardened cmdline)..."
-    cargo run -p isoman -- --build --profile prod
+    cargo run -p isoman -- --build --profile prod --kernel "{{ kernel }}"
     @echo "==> Production disk image written to os-<mode>.img"
 
 # Build production live OS image (hardened cmdline + container-ready for preflight)
 build-prod-live:
     @echo "==> Building production live OS disk image (container-ready for preflight)..."
-    cargo run -p isoman -- --build --profile prod-live
+    cargo run -p isoman -- --build --profile prod-live --kernel "{{ kernel }}"
     @echo "==> Production live disk image written to os-<mode>.img"
 
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
 build-secure-boot:
     @echo "==> Building with Secure Boot signing..."
-    cargo run -p isoman -- --build --output "{{ output }}" --secure-boot
+    cargo run -p isoman -- --build --output "{{ output }}" --secure-boot --kernel "{{ kernel }}"
 
 # Build initramfs then launch in QEMU
 build-run: build run

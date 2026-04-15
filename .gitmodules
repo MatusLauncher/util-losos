@@ -34,3 +34,6 @@
 [submodule "crates/pcm"]
 	path = crates/pcm
 	url = https://gitlab.com/losos-linux/pcm/pcm
+[submodule "crates/bootlib"]
+	path = crates/bootlib
+	url = https://gitlab.com/losos-linux/bootlib

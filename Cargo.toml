@@ -2,7 +2,8 @@
 resolver = "3"
 members = ["crates/bench", "crates/bootenv", "crates/isoman"
 
-    ,"crates/actman",
+    ,"crates/bootlib",
+    "crates/actman",
     "crates/updman",
     "crates/cluman",
     "crates/dhcman",
@@ -17,6 +18,7 @@ exclude = [
 
 [workspace.dependencies]
 actman = { version = "0.1.0", path = "crates/actman" }
+bootlib = { version = "0.1.0", path = "crates/bootlib" }
 cluman = { version = "0.1.0", path = "crates/cluman" }
 dhcman = { version = "0.1.0", path = "crates/dhcman" }
 updman = { version = "0.1.0", path = "crates/updman" }

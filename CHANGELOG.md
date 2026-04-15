@@ -125,6 +125,7 @@
 
 ### Miscellaneous
 
+- Update pcm submodule
 - Consolidate common deps into workspace.dependencies
 - Update pcm submodule
 - Update pcm submodule
