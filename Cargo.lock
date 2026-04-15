@@ -458,9 +458,9 @@ name = "bench"
 version = "0.1.0"
 dependencies = [
  "actman 0.1.0",
- "cluman 0.1.0",
+ "cluman",
  "dhcman",
- "gpuman 0.1.0",
+ "gpuman",
  "isoman",
  "mkbootimg",
  "pm",
@@ -924,7 +924,7 @@ dependencies = [
  "either",
  "expressjs",
  "futures",
- "gpuman 0.1.0",
+ "gpuman",
  "hex",
  "hmac",
  "httpmock",
@@ -956,39 +956,6 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "urlencoding",
- "walkdir",
-]
-
-[[package]]
-name = "cluman"
-version = "0.1.0"
-source = "git+https://gitlab.com/losos-linux/cluman#a9cd1c07c9eaa95d74a63bead03dd80f6e434d46"
-dependencies = [
- "actman 0.1.0 (git+https://gitlab.com/losos-linux/actman.git)",
- "async-trait",
- "chrono",
- "clap",
- "either",
- "expressjs",
- "fast_rsync",
- "gpuman 0.1.0 (git+https://gitlab.com/losos-linux/gpuman)",
- "ipnet",
- "miette",
- "minreq",
- "nix 0.29.0",
- "parking_lot",
- "russh",
- "russh-keys",
- "rustix 1.1.4",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha2",
- "ssh-key",
- "strum 0.28.0",
- "tokio",
- "tracing",
- "tracing-subscriber",
  "walkdir",
 ]
 
@@ -2022,15 +1989,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fast_rsync"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd4b06c695e3dbc4dcc3c0428f5b1131a92873d3110adbdd5ad1beeb34c437ca"
-dependencies = [
- "arrayref",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2416,19 +2374,6 @@ dependencies = [
  "miette",
  "serde",
  "serde_yaml",
- "tracing",
- "tracing-subscriber",
- "walkdir",
-]
-
-[[package]]
-name = "gpuman"
-version = "0.1.0"
-source = "git+https://gitlab.com/losos-linux/gpuman#495149f017fc5538c356bc5698a3876a19207041"
-dependencies = [
- "actman 0.1.0 (git+https://gitlab.com/losos-linux/actman.git)",
- "miette",
- "serde",
  "tracing",
  "tracing-subscriber",
  "walkdir",
@@ -3078,7 +3023,7 @@ version = "0.1.0"
 dependencies = [
  "adb_client",
  "clap",
- "cluman 0.1.0 (git+https://gitlab.com/losos-linux/cluman)",
+ "cluman",
  "flate2",
  "miette",
  "mkbootimg",
@@ -4277,7 +4222,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 name = "pm"
 version = "1.0.1"
 dependencies = [
- "actman 0.1.0 (git+https://gitlab.com/losos-linux/actman.git)",
+ "actman 0.1.0",
  "clap",
  "doku",
  "fetch-data",
@@ -4399,7 +4344,7 @@ name = "preflight"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "cluman 0.1.0",
+ "cluman",
  "devicemapper",
  "dialoguer",
  "flate2",

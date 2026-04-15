@@ -36,10 +36,6 @@ name = "updman"
 path = "benches/updman.rs"
 
 [[test]]
-name = "pakman"
-path = "benches/pakman.rs"
-
-[[test]]
 name = "isoman"
 path = "benches/isoman.rs"
 
