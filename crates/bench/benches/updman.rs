@@ -49,6 +49,7 @@ mod new {
             BASE_URL_MINIMAL.to_owned(),
             IMAGE_TAG_MINIMAL.to_owned(),
             HASH_MINIMAL.to_owned(),
+            "/dev/sda".to_owned(),
         ));
     }
 
@@ -58,6 +59,7 @@ mod new {
             BASE_URL_SHORT.to_owned(),
             IMAGE_TAG_SHORT.to_owned(),
             HASH_SHORT.to_owned(),
+            "/dev/sda".to_owned(),
         ));
     }
 
@@ -67,6 +69,7 @@ mod new {
             BASE_URL_MEDIUM.to_owned(),
             IMAGE_TAG_MEDIUM.to_owned(),
             HASH_MEDIUM.to_owned(),
+            "/dev/sda".to_owned(),
         ));
     }
 
@@ -76,6 +79,7 @@ mod new {
             BASE_URL_LONG.to_owned(),
             IMAGE_TAG_LONG.to_owned(),
             HASH_LONG.to_owned(),
+            "/dev/sda".to_owned(),
         ));
     }
 
@@ -85,6 +89,7 @@ mod new {
             BASE_URL_VERY_LONG.to_owned(),
             IMAGE_TAG_VERY_LONG.to_owned(),
             HASH_VERY_LONG.to_owned(),
+            "/dev/sda".to_owned(),
         ));
     }
 }
@@ -98,6 +103,7 @@ mod image_ref {
             BASE_URL_MINIMAL.to_owned(),
             IMAGE_TAG_MINIMAL.to_owned(),
             HASH_MINIMAL.to_owned(),
+            "/dev/sda".to_owned(),
         );
         black_box(u.image_ref());
     }
@@ -108,6 +114,7 @@ mod image_ref {
             BASE_URL_SHORT.to_owned(),
             IMAGE_TAG_SHORT.to_owned(),
             HASH_SHORT.to_owned(),
+            "/dev/sda".to_owned(),
         );
         black_box(u.image_ref());
     }
@@ -118,6 +125,7 @@ mod image_ref {
             BASE_URL_MEDIUM.to_owned(),
             IMAGE_TAG_MEDIUM.to_owned(),
             HASH_MEDIUM.to_owned(),
+            "/dev/sda".to_owned(),
         );
         black_box(u.image_ref());
     }
@@ -128,6 +136,7 @@ mod image_ref {
             BASE_URL_LONG.to_owned(),
             IMAGE_TAG_LONG.to_owned(),
             HASH_LONG.to_owned(),
+            "/dev/sda".to_owned(),
         );
         black_box(u.image_ref());
     }
@@ -138,6 +147,7 @@ mod image_ref {
             BASE_URL_VERY_LONG.to_owned(),
             IMAGE_TAG_VERY_LONG.to_owned(),
             HASH_VERY_LONG.to_owned(),
+            "/dev/sda".to_owned(),
         );
         black_box(u.image_ref());
     }
@@ -152,6 +162,7 @@ mod image_ref_double_call {
             BASE_URL_SHORT.to_owned(),
             IMAGE_TAG_SHORT.to_owned(),
             HASH_SHORT.to_owned(),
+            "/dev/sda".to_owned(),
         );
         black_box(u.image_ref());
         black_box(u.image_ref());
@@ -163,6 +174,7 @@ mod image_ref_double_call {
             BASE_URL_MEDIUM.to_owned(),
             IMAGE_TAG_MEDIUM.to_owned(),
             HASH_MEDIUM.to_owned(),
+            "/dev/sda".to_owned(),
         );
         black_box(u.image_ref());
         black_box(u.image_ref());
@@ -174,6 +186,7 @@ mod image_ref_double_call {
             BASE_URL_LONG.to_owned(),
             IMAGE_TAG_LONG.to_owned(),
             HASH_LONG.to_owned(),
+            "/dev/sda".to_owned(),
         );
         black_box(u.image_ref());
         black_box(u.image_ref());
@@ -190,6 +203,7 @@ mod new_then_image_ref {
                 BASE_URL_MINIMAL.to_owned(),
                 IMAGE_TAG_MINIMAL.to_owned(),
                 HASH_MINIMAL.to_owned(),
+                "/dev/sda".to_owned(),
             )
             .image_ref(),
         );
@@ -202,6 +216,7 @@ mod new_then_image_ref {
                 BASE_URL_SHORT.to_owned(),
                 IMAGE_TAG_SHORT.to_owned(),
                 HASH_SHORT.to_owned(),
+                "/dev/sda".to_owned(),
             )
             .image_ref(),
         );
@@ -214,6 +229,7 @@ mod new_then_image_ref {
                 BASE_URL_MEDIUM.to_owned(),
                 IMAGE_TAG_MEDIUM.to_owned(),
                 HASH_MEDIUM.to_owned(),
+                "/dev/sda".to_owned(),
             )
             .image_ref(),
         );
@@ -226,6 +242,7 @@ mod new_then_image_ref {
                 BASE_URL_LONG.to_owned(),
                 IMAGE_TAG_LONG.to_owned(),
                 HASH_LONG.to_owned(),
+                "/dev/sda".to_owned(),
             )
             .image_ref(),
         );
@@ -238,6 +255,7 @@ mod new_then_image_ref {
                 BASE_URL_VERY_LONG.to_owned(),
                 IMAGE_TAG_VERY_LONG.to_owned(),
                 HASH_VERY_LONG.to_owned(),
+                "/dev/sda".to_owned(),
             )
             .image_ref(),
         );
@@ -256,7 +274,12 @@ mod image_ref_base_url_scaling {
                 "r.example.com/{}",
                 "a".repeat(len.saturating_sub("r.example.com/".len()))
             );
-            let u = UpdMan::new(base, fixed_tag.clone(), fixed_hash.clone());
+            let u = UpdMan::new(
+                base,
+                fixed_tag.clone(),
+                fixed_hash.clone(),
+                "/dev/sda".to_owned(),
+            );
             black_box(u.image_ref());
         }
     }
@@ -271,7 +294,12 @@ mod image_ref_image_tag_scaling {
         let fixed_hash = "sha256:cafe".to_owned();
         for len in [4usize, 8, 16, 32, 64, 96, 128] {
             let tag: String = format!("app:{}", "v".repeat(len.saturating_sub("app:".len())));
-            let u = UpdMan::new(fixed_base.clone(), tag, fixed_hash.clone());
+            let u = UpdMan::new(
+                fixed_base.clone(),
+                tag,
+                fixed_hash.clone(),
+                "/dev/sda".to_owned(),
+            );
             black_box(u.image_ref());
         }
     }
@@ -290,7 +318,7 @@ mod image_ref_total_len_scaling {
                 "x".repeat(base_len.saturating_sub("r.io/".len()))
             );
             let tag: String = format!("i:{}", "t".repeat(tag_len.saturating_sub("i:".len())));
-            let u = UpdMan::new(base, tag, "sha256:00".to_owned());
+            let u = UpdMan::new(base, tag, "sha256:00".to_owned(), "/dev/sda".to_owned());
             black_box(u.image_ref());
         }
     }
@@ -305,6 +333,7 @@ mod image_ref_fresh_strings {
             BASE_URL_MEDIUM.to_owned(),
             IMAGE_TAG_MEDIUM.to_owned(),
             HASH_MEDIUM.to_owned(),
+            "/dev/sda".to_owned(),
         );
         black_box(u.image_ref());
     }
@@ -315,6 +344,7 @@ mod image_ref_fresh_strings {
             BASE_URL_LONG.to_owned(),
             IMAGE_TAG_LONG.to_owned(),
             HASH_LONG.to_owned(),
+            "/dev/sda".to_owned(),
         );
         black_box(u.image_ref());
     }

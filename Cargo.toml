@@ -13,8 +13,6 @@ members = ["crates/bench", "crates/bootenv", "crates/isoman"
     "crates/gpuman",
     "crates/preflight",
 ]
-exclude = [
-]
 
 [workspace.dependencies]
 actman = { version = "0.1.0", path = "crates/actman" }

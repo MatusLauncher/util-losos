@@ -48,6 +48,7 @@
 
 ### Features
 
+- Remove pakman integration tests and benchmarks
 - Merge pakman into pcm
 - Add prod and prod-live ISO profiles to Justfile; update isoman
 - Mount data drive and virtual FS before switch_root

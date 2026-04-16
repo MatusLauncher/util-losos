@@ -694,7 +694,6 @@ name = "bootlib"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "devicemapper",
  "luks",
  "miette",
  "overlayfs_fuse",
@@ -6773,8 +6772,8 @@ checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 name = "userman"
 version = "0.1.0"
 dependencies = [
- "actman 0.1.0",
  "base64 0.22.1",
+ "bootlib",
  "clap",
  "crossterm",
  "ctap-hid-fido2",
