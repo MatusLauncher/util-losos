@@ -326,13 +326,13 @@ mod server_state {
         for i in 0..1_000 {
             s.push_task(make_task(i));
         }
-        black_box(s.claim_task());
+        black_box(s.claim_task()).await;
     }
 
     #[tokio::test]
     async fn claim_task_from_empty() {
         let s = ServerState::new();
-        black_box(s.claim_task());
+        black_box(s.claim_task()).await;
     }
 
     #[tokio::test]
@@ -365,7 +365,7 @@ mod server_state {
     async fn push_then_claim_roundtrip() {
         let s = ServerState::new();
         s.push_task(make_task(0));
-        black_box(s.claim_task());
+        black_box(s.claim_task()).await;
     }
 }
 
