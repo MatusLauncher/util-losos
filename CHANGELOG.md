@@ -126,6 +126,7 @@
 
 ### Miscellaneous
 
+- Update isoman submodule
 - Update preflight submodule
 - Update user submodule
 - Update preflight and bootlib submodules
