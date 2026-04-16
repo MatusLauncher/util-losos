@@ -126,6 +126,7 @@
 
 ### Miscellaneous
 
+- Update preflight submodule (remove rsfdisk)
 - Update isoman submodule
 - Update preflight submodule
 - Update user submodule
