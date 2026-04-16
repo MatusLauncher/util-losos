@@ -126,6 +126,7 @@
 
 ### Miscellaneous
 
+- Update isoman submodule
 - Update bootlib submodule
 - Update bootlib submodule
 - Update isoman submodule
