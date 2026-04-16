@@ -29,7 +29,8 @@ fn discover_bytes() -> Vec<u8> {
 }
 
 fn request_bytes() -> Vec<u8> {
-    encode(&request(FIXED_XID, &DUMMY_MAC, OFFERED_IP, SERVER_IP)).expect("encode request")
+    encode(&request(FIXED_XID, &DUMMY_MAC, OFFERED_IP, SERVER_IP))
+        .expect("encode request")
 }
 
 mod parse_iface {
@@ -307,7 +308,8 @@ mod encode_throughput {
         for n in [1usize, 10, 100, 1_000] {
             let mut out = Vec::with_capacity(n);
             for i in 0..n as u32 {
-                let msg = super::discover(FIXED_XID.wrapping_add(i), &DUMMY_MAC);
+                let msg =
+                    super::discover(FIXED_XID.wrapping_add(i), &DUMMY_MAC);
                 out.push(encode(&msg).unwrap());
             }
             black_box(out);
@@ -339,7 +341,9 @@ mod dora_encode_side {
         let xid = new_xid();
         let disc_bytes = encode(&super::discover(xid, &DUMMY_MAC)).unwrap();
         black_box(decode(&disc_bytes).unwrap());
-        let req_bytes = encode(&super::request(xid, &DUMMY_MAC, OFFERED_IP, SERVER_IP)).unwrap();
+        let req_bytes =
+            encode(&super::request(xid, &DUMMY_MAC, OFFERED_IP, SERVER_IP))
+                .unwrap();
         black_box(decode(&req_bytes).unwrap());
     }
 
@@ -350,7 +354,10 @@ mod dora_encode_side {
                 let xid = new_xid();
                 let disc = encode(&super::discover(xid, &DUMMY_MAC)).unwrap();
                 black_box(decode(&disc).unwrap());
-                let req = encode(&super::request(xid, &DUMMY_MAC, OFFERED_IP, SERVER_IP)).unwrap();
+                let req = encode(&super::request(
+                    xid, &DUMMY_MAC, OFFERED_IP, SERVER_IP,
+                ))
+                .unwrap();
                 black_box(decode(&req).unwrap());
             }
         }

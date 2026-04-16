@@ -1,24 +1,31 @@
 //! Smoke tests and micro-benchmarks for `isoman`'s GSI pipeline.
 //!
 //! Exercises:
-//! * `build_gsi_fastboot`   — full end-to-end Fastboot image build into a temp dir.
-//! * `build_gsi_odin`       — full end-to-end Odin `.tar.md5` build into a temp dir.
-//! * boot image header      — `ANDROID!` magic, kernel/ramdisk size fields, page-size field.
+//! * `build_gsi_fastboot`   — full end-to-end Fastboot image build into a temp
+//!   dir.
+//! * `build_gsi_odin`       — full end-to-end Odin `.tar.md5` build into a temp
+//!   dir.
+//! * boot image header      — `ANDROID!` magic, kernel/ramdisk size fields,
+//!   page-size field.
 //! * Odin archive structure — tar member list, MD5 trailer presence and format.
 //! * `MkbootimgParams`      — construction and field assignment throughput.
 //! * `resolve_output`       — absolute/relative path resolution.
-//! * Scaling                — fastboot + odin repeated over several ramdisk sizes.
+//! * Scaling                — fastboot + odin repeated over several ramdisk
+//!   sizes.
 
 use std::fs;
 use std::hint::black_box;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use isoman::{GSI_CMDLINE, GSI_FASTBOOT_DEFAULT, GSI_ODIN_DEFAULT, resolve_output};
+use isoman::{
+    GSI_CMDLINE, GSI_FASTBOOT_DEFAULT, GSI_ODIN_DEFAULT, resolve_output,
+};
 use mkbootimg::MkbootimgParams;
 use tempfile::TempDir;
 
-// ── Shared helpers ────────────────────────────────────────────────────────────
+// ── Shared helpers
+// ────────────────────────────────────────────────────────────
 
 /// Magic bytes at offset 0 of every Android boot image.
 const ANDROID_MAGIC: &[u8] = b"ANDROID!";
@@ -36,7 +43,10 @@ fn write_dummy_file(path: &Path, size: usize) {
 ///
 /// Returns `(tmp, kernel_path, initramfs_path)`.  The `TempDir` must stay
 /// alive for the duration of the test.
-fn setup(kernel_bytes: usize, ramdisk_bytes: usize) -> (TempDir, PathBuf, PathBuf) {
+fn setup(
+    kernel_bytes: usize,
+    ramdisk_bytes: usize,
+) -> (TempDir, PathBuf, PathBuf) {
     let tmp = TempDir::new().expect("tempdir");
     let kernel = tmp.path().join("vmlinuz");
     let initramfs = tmp.path().join("initramfs.gz");
@@ -193,7 +203,8 @@ mod fastboot_correctness {
     }
 }
 
-// ── build_gsi_odin — correctness ──────────────────────────────────────────────
+// ── build_gsi_odin — correctness
+// ──────────────────────────────────────────────
 
 mod odin_correctness {
     use super::*;
@@ -226,7 +237,10 @@ mod odin_correctness {
         let stage = TempDir::new().unwrap();
         isoman_gsi_odin(&kernel, &initramfs, &output, stage.path());
         let head = read_head(&output, 1);
-        assert_ne!(head[0], 0x00, "first byte of Odin archive must not be null");
+        assert_ne!(
+            head[0], 0x00,
+            "first byte of Odin archive must not be null"
+        );
     }
 
     #[test]
@@ -310,7 +324,8 @@ mod odin_correctness {
 
     #[test]
     fn embedded_boot_img_has_android_magic() {
-        // Extract the tar member and verify the magic bytes of the embedded boot.img.
+        // Extract the tar member and verify the magic bytes of the embedded
+        // boot.img.
         let (tmp, kernel, initramfs) = setup(4096, 4096);
         let output = tmp.path().join("AP_losos.tar.md5");
         let stage = TempDir::new().unwrap();
@@ -335,7 +350,12 @@ mod odin_correctness {
         let odin_out = tmp.path().join("AP_losos.tar.md5");
         let stage_fb = TempDir::new().unwrap();
         let stage_od = TempDir::new().unwrap();
-        isoman_gsi_fastboot(&kernel, &initramfs, &fastboot_out, stage_fb.path());
+        isoman_gsi_fastboot(
+            &kernel,
+            &initramfs,
+            &fastboot_out,
+            stage_fb.path(),
+        );
         isoman_gsi_odin(&kernel, &initramfs, &odin_out, stage_od.path());
         let fb_size = fs::metadata(&fastboot_out).unwrap().len();
         let odin_size = fs::metadata(&odin_out).unwrap().len();
@@ -346,7 +366,8 @@ mod odin_correctness {
     }
 }
 
-// ── MkbootimgParams construction benchmarks ───────────────────────────────────
+// ── MkbootimgParams construction benchmarks
+// ───────────────────────────────────
 
 mod mkbootimg_params {
     use super::*;
@@ -432,7 +453,8 @@ mod mkbootimg_params {
     }
 }
 
-// ── GSI_CMDLINE / default filename constants ──────────────────────────────────
+// ── GSI_CMDLINE / default filename constants
+// ──────────────────────────────────
 
 mod gsi_constants {
     use super::*;
@@ -485,7 +507,8 @@ mod gsi_constants {
     }
 }
 
-// ── resolve_output ────────────────────────────────────────────────────────────
+// ── resolve_output
+// ────────────────────────────────────────────────────────────
 
 mod resolve_output_tests {
     use super::*;
@@ -532,7 +555,8 @@ mod resolve_output_tests {
     }
 }
 
-// ── Scaling — fastboot ────────────────────────────────────────────────────────
+// ── Scaling — fastboot
+// ────────────────────────────────────────────────────────
 
 mod fastboot_scaling {
     use super::*;
@@ -548,11 +572,17 @@ mod fastboot_scaling {
             let stage = TempDir::new().unwrap();
             isoman_gsi_fastboot(&kernel, &initramfs, &output, stage.path());
             // Verify the image was created and has the right magic.
-            assert!(output.exists(), "boot.img must exist for ramdisk size {sz}");
+            assert!(
+                output.exists(),
+                "boot.img must exist for ramdisk size {sz}"
+            );
             let head = read_head(&output, 8);
             assert_eq!(&head, ANDROID_MAGIC, "bad magic for ramdisk size {sz}");
             let stored_sz = read_u32_le(&output, HDR_OFF_RAMDISK_SIZE);
-            assert_eq!(stored_sz as usize, sz, "ramdisk_size mismatch for {sz}");
+            assert_eq!(
+                stored_sz as usize, sz,
+                "ramdisk_size mismatch for {sz}"
+            );
             black_box(&output);
         }
     }
@@ -565,7 +595,10 @@ mod fastboot_scaling {
             let output = tmp.path().join("boot.img");
             let stage = TempDir::new().unwrap();
             isoman_gsi_fastboot(&kernel, &initramfs, &output, stage.path());
-            assert!(output.exists(), "boot.img must exist for kernel size {sz}");
+            assert!(
+                output.exists(),
+                "boot.img must exist for kernel size {sz}"
+            );
             let stored_sz = read_u32_le(&output, HDR_OFF_KERNEL_SIZE);
             assert_eq!(stored_sz as usize, sz, "kernel_size mismatch for {sz}");
             black_box(&output);
@@ -591,7 +624,8 @@ mod fastboot_scaling {
     }
 }
 
-// ── Scaling — odin ────────────────────────────────────────────────────────────
+// ── Scaling — odin
+// ────────────────────────────────────────────────────────────
 
 mod odin_scaling {
     use super::*;
@@ -638,7 +672,8 @@ mod odin_scaling {
     }
 }
 
-// ── Tail-reading helper ───────────────────────────────────────────────────────
+// ── Tail-reading helper
+// ───────────────────────────────────────────────────────
 
 /// Return the appended MD5 trailer line from an Odin `.tar.md5` file.
 ///
@@ -651,8 +686,8 @@ mod odin_scaling {
 ///
 /// 1. Skip the terminating `\n` of the appended line.
 /// 2. Collect bytes backward until we hit another `\n` or the start of file
-///    **but stop early** as soon as we encounter a null byte — the MD5 line
-///    is pure ASCII, so a null means we have walked back into the tar padding.
+///    **but stop early** as soon as we encounter a null byte — the MD5 line is
+///    pure ASCII, so a null means we have walked back into the tar padding.
 /// 3. Reverse and return the collected slice as a trimmed string.
 fn last_nonempty_line(path: &Path) -> String {
     let bytes = fs::read(path).expect("read file");
@@ -682,7 +717,8 @@ fn last_nonempty_line(path: &Path) -> String {
         .to_owned()
 }
 
-// ── Private test-only wrappers ────────────────────────────────────────────────
+// ── Private test-only wrappers
+// ────────────────────────────────────────────────
 //
 // `build_gsi_fastboot` and `build_gsi_odin` are `pub(crate)` inside the
 // `isoman` binary crate and therefore not accessible from an external test
@@ -691,14 +727,24 @@ fn last_nonempty_line(path: &Path) -> String {
 // and does not require any visibility changes in the production code.
 
 /// Replicate `gsi::build_gsi_fastboot` using only the public `mkbootimg` API.
-fn isoman_gsi_fastboot(kernel: &Path, initramfs: &Path, output: &Path, stage: &Path) {
+fn isoman_gsi_fastboot(
+    kernel: &Path,
+    initramfs: &Path,
+    output: &Path,
+    stage: &Path,
+) {
     let boot_img = build_boot_img_inner(kernel, initramfs, stage);
     fs::copy(&boot_img, output).expect("copy boot.img to fastboot output");
 }
 
 /// Replicate `gsi::build_gsi_odin` using only the public `mkbootimg` API and
 /// `std` shell-free primitives.
-fn isoman_gsi_odin(kernel: &Path, initramfs: &Path, output: &Path, stage: &Path) {
+fn isoman_gsi_odin(
+    kernel: &Path,
+    initramfs: &Path,
+    output: &Path,
+    stage: &Path,
+) {
     use std::io::Write as _;
 
     let _boot_img = build_boot_img_inner(kernel, initramfs, stage);
@@ -731,7 +777,11 @@ fn isoman_gsi_odin(kernel: &Path, initramfs: &Path, output: &Path, stage: &Path)
 }
 
 /// Shared inner helper: build `<stage>/boot.img` via `mkbootimg` library.
-fn build_boot_img_inner(kernel: &Path, initramfs: &Path, stage: &Path) -> PathBuf {
+fn build_boot_img_inner(
+    kernel: &Path,
+    initramfs: &Path,
+    stage: &Path,
+) -> PathBuf {
     let output = stage.join("boot.img");
     let mut params = MkbootimgParams::default();
     params.output = output.to_str().unwrap().to_owned();

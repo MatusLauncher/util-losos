@@ -20,20 +20,19 @@ const HASH_SHORT: &str = "sha256:deadbeef";
 
 const BASE_URL_MEDIUM: &str = "registry.example.com/losos-linux";
 const IMAGE_TAG_MEDIUM: &str = "util-mdl:1.2.3";
-const HASH_MEDIUM: &str = "sha256:deadbeefcafe0123456789abcdef0123456789abcdef0123456789abcdef0123";
+const HASH_MEDIUM: &str =
+    "sha256:deadbeefcafe0123456789abcdef0123456789abcdef0123456789abcdef0123";
 
-const BASE_URL_LONG: &str =
-    "registry.gitlab.com/organisation/group/subgroup/project/images/losos-linux";
-const IMAGE_TAG_LONG: &str = "util-mdl-x86_64-musl:1.23.456-rc.7+build.20240101";
-const HASH_LONG: &str =
-    "sha256:aaaaaabbbbbbccccccddddddeeeeeeffffffgggggghhhhhhiiiiiijjjjjjkkkkkkllllll";
+const BASE_URL_LONG: &str = "registry.gitlab.com/organisation/group/subgroup/project/images/losos-linux";
+const IMAGE_TAG_LONG: &str =
+    "util-mdl-x86_64-musl:1.23.456-rc.7+build.20240101";
+const HASH_LONG: &str = "sha256:aaaaaabbbbbbccccccddddddeeeeeeffffffgggggghhhhhhiiiiiijjjjjjkkkkkkllllll";
 
 const BASE_URL_VERY_LONG: &str = concat!(
     "registry.very-long-hostname-that-exceeds-typical-dns-label-limits.internal.corporate.example",
     ".com/some/very/deeply/nested/image/namespace/hierarchy/for/a/large/organisation/mtos"
 );
-const IMAGE_TAG_VERY_LONG: &str =
-    "util-mdl-x86_64-unknown-linux-musl:2.100.999-alpha.42+git.abcdef1234567890.20241231";
+const IMAGE_TAG_VERY_LONG: &str = "util-mdl-x86_64-unknown-linux-musl:2.100.999-alpha.42+git.abcdef1234567890.20241231";
 const HASH_VERY_LONG: &str = concat!(
     "sha256:",
     "0000000000000000000000000000000000000000000000000000000000000000",
@@ -293,7 +292,8 @@ mod image_ref_image_tag_scaling {
         let fixed_base = "registry.example.com/mtos".to_owned();
         let fixed_hash = "sha256:cafe".to_owned();
         for len in [4usize, 8, 16, 32, 64, 96, 128] {
-            let tag: String = format!("app:{}", "v".repeat(len.saturating_sub("app:".len())));
+            let tag: String =
+                format!("app:{}", "v".repeat(len.saturating_sub("app:".len())));
             let u = UpdMan::new(
                 fixed_base.clone(),
                 tag,
@@ -317,8 +317,14 @@ mod image_ref_total_len_scaling {
                 "r.io/{}",
                 "x".repeat(base_len.saturating_sub("r.io/".len()))
             );
-            let tag: String = format!("i:{}", "t".repeat(tag_len.saturating_sub("i:".len())));
-            let u = UpdMan::new(base, tag, "sha256:00".to_owned(), "/dev/sda".to_owned());
+            let tag: String =
+                format!("i:{}", "t".repeat(tag_len.saturating_sub("i:".len())));
+            let u = UpdMan::new(
+                base,
+                tag,
+                "sha256:00".to_owned(),
+                "/dev/sda".to_owned(),
+            );
             black_box(u.image_ref());
         }
     }

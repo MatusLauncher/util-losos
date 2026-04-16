@@ -3,7 +3,8 @@
 //! Exercises:
 //! * `IpRange::from_str`  — parsing all three notations.
 //! * `IpRange::hosts`     — expanding single IPs, CIDR blocks, and dash ranges.
-//! * `CluManSchema::add`  — map-insertion from both the `Right` and `Left` variants.
+//! * `CluManSchema::add`  — map-insertion from both the `Right` and `Left`
+//!   variants.
 //! * `Tasks` push / pop   — throughput and single-operation paths.
 //! * `ServerState`        — push/claim/read operations.
 //! * `Mode` conversions   — `from_str` and `Display` for every variant.
@@ -109,19 +110,28 @@ mod ip_range_hosts {
 
     #[tokio::test]
     async fn dash_range_5() {
-        let r = IpRange::DashRange(Ipv4Addr::new(10, 0, 0, 1), Ipv4Addr::new(10, 0, 0, 5));
+        let r = IpRange::DashRange(
+            Ipv4Addr::new(10, 0, 0, 1),
+            Ipv4Addr::new(10, 0, 0, 5),
+        );
         black_box(r.hosts());
     }
 
     #[tokio::test]
     async fn dash_range_256() {
-        let r = IpRange::DashRange(Ipv4Addr::new(10, 0, 0, 0), Ipv4Addr::new(10, 0, 0, 255));
+        let r = IpRange::DashRange(
+            Ipv4Addr::new(10, 0, 0, 0),
+            Ipv4Addr::new(10, 0, 0, 255),
+        );
         black_box(r.hosts());
     }
 
     #[tokio::test]
     async fn dash_range_1024() {
-        let r = IpRange::DashRange(Ipv4Addr::new(10, 0, 0, 0), Ipv4Addr::new(10, 0, 3, 255));
+        let r = IpRange::DashRange(
+            Ipv4Addr::new(10, 0, 0, 0),
+            Ipv4Addr::new(10, 0, 3, 255),
+        );
         black_box(r.hosts());
     }
 }
@@ -145,7 +155,10 @@ mod cluman_schema_add {
 
     #[tokio::test]
     async fn first_add_from_right() {
-        let mut schema = CluManSchema::registration(Ipv4Addr::new(10, 0, 0, 1), Mode::Client);
+        let mut schema = CluManSchema::registration(
+            Ipv4Addr::new(10, 0, 0, 1),
+            Mode::Client,
+        );
         schema.add(Ipv4Addr::new(10, 0, 0, 2), Mode::Server);
         black_box(schema);
     }
@@ -325,7 +338,8 @@ mod server_state {
     #[tokio::test]
     async fn register_client() {
         let s = ServerState::new();
-        // Fixed IP used in place of fastrand — this is a smoke tokio::test, not a measurement.
+        // Fixed IP used in place of fastrand — this is a smoke tokio::test, not
+        // a measurement.
         black_box(s.register_client(Ipv4Addr::from(0x0A00_0064_u32)));
     }
 

@@ -7,18 +7,23 @@
 //!   full-path and unknown-name fast-paths.
 //! * `Preboot::new` / `Preboot::default` — construction (live sysfs probes).
 
-use actman::{cmdline::CmdLineOptions, nfs::parse_nfs_spec, preboot::Preboot, reboot::RebootCMD};
+use actman::{
+    cmdline::CmdLineOptions, nfs::parse_nfs_spec, preboot::Preboot,
+    reboot::RebootCMD,
+};
 use std::hint::black_box;
 
 const CMDLINE_BARE_FLAGS: &str = "quiet ro splash";
-const CMDLINE_SMALL: &str = "console=ttyS0 earlyprintk=ttyS0 quiet net.ifnames=0 biosdevname=0";
+const CMDLINE_SMALL: &str =
+    "console=ttyS0 earlyprintk=ttyS0 quiet net.ifnames=0 biosdevname=0";
 const CMDLINE_MEDIUM: &str = "console=ttyS0 earlyprintk=ttyS0 quiet ro net.ifnames=0 biosdevname=0 \
      server_url=http://10.0.0.1:21 own_ip=10.0.0.42 tag=util-mdl:latest \
      hash=sha256:deadbeefcafe data_drive=/dev/sda2 base_url=registry.example.com/mtos";
 const CMDLINE_VALUES_WITH_EQUALS: &str =
     "url=http://host/path?a=1&b=2 token=abc=def== other=x=y console=ttyS0";
 // Boot parameter payloads for LUKS/LVM/NFS features.
-// LUKS and LVM are now auto-detected from data_drive — no separate flags needed.
+// LUKS and LVM are now auto-detected from data_drive — no separate flags
+// needed.
 const CMDLINE_LUKS: &str = "console=ttyS0 quiet data_drive=/dev/sda2";
 const CMDLINE_LVM: &str = "console=ttyS0 quiet data_drive=/dev/vg0/data";
 const CMDLINE_LUKS_KEYFILE: &str =

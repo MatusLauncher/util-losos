@@ -2,8 +2,8 @@
 //!
 //! Exercises:
 //! * `ModeOfOperation::from` — executable-name-to-mode dispatch.
-//! * `GpuVendor` / `DeviceClass` / `GpuDevice` — Display formatting and
-//!   vendor helper methods.
+//! * `GpuVendor` / `DeviceClass` / `GpuDevice` — Display formatting and vendor
+//!   helper methods.
 //! * `vendors_present` — vendor deduplication over device lists.
 //! * `build_container_spec` — container specification construction from
 //!   detected devices and kernel command-line overrides.
@@ -263,7 +263,11 @@ mod build_container_spec_tests {
     fn nvidia_returns_some() {
         let devices = nvidia_devices(1);
         let opts = HashMap::new();
-        let spec = black_box(build_container_spec(&GpuVendor::Nvidia, &devices, &opts));
+        let spec = black_box(build_container_spec(
+            &GpuVendor::Nvidia,
+            &devices,
+            &opts,
+        ));
         assert!(spec.is_some());
     }
 
@@ -271,7 +275,8 @@ mod build_container_spec_tests {
     fn amd_returns_some() {
         let devices = vec![make_device(GpuVendor::Amd, "0000:01:00.0")];
         let opts = HashMap::new();
-        let spec = black_box(build_container_spec(&GpuVendor::Amd, &devices, &opts));
+        let spec =
+            black_box(build_container_spec(&GpuVendor::Amd, &devices, &opts));
         assert!(spec.is_some());
     }
 
@@ -279,13 +284,15 @@ mod build_container_spec_tests {
     fn intel_returns_some() {
         let devices = vec![make_device(GpuVendor::Intel, "0000:01:00.0")];
         let opts = HashMap::new();
-        let spec = black_box(build_container_spec(&GpuVendor::Intel, &devices, &opts));
+        let spec =
+            black_box(build_container_spec(&GpuVendor::Intel, &devices, &opts));
         assert!(spec.is_some());
     }
 
     #[test]
     fn unknown_vendor_returns_none() {
-        let devices = vec![make_device(GpuVendor::Unknown(0x9999), "0000:01:00.0")];
+        let devices =
+            vec![make_device(GpuVendor::Unknown(0x9999), "0000:01:00.0")];
         let opts = HashMap::new();
         let spec = black_box(build_container_spec(
             &GpuVendor::Unknown(0x9999),
@@ -299,14 +306,19 @@ mod build_container_spec_tests {
     fn no_matching_devices_returns_none() {
         let devices = vec![make_device(GpuVendor::Amd, "0000:01:00.0")];
         let opts = HashMap::new();
-        let spec = black_box(build_container_spec(&GpuVendor::Nvidia, &devices, &opts));
+        let spec = black_box(build_container_spec(
+            &GpuVendor::Nvidia,
+            &devices,
+            &opts,
+        ));
         assert!(spec.is_none());
     }
 
     #[test]
     fn empty_devices_returns_none() {
         let opts = HashMap::new();
-        let spec = black_box(build_container_spec(&GpuVendor::Nvidia, &[], &opts));
+        let spec =
+            black_box(build_container_spec(&GpuVendor::Nvidia, &[], &opts));
         assert!(spec.is_none());
     }
 }
@@ -324,7 +336,8 @@ mod build_container_spec_cmdline_override {
             "gpu_nvidia_image".to_string(),
             "custom/cuda:latest".to_string(),
         );
-        let spec = build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
+        let spec =
+            build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
         assert_eq!(black_box(&spec.image), "custom/cuda:latest");
     }
 
@@ -336,7 +349,8 @@ mod build_container_spec_cmdline_override {
             "gpu_amd_image".to_string(),
             "custom/rocm:latest".to_string(),
         );
-        let spec = build_container_spec(&GpuVendor::Amd, &devices, &opts).unwrap();
+        let spec =
+            build_container_spec(&GpuVendor::Amd, &devices, &opts).unwrap();
         assert_eq!(black_box(&spec.image), "custom/rocm:latest");
     }
 
@@ -348,7 +362,8 @@ mod build_container_spec_cmdline_override {
             "gpu_intel_image".to_string(),
             "custom/oneapi:latest".to_string(),
         );
-        let spec = build_container_spec(&GpuVendor::Intel, &devices, &opts).unwrap();
+        let spec =
+            build_container_spec(&GpuVendor::Intel, &devices, &opts).unwrap();
         assert_eq!(black_box(&spec.image), "custom/oneapi:latest");
     }
 
@@ -356,7 +371,8 @@ mod build_container_spec_cmdline_override {
     fn default_image_when_no_override() {
         let devices = nvidia_devices(1);
         let opts = HashMap::new();
-        let spec = build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
+        let spec =
+            build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
         assert!(black_box(&spec.image).contains("nvidia/cuda"));
     }
 }
@@ -370,16 +386,19 @@ mod build_container_spec_device_nodes {
     fn render_nodes_collected() {
         let devices = nvidia_devices(2);
         let opts = HashMap::new();
-        let spec = build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
+        let spec =
+            build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
         // Each device contributes one render node.
         assert!(black_box(spec.devices.len()) >= 2);
     }
 
     #[test]
     fn accel_nodes_collected() {
-        let devices = vec![make_device_with_accel(GpuVendor::Intel, "0000:01:00.0")];
+        let devices =
+            vec![make_device_with_accel(GpuVendor::Intel, "0000:01:00.0")];
         let opts = HashMap::new();
-        let spec = build_container_spec(&GpuVendor::Intel, &devices, &opts).unwrap();
+        let spec =
+            build_container_spec(&GpuVendor::Intel, &devices, &opts).unwrap();
         assert!(black_box(&spec.devices).iter().any(|d| d.contains("accel")));
     }
 
@@ -391,8 +410,10 @@ mod build_container_spec_device_nodes {
             make_device(GpuVendor::Nvidia, "0000:03:00.0"),
         ];
         let opts = HashMap::new();
-        let spec = build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
-        // Only 2 NVIDIA devices, so 2 render nodes (plus potential NVIDIA control nodes).
+        let spec =
+            build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
+        // Only 2 NVIDIA devices, so 2 render nodes (plus potential NVIDIA
+        // control nodes).
         assert!(black_box(spec.devices.len()) >= 2);
     }
 }
@@ -406,7 +427,8 @@ mod container_spec_naming {
     fn nvidia_name() {
         let devices = nvidia_devices(1);
         let opts = HashMap::new();
-        let spec = build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
+        let spec =
+            build_container_spec(&GpuVendor::Nvidia, &devices, &opts).unwrap();
         assert_eq!(black_box(&spec.name), "gpuman-nvidia");
     }
 
@@ -414,7 +436,8 @@ mod container_spec_naming {
     fn amd_name() {
         let devices = vec![make_device(GpuVendor::Amd, "0000:01:00.0")];
         let opts = HashMap::new();
-        let spec = build_container_spec(&GpuVendor::Amd, &devices, &opts).unwrap();
+        let spec =
+            build_container_spec(&GpuVendor::Amd, &devices, &opts).unwrap();
         assert_eq!(black_box(&spec.name), "gpuman-amd");
     }
 
@@ -422,7 +445,8 @@ mod container_spec_naming {
     fn intel_name() {
         let devices = vec![make_device(GpuVendor::Intel, "0000:01:00.0")];
         let opts = HashMap::new();
-        let spec = build_container_spec(&GpuVendor::Intel, &devices, &opts).unwrap();
+        let spec =
+            build_container_spec(&GpuVendor::Intel, &devices, &opts).unwrap();
         assert_eq!(black_box(&spec.name), "gpuman-intel");
     }
 }
