@@ -8,7 +8,7 @@ version = "0.1.0"
 dependencies = [
  "bootlib",
  "miette",
- "rustix 1.1.4",
+ "rustix",
  "strum 0.28.0",
  "tracing",
  "tracing-subscriber",
@@ -24,7 +24,7 @@ dependencies = [
  "luks",
  "miette",
  "overlayfs_fuse",
- "rustix 1.1.4",
+ "rustix",
  "serde_json",
  "strum 0.28.0",
  "tracing",
@@ -420,12 +420,6 @@ checksum = "022dfe9eb35f19ebbcb51e0b40a5ab759f46ad60cadf7297e0bd085afb50e076"
 
 [[package]]
 name = "base64"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
-
-[[package]]
-name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
@@ -464,35 +458,12 @@ dependencies = [
  "isoman",
  "mkbootimg",
  "pm",
- "rustix 1.1.4",
+ "rustix",
  "serde_json",
  "tempfile",
  "tokio",
  "updman",
  "walkdir",
-]
-
-[[package]]
-name = "bindgen"
-version = "0.66.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2b84e06fc203107bfbad243f4aba2af864eb7db3b1cf46ea0a023b0b433d2a7"
-dependencies = [
- "bitflags 2.11.0",
- "cexpr",
- "clang-sys",
- "lazy_static",
- "lazycell",
- "log",
- "peeking_take_while",
- "prettyplease",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash 1.1.0",
- "shlex",
- "syn 2.0.117",
- "which",
 ]
 
 [[package]]
@@ -652,7 +623,7 @@ version = "0.1.0"
 dependencies = [
  "bootlib",
  "miette",
- "rustix 1.1.4",
+ "rustix",
  "serial_test",
  "tempfile",
  "testman",
@@ -665,7 +636,7 @@ name = "bootimg-sys"
 version = "0.1.0"
 source = "git+https://gitlab.com/losos-linux/mkbootimg#34974886ed3705fc54d107a0716e69f8db6dc0b7"
 dependencies = [
- "bindgen 0.70.1",
+ "bindgen",
  "cc",
 ]
 
@@ -677,7 +648,7 @@ dependencies = [
  "luks",
  "miette",
  "overlayfs_fuse",
- "rustix 1.1.4",
+ "rustix",
  "serde_json",
  "strum 0.28.0",
  "tracing",
@@ -919,7 +890,7 @@ dependencies = [
  "reqwest",
  "russh",
  "russh-keys",
- "rustix 1.1.4",
+ "rustix",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1154,7 +1125,7 @@ dependencies = [
  "document-features",
  "mio",
  "parking_lot",
- "rustix 1.1.4",
+ "rustix",
  "signal-hook",
  "signal-hook-mio",
  "winapi",
@@ -1737,18 +1708,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "embed-doc-image"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af36f591236d9d822425cb6896595658fa558fcebf5ee8accac1d4b92c47166e"
-dependencies = [
- "base64 0.13.1",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "encode_unicode"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1773,26 +1732,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "enum-iterator"
-version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4549325971814bda7a44061bf3fe7e487d447cba01e4220a4b454d630d7a016"
-dependencies = [
- "enum-iterator-derive",
-]
-
-[[package]]
-name = "enum-iterator-derive"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "685adfa4d6f3d765a26bc5dbc936577de9abf756c1feeb3089b01dd395034842"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]
@@ -2941,7 +2880,7 @@ name = "iptman"
 version = "0.1.0"
 source = "git+https://gitlab.com/losos-linux/iptman#56af69e28d8afc4b74714a73289be7d72d01551d"
 dependencies = [
- "rustix 1.1.4",
+ "rustix",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -3094,12 +3033,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lazycell"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
-
-[[package]]
 name = "leb128fmt"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3147,12 +3080,6 @@ checksum = "3f50e8f47623268b5407192d26876c4d7f89d686ca130fdc53bced4814cd29f8"
 dependencies = [
  "bitflags 2.11.0",
 ]
-
-[[package]]
-name = "linux-raw-sys"
-version = "0.4.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d26c52dbd32dccf2d10cac7725f8eae5296885fb5703b261f7d0a0739ec807ab"
 
 [[package]]
 name = "linux-raw-sys"
@@ -3969,12 +3896,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "peeking_take_while"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
-
-[[package]]
 name = "pem"
 version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4179,7 +4100,7 @@ dependencies = [
  "fetch-data",
  "miette",
  "rayon",
- "rustix 1.1.4",
+ "rustix",
  "serde",
  "sha256",
  "toml",
@@ -4302,7 +4223,6 @@ dependencies = [
  "miette",
  "regex",
  "reqwest",
- "rsfdisk",
  "serde_json",
  "sha2",
  "tar",
@@ -4887,35 +4807,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rsfdisk"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f3e8840f0a90f40b73165df1f71668c47de0e318072122d74aa2b1ebde18405"
-dependencies = [
- "embed-doc-image",
- "enum-iterator",
- "libc",
- "log",
- "num_enum",
- "once_cell",
- "pkg-config",
- "rsfdisk-sys",
- "thiserror 1.0.69",
- "typed-builder",
-]
-
-[[package]]
-name = "rsfdisk-sys"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b39b186475d9df76290bba3de5196eeed64b95e77861095ea8b244f962f47575"
-dependencies = [
- "bindgen 0.66.1",
- "cc",
- "pkg-config",
-]
-
-[[package]]
 name = "russh"
 version = "0.49.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5098,19 +4989,6 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.44"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
-dependencies = [
- "bitflags 2.11.0",
- "errno",
- "libc",
- "linux-raw-sys 0.4.15",
- "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "rustix"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190"
@@ -5118,7 +4996,7 @@ dependencies = [
  "bitflags 2.11.0",
  "errno",
  "libc",
- "linux-raw-sys 0.12.1",
+ "linux-raw-sys",
  "windows-sys 0.61.2",
 ]
 
@@ -5949,7 +5827,7 @@ dependencies = [
  "fastrand",
  "getrandom 0.4.2",
  "once_cell",
- "rustix 1.1.4",
+ "rustix",
  "windows-sys 0.61.2",
 ]
 
@@ -5959,7 +5837,7 @@ version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
- "rustix 1.1.4",
+ "rustix",
  "windows-sys 0.61.2",
 ]
 
@@ -6506,26 +6384,6 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
-
-[[package]]
-name = "typed-builder"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd9d30e3a08026c78f246b173243cf07b3696d274debd26680773b6773c2afc7"
-dependencies = [
- "typed-builder-macro",
-]
-
-[[package]]
-name = "typed-builder-macro"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c36781cc0e46a83726d9879608e4cf6c2505237e263a8eb8c24502989cfdb28"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
 
 [[package]]
 name = "typenum"
@@ -7096,18 +6954,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "which"
-version = "4.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87ba24419a2078cd2b0f2ede2691b6c66d8e47836da3b6db8265ebad47afbfc7"
-dependencies = [
- "either",
- "home",
- "once_cell",
- "rustix 0.38.44",
-]
-
-[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7563,7 +7409,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
 dependencies = [
  "libc",
- "rustix 1.1.4",
+ "rustix",
 ]
 
 [[package]]
