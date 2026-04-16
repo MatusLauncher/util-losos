@@ -2919,6 +2919,7 @@ dependencies = [
  "mkbootimg",
  "serde",
  "serde_json",
+ "tar",
  "tempfile",
  "tracing",
  "tracing-subscriber",
