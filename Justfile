@@ -15,7 +15,7 @@
 #   just dev                 Pull all submodules and build the workspace
 # ── Configurable variables (override via env or 'just var=value recipe') ──────
 
-kernel := env("KERNEL", `find /boot -maxdepth 4 -type f -name "vmlinuz-$(uname -r)" -print`)
+kernel := env("KERNEL", "")
 memory := env("MEMORY", "2G")
 cpus := env("CPUS", "4")
 kvm := env("KVM", "1")

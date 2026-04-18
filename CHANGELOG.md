@@ -127,6 +127,7 @@
 ### Miscellaneous
 
 - Update isoman submodule
+- Update isoman submodule
 - Update submodules (actman, gpuman, pcm, book, user)
 - Update bootlib and bootenv submodules
 - Update bootlib and bootenv submodules
