@@ -44,13 +44,13 @@ default: build-secure-boot run
 # Build the OS disk image (GPT with LUKS2-encrypted initramfs partition)
 build: _dm-integrity
     @echo "==> Building OS disk image (LUKS2-encrypted P3)..."
-    sudo -E cargo run -p isoman -- --build
+    cargo run -p isoman -- --build
     @echo "==> Disk image written to os-<mode>.img"
 
 # Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
 build-config config_path=isoman_config: _dm-integrity
     @echo "==> Building from config: {{ config_path }}"
-    sudo -E cargo run -p isoman -- --build --config "{{ config_path }}"
+    cargo run -p isoman -- --build --config "{{ config_path }}"
 
 # Build a GSI (Fastboot + Odin) instead of a bootable ISO
 build-gsi:
@@ -64,19 +64,19 @@ build-gsi-fastboot:
 # Build production-hardened OS image (loglevel=0 + security mitigations baked into UKI cmdline)
 build-prod: _dm-integrity
     @echo "==> Building production OS disk image (hardened cmdline)..."
-    sudo -E cargo run -p isoman -- --build --profile prod --kernel "{{ kernel }}"
+    cargo run -p isoman -- --build --profile prod --kernel "{{ kernel }}"
     @echo "==> Production disk image written to os-<mode>.img"
 
 # Build production live OS image (hardened cmdline + container-ready for preflight)
 build-prod-live: _dm-integrity
     @echo "==> Building production live OS disk image (container-ready for preflight)..."
-    sudo -E cargo run -p isoman -- --build --profile prod-live --kernel "{{ kernel }}"
+    cargo run -p isoman -- --build --profile prod-live --kernel "{{ kernel }}"
     @echo "==> Production live disk image written to os-<mode>.img"
 
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
 build-secure-boot: _dm-integrity
     @echo "==> Building with Secure Boot signing..."
-    sudo -E cargo run -p isoman -- --build --output "{{ output }}" --secure-boot --kernel "{{ kernel }}"
+    cargo run -p isoman -- --build --output "{{ output }}" --secure-boot --kernel "{{ kernel }}"
 
 # Build initramfs then launch in QEMU
 build-run: build run
