@@ -13,6 +13,7 @@
 #   just build-run           Build then launch
 #   just build-test          Build then test
 #   just dev                 Pull all submodules and build the workspace
+#   just setup-sbctl         Generate Secure Boot key hierarchy (PK/KEK/db) via sbctl in an ephemeral Arch Linux container
 # ── Configurable variables (override via env or 'just var=value recipe') ──────
 
 kernel := env("KERNEL", "")
@@ -37,6 +38,41 @@ _dm-integrity:
 dev:
     @echo "==> Pulling submodules..."
     git submodule update --remote --merge
+
+# Generate a full UEFI Secure Boot key hierarchy (PK, KEK, db) via sbctl in an
+# ephemeral Arch Linux container.  The db signing key/cert are copied to
+# sb-key.pem / sb-cert.pem in the project root where isoman --secure-boot
+# picks them up automatically.  The full hierarchy lives in secure-boot/.
+setup-sbctl:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    SB_DIR="$(pwd)/secure-boot"
+    mkdir -p "$SB_DIR"
+
+    echo "==> Generating Secure Boot key hierarchy via sbctl (ephemeral archlinux container)..."
+    podman run --rm \
+        --name sbctl-setup \
+        -v "$SB_DIR:/usr/share/secureboot:Z" \
+        docker.io/archlinux:latest \
+        bash -c "
+            pacman -Sy --noconfirm --quiet sbctl 2>&1 | tail -3
+            sbctl create-keys
+        "
+
+    # The db key/cert are what sbsign (isoman --secure-boot) needs.
+    cp "$SB_DIR/keys/db/db.key" sb-key.pem
+    cp "$SB_DIR/keys/db/db.pem" sb-cert.pem
+    chmod 600 sb-key.pem
+
+    echo ""
+    echo "==> Full key hierarchy written to secure-boot/"
+    echo "    PK  : secure-boot/keys/PK/PK.{key,pem}"
+    echo "    KEK : secure-boot/keys/KEK/KEK.{key,pem}"
+    echo "    db  : secure-boot/keys/db/db.{key,pem}"
+    echo ""
+    echo "==> Signing key/cert copied to sb-key.pem / sb-cert.pem"
+    echo "    Run 'just build-secure-boot' to sign the EFI binary with these keys."
 
 # Launch initramfs in QEMU (default)
 default: build-secure-boot run
