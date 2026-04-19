@@ -5,3 +5,6 @@ initramfs*
 vmlinuz*
 os*.initramfs.tar.gz
 os*.iso
+sb-key.pem
+sb-cert.pem
+secure-boot/

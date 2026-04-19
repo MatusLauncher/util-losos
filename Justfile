@@ -22,8 +22,8 @@ cpus := env("CPUS", "4")
 kvm := env("KVM", "1")
 disk := env("DISK", "")
 output := env("OUTPUT", "os-client.img")
-ovmf_code := env("OVMF_CODE", "/usr/share/edk2/ovmf/OVMF_CODE.fd")
-ovmf_vars := env("OVMF_VARS", "/usr/share/edk2/ovmf/OVMF_VARS.fd")
+ovmf_code := env("OVMF_CODE", "/usr/share/edk2/x64/OVMF_CODE.4m.fd")
+ovmf_vars := env("OVMF_VARS", "/usr/share/edk2/x64/OVMF_VARS.4m.fd")
 isoman_config := env("ISOMAN_CONFIG", "")
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -31,6 +31,15 @@ isoman_config := env("ISOMAN_CONFIG", "")
 # Load dm-integrity and ensure root access for cryptsetup loop-device operations.
 _dm-integrity:
     sudo modprobe dm-integrity
+
+# Generate Secure Boot keys only when sb-key.pem / sb-cert.pem are absent.
+_ensure-sb-keys:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ ! -f sb-key.pem || ! -f sb-cert.pem ]]; then
+        echo "==> Secure Boot keys not found — generating via sbctl..."
+        just setup-sbctl
+    fi
 
 # ── Public recipes ────────────────────────────────────────────────────────────
 
@@ -80,8 +89,8 @@ default: build-secure-boot run
 # Build the OS disk image (GPT with LUKS2-encrypted initramfs partition)
 build: _dm-integrity
     @echo "==> Building OS disk image (LUKS2-encrypted P3)..."
-    cargo run -p isoman -- --build
-    @echo "==> Disk image written to os-<mode>.img"
+    cargo run -p isoman -- --build --output "{{ output }}"
+    @echo "==> Disk image written to {{ output }}"
 
 # Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
 build-config config_path=isoman_config: _dm-integrity
@@ -98,19 +107,19 @@ build-gsi-fastboot:
     cargo run -p isoman -- --build --gsi --gsi-fastboot
 
 # Build production-hardened OS image (loglevel=0 + security mitigations baked into UKI cmdline)
-build-prod: _dm-integrity
+build-prod: _dm-integrity _ensure-sb-keys
     @echo "==> Building production OS disk image (hardened cmdline)..."
     cargo run -p isoman -- --build --profile prod --kernel "{{ kernel }}"
     @echo "==> Production disk image written to os-<mode>.img"
 
 # Build production live OS image (hardened cmdline + container-ready for preflight)
-build-prod-live: _dm-integrity
+build-prod-live: _dm-integrity _ensure-sb-keys
     @echo "==> Building production live OS disk image (container-ready for preflight)..."
     cargo run -p isoman -- --build --profile prod-live --kernel "{{ kernel }}"
     @echo "==> Production live disk image written to os-<mode>.img"
 
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
-build-secure-boot: _dm-integrity
+build-secure-boot: _dm-integrity _ensure-sb-keys
     @echo "==> Building with Secure Boot signing..."
     cargo run -p isoman -- --build --output "{{ output }}" --secure-boot --kernel "{{ kernel }}"
 
@@ -120,8 +129,8 @@ build-run: build run
 # Build initramfs then run integration tests
 build-test: build test
 
-# Run testman integration tests
-test:
+# Run testman integration tests (builds non-prod encrypted disk image first)
+test: build
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -156,7 +165,7 @@ run:
     # Extra data disk (e.g. for persistent storage).  The OS image is /dev/vda;
     # the optional data disk appears as /dev/vdb.
     data_disk_args=()
-    [[ -n "{{ disk }}" ]] && data_disk_args=(-drive "file={{ disk }},format=raw,if=virtio,${data_disk_args[@]}")
+    [[ -n "{{ disk }}" ]] && data_disk_args=(-drive "file={{ disk }},format=raw,if=virtio")
 
     # OVMF_VARS must be writable; use a temp copy to avoid mutating the
     # system-wide file.
