@@ -106,7 +106,7 @@ build-gsi:
 build-gsi-fastboot:
     cargo run -p isoman -- --build --gsi --gsi-fastboot
 
-# Build production-hardened OS image (loglevel=0 + security mitigations baked into UKI cmdline)
+# Build production-hardened OS image (loglevel=0 + security mitigations)
 build-prod: _dm-integrity _ensure-sb-keys
     @echo "==> Building production OS disk image (hardened cmdline)..."
     cargo run -p isoman -- --build --profile prod --kernel "{{ kernel }}"
