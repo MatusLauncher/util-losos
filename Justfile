@@ -130,6 +130,25 @@ build-run: build run
 # Build initramfs then run integration tests
 build-test: build test
 
+# Run testman integration tests in legacy BIOS mode (El Torito, no OVMF)
+test-bios: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "==> Running testman integration tests (BIOS/El Torito mode)"
+    echo "    ISO:         {{ output }}"
+    echo "    Memory:      {{ memory }}"
+    echo "    CPUs:        {{ cpus }}"
+    echo ""
+
+    exec env \
+        ISO="{{ output }}" \
+        MEMORY="{{ memory }}" \
+        CPUS="{{ cpus }}" \
+        KVM="{{ kvm }}" \
+        BIOS=1 \
+        cargo test --manifest-path crates/testman/Cargo.toml -- --test-threads=1 --include-ignored
+
 # Run testman integration tests (builds non-prod encrypted disk image first)
 test: build
     #!/usr/bin/env bash
