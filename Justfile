@@ -21,7 +21,7 @@ memory := env("MEMORY", "2G")
 cpus := env("CPUS", "4")
 kvm := env("KVM", "1")
 disk := env("DISK", "")
-output := env("OUTPUT", "os-client.img")
+output := env("OUTPUT", "os-client.iso")
 ovmf_code := env("OVMF_CODE", "/usr/share/edk2/x64/OVMF_CODE.4m.fd")
 ovmf_vars := env("OVMF_VARS", "/usr/share/edk2/x64/OVMF_VARS.4m.fd")
 isoman_config := env("ISOMAN_CONFIG", "")
@@ -86,16 +86,16 @@ setup-sbctl:
 # Launch initramfs in QEMU (default)
 default: build-secure-boot run
 
-# Build the OS disk image (GPT with LUKS2-encrypted initramfs partition)
+# Build the OS ISO image (Hybrid BIOS+UEFI with LUKS2-encrypted initramfs partition)
 build: _dm-integrity
-    @echo "==> Building OS disk image (LUKS2-encrypted P3)..."
+    @echo "==> Building OS ISO image (LUKS2-encrypted P3)..."
     cargo run -p isoman -- --build --output "{{ output }}"
-    @echo "==> Disk image written to {{ output }}"
+    @echo "==> ISO image written to {{ output }}"
 
 # Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
 build-config config_path=isoman_config: _dm-integrity
     @echo "==> Building from config: {{ config_path }}"
-    cargo run -p isoman -- --build --config "{{ config_path }}"
+    cargo run -p isoman -- --build --config "{{ config_path }}" --output "{{ output }}"
 
 # Build a GSI (Fastboot + Odin) instead of a bootable ISO
 build-gsi:
@@ -121,7 +121,8 @@ build-prod-live: _dm-integrity _ensure-sb-keys
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
 build-secure-boot: _dm-integrity _ensure-sb-keys
     @echo "==> Building with Secure Boot signing..."
-    cargo run -p isoman -- --build --output "{{ output }}" --secure-boot --kernel "{{ kernel }}"
+    kernel_arg=$([[ -n "{{ kernel }}" ]] && echo "--kernel {{ kernel }}" || echo ""); \
+    cargo run -p isoman -- --build --output "{{ output }}" --secure-boot true $kernel_arg
 
 # Build initramfs then launch in QEMU
 build-run: build run
@@ -147,12 +148,12 @@ test: build
         KVM="{{ kvm }}" \
         cargo test --manifest-path crates/testman/Cargo.toml -- --test-threads=1 --include-ignored
 
-# Launch OS disk image in QEMU via UEFI (OVMF pflash + virtio drive)
+# Launch OS ISO image in QEMU via UEFI (OVMF pflash + virtio drive)
 run:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    echo "==> Launching OS disk image"
+    echo "==> Launching OS ISO image (UEFI)"
     echo "    Image:     {{ output }}"
     echo "    Memory:    {{ memory }}"
     echo "    CPUs:      {{ cpus }}"
@@ -178,6 +179,35 @@ run:
         -smp "{{ cpus }}" \
         -drive "if=pflash,format=raw,readonly=on,file={{ ovmf_code }}" \
         -drive "if=pflash,format=raw,file=$tmp_vars" \
+        -drive "file={{ output }},format=raw,if=virtio" \
+        -nographic \
+        -nic user \
+        -netdev user,id=n0 \
+        -device virtio-net-pci,netdev=n0 \
+        "${data_disk_args[@]}" \
+        "${kvm_flag[@]}"
+
+# Launch OS ISO image in QEMU via Legacy BIOS
+run-bios:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "==> Launching OS ISO image (Legacy BIOS)"
+    echo "    Image:     {{ output }}"
+    echo "    Memory:    {{ memory }}"
+    echo "    CPUs:      {{ cpus }}"
+    [[ -n "{{ disk }}" ]] && echo "    Data disk: {{ disk }} (→ /dev/vdb)"
+    echo ""
+
+    kvm_flag=()
+    [[ "{{ kvm }}" -eq 1 ]] && kvm_flag=(-enable-kvm)
+
+    data_disk_args=()
+    [[ -n "{{ disk }}" ]] && data_disk_args=(-drive "file={{ disk }},format=raw,if=virtio")
+
+    exec qemu-system-x86_64 \
+        -m "{{ memory }}" \
+        -smp "{{ cpus }}" \
         -drive "file={{ output }},format=raw,if=virtio" \
         -nographic \
         -nic user \

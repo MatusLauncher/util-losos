@@ -221,7 +221,7 @@ Key source files:
 
 1. **Build the initramfs** — generate the Containerfile from the template embedded in `crates/isoman/src/schema.rs`, bake in the chosen `cluman` mode (`ARG MODE=<mode>`), and invoke `podman build`. Output is mode-stamped (`os-<mode>.initramfs.tar.gz`) so client and server archives never collide.
 
-2. **Assemble the ISO** — clone the Limine bootloader, copy the kernel and initramfs into a staging directory, and call `xorriso` to produce a hybrid BIOS+UEFI ISO. Output defaults to `os-<mode>.iso`.
+2. **Assemble the ISO** — fetch the Limine bootloader from GitHub, copy the kernel and initramfs into a staging directory, and call `xorriso` to produce a hybrid BIOS+UEFI ISO. Output defaults to `os-<mode>.iso`.
 
 3. **Build a GSI** — use the [`mkbootimg`](https://gitlab.com/losos-linux/mkbootimg) Rust library (wrapping the upstream Android `mkbootimg` C tool) to bundle the kernel and initramfs into an Android boot image. Supports two output formats:
    - **Fastboot** — raw `boot.img` flashable via `fastboot flash boot`.
@@ -235,7 +235,8 @@ Key source files:
 
 - `crates/isoman/src/schema.rs` — `ContMode` renderer + embedded Containerfile stage constants
 - `crates/isoman/src/container.rs` — `podman build` / `podman cp` invocation
-- `crates/isoman/src/build.rs` — Limine ISO assembly
+- `crates/isoman/src/build.rs` — ISO assembly logic using Limine + xorriso
+- `crates/isoman/src/limine.rs` — Automated Limine bootloader downloader
 - `crates/isoman/src/gsi.rs` — GSI builder using the `mkbootimg` library
 - `crates/isoman/src/main.rs` — `clap` CLI entry point; `find_kernel` auto-detection
 
