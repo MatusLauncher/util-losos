@@ -146,14 +146,14 @@ Use conventional commit format:
 - **Never push without committing** — ensure all changes are committed
 - **Use `git add -A`** to stage all changes including deletions
 - **Check `git status`** before committing to verify what will be included
-- **Run tests** (`cargo test`) before committing code changes
+- **Run tests** (`cargo nextest run`) before committing code changes
 - **Run linting** (`cargo clippy`, `cargo fmt --check`) before committing Rust code
 
 ### Pre-commit Checklist
 
 Before pushing, verify:
 1. ✅ Code compiles (`cargo build` or `cargo build --manifest-path crates/<name>/Cargo.toml`)
-2. ✅ Tests pass (`cargo test`)
+2. ✅ Tests pass (`cargo nextest run`)
 3. ✅ No clippy warnings (`cargo clippy`)
 4. ✅ Code is formatted (`cargo fmt`)
 5. ✅ Documentation updated if API changed

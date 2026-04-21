@@ -29,6 +29,14 @@ isoman_config := env("ISOMAN_CONFIG", "")
 
 # ── Private helpers ───────────────────────────────────────────────────────────
 
+# Ensure cargo-nextest is installed
+_ensure-nextest:
+    #!/usr/bin/env bash
+    if ! command -v cargo-nextest &> /dev/null; then
+        echo "==> cargo-nextest not found — installing..."
+        cargo install cargo-nextest --locked
+    fi
+
 # Load dm-integrity and ensure root access for cryptsetup loop-device operations.
 _dm-integrity:
     sudo modprobe dm-integrity
@@ -138,7 +146,7 @@ build-run: build run
 build-test: build test
 
 # Run testman integration tests in legacy BIOS mode (El Torito, no OVMF)
-test-bios: build
+test-bios: build _ensure-nextest
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -154,10 +162,10 @@ test-bios: build
         CPUS="{{ cpus }}" \
         KVM="{{ kvm }}" \
         BIOS=1 \
-        cargo test --manifest-path crates/testman/Cargo.toml -- --test-threads=1 --include-ignored
+        cargo nextest run --manifest-path crates/testman/Cargo.toml --test-threads 1 --run-ignored all
 
 # Run testman integration tests (builds non-prod encrypted disk image first)
-test: build
+test: build _ensure-nextest
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -172,7 +180,7 @@ test: build
         MEMORY="{{ memory }}" \
         CPUS="{{ cpus }}" \
         KVM="{{ kvm }}" \
-        cargo test --manifest-path crates/testman/Cargo.toml -- --test-threads=1 --include-ignored
+        cargo nextest run --manifest-path crates/testman/Cargo.toml --test-threads 1 --run-ignored all
 
 # Launch OS ISO image in QEMU via UEFI (OVMF pflash + virtio drive)
 run:

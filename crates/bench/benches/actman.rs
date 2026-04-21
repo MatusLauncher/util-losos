@@ -3,13 +3,13 @@
 //! Exercises:
 //! * `CmdLineOptions::param_search` — the kernel command-line parser, at
 //!   various input sizes and shapes.
-//! * `RebootCMD::from` — basename-to-mode dispatch for every variant plus the
+//! * `RebootCmd::from` — basename-to-mode dispatch for every variant plus the
 //!   full-path and unknown-name fast-paths.
 //! * `Preboot::new` / `Preboot::default` — construction (live sysfs probes).
 
 use actman::{
     cmdline::CmdLineOptions, nfs::parse_nfs_spec, preboot::Preboot,
-    reboot::RebootCMD,
+    reboot::RebootCmd,
 };
 use std::hint::black_box;
 
@@ -36,7 +36,7 @@ const CMDLINE_FULL: &str = "console=ttyS0 earlyprintk=ttyS0 quiet ro net.ifnames
      server_url=http://10.0.0.1:21 own_ip=10.0.0.42 tag=util-mdl:latest \
      hash=sha256:deadbeefcafe base_url=registry.example.com/mtos";
 
-fn large_cmdline() -> String {
+fn large_Cmdline() -> String {
     (0..64)
         .map(|i| format!("key{i}=value{i}"))
         .collect::<Vec<_>>()
@@ -68,7 +68,7 @@ mod param_search {
 
     #[test]
     fn large_64_pairs() {
-        let input = large_cmdline();
+        let input = large_Cmdline();
         black_box(CmdLineOptions::param_search(&input));
     }
 
@@ -123,47 +123,47 @@ mod param_search_scaling {
     }
 }
 
-mod reboot_cmd_dispatch {
+mod reboot_Cmd_dispatch {
     use super::*;
 
     #[test]
     fn init_bare() {
-        black_box(RebootCMD::from("init"));
+        black_box(RebootCmd::from("init"));
     }
 
     #[test]
     fn poweroff_bare() {
-        black_box(RebootCMD::from("poweroff"));
+        black_box(RebootCmd::from("poweroff"));
     }
 
     #[test]
     fn reboot_bare() {
-        black_box(RebootCMD::from("reboot"));
+        black_box(RebootCmd::from("reboot"));
     }
 
     #[test]
     fn unknown_bare() {
-        black_box(RebootCMD::from("shutdown"));
+        black_box(RebootCmd::from("shutdown"));
     }
 
     #[test]
     fn init_full_path() {
-        black_box(RebootCMD::from("/bin/init"));
+        black_box(RebootCmd::from("/bin/init"));
     }
 
     #[test]
     fn poweroff_full_path() {
-        black_box(RebootCMD::from("/bin/poweroff"));
+        black_box(RebootCmd::from("/bin/poweroff"));
     }
 
     #[test]
     fn reboot_full_path() {
-        black_box(RebootCMD::from("/bin/reboot"));
+        black_box(RebootCmd::from("/bin/reboot"));
     }
 
     #[test]
     fn unknown_deep_path() {
-        black_box(RebootCMD::from("/usr/local/sbin/some-unknown-tool"));
+        black_box(RebootCmd::from("/usr/local/sbin/some-unknown-tool"));
     }
 }
 
@@ -173,24 +173,24 @@ mod reboot_cmd_conversions {
 
     #[test]
     fn reboot_cmd_to_reboot_command() {
-        let cmd = black_box(RebootCMD::Reboot);
-        black_box(RebootCommand::from(cmd));
+        let Cmd = black_box(RebootCmd::Reboot);
+        black_box(RebootCommand::from(Cmd));
     }
 
     #[test]
-    fn poweroff_cmd_to_reboot_command() {
-        let cmd = black_box(RebootCMD::PowerOff);
-        black_box(RebootCommand::from(cmd));
+    fn poweroff_Cmd_to_reboot_command() {
+        let Cmd = black_box(RebootCmd::PowerOff);
+        black_box(RebootCommand::from(Cmd));
     }
 
     #[test]
-    fn reboot_command_to_reboot_cmd() {
-        black_box(RebootCMD::from(RebootCommand::Restart));
+    fn reboot_command_to_reboot_Cmd() {
+        black_box(RebootCmd::from(RebootCommand::Restart));
     }
 
     #[test]
-    fn poweroff_command_to_reboot_cmd() {
-        black_box(RebootCMD::from(RebootCommand::PowerOff));
+    fn poweroff_command_to_reboot_Cmd() {
+        black_box(RebootCmd::from(RebootCommand::PowerOff));
     }
 }
 
