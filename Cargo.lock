@@ -487,6 +487,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bindgen"
+version = "0.72.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
+dependencies = [
+ "bitflags 2.11.0",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
+ "log",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 2.1.2",
+ "shlex",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -636,7 +656,7 @@ name = "bootimg-sys"
 version = "0.1.0"
 source = "git+https://gitlab.com/losos-linux/mkbootimg#34974886ed3705fc54d107a0716e69f8db6dc0b7"
 dependencies = [
- "bindgen",
+ "bindgen 0.70.1",
  "cc",
 ]
 
@@ -645,6 +665,7 @@ name = "bootlib"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "libblkid-rs",
  "luks",
  "miette",
  "overlayfs_fuse",
@@ -3037,6 +3058,29 @@ name = "leb128fmt"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
+
+[[package]]
+name = "libblkid-rs"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6eee640d2d3e939915ef2576b4d0d6aa4d40d96b37cfbcec38c3c1ff7d4f221"
+dependencies = [
+ "either",
+ "libblkid-rs-sys",
+ "libc",
+ "uuid",
+]
+
+[[package]]
+name = "libblkid-rs-sys"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a49302d1b1c51dd61f0ae7bc3f3700ab812250866716013eb1b0921ba089476"
+dependencies = [
+ "bindgen 0.72.1",
+ "cc",
+ "pkg-config",
+]
 
 [[package]]
 name = "libc"
