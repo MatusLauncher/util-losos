@@ -2,6 +2,7 @@
 #
 # Recipes:
 #   just build               Build OS disk image (LUKS2-encrypted P3, default)
+#   just host-build          Build OS disk image with Rust compiled on host (faster iteration)
 #   just build-config        Build from a JSON config file (ISOMAN_CONFIG)
 #   just build-gsi           Build a GSI (Fastboot + Odin)
 #   just build-gsi-fastboot  Build a Fastboot-only GSI boot.img
@@ -90,6 +91,12 @@ default: build-secure-boot run
 build: _dm-integrity
     @echo "==> Building OS ISO image (LUKS2-encrypted P3)..."
     cargo run -p isoman -- --build --output "{{ output }}"
+    @echo "==> ISO image written to {{ output }}"
+
+# Build OS ISO with Rust components compiled on the host (musl) — podman only does cpio assembly
+host-build: _dm-integrity
+    @echo "==> Building OS ISO image (host-compiled Rust, podman cpio assembly)..."
+    cargo run -p isoman -- --host-compile --output "{{ output }}"
     @echo "==> ISO image written to {{ output }}"
 
 # Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
