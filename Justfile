@@ -110,11 +110,16 @@ llvm:
     curl -L {{ zig_rel }} -o "$bootstrap_root/zig.tar.xz"
     tar -xJf "$bootstrap_root/zig.tar.xz" -C "$bootstrap_root"
     ZIG="$bootstrap_root/zig-x86_64-linux-0.16.0/zig"
+    ZIG_CC="$bootstrap_root/zig-cc"
+    ZIG_CXX="$bootstrap_root/zig-c++"
 
     echo "==> Building bootstrap LLVM toolchain with Zig..."
     mkdir -p "$bootstrap_root/build"
-    export CC="$ZIG cc -target x86_64-linux-musl"
-    export CXX="$ZIG c++ -target x86_64-linux-musl"
+    printf '%s\n' '#!/usr/bin/env bash' 'exec "'"$ZIG"'" cc -target x86_64-linux-musl "$@"' > "$ZIG_CC"
+    printf '%s\n' '#!/usr/bin/env bash' 'exec "'"$ZIG"'" c++ -target x86_64-linux-musl "$@"' > "$ZIG_CXX"
+    chmod +x "$ZIG_CC" "$ZIG_CXX"
+    export CC="$ZIG_CC"
+    export CXX="$ZIG_CXX"
 
     cmake -S "$bootstrap_root/src/llvm" -B "$bootstrap_root/build" -G "$generator" \
         -DCMAKE_BUILD_TYPE=Release \
