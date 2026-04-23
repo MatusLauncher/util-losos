@@ -75,6 +75,14 @@ llvm:
         exit 0
     fi
 
+    echo "==> Checking dependencies..."
+    for cmd in curl tar cmake; do
+        if ! command -v $cmd &> /dev/null; then
+            echo "Error: $cmd is required but not installed."
+            exit 1
+        fi
+    done
+
     echo "==> Downloading and building LLVM (this will take a while)..."
     rm -rf "$build_root"
     mkdir -p "$build_root"
