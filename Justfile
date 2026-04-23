@@ -84,18 +84,24 @@ llvm:
         fi
     done
 
-    echo "==> Downloading LLVM source..."
+    echo "==> Downloading LLVM source and Zig bootstrap compiler..."
     rm -rf "$bootstrap_root" "$stage2_root"
     mkdir -p "$bootstrap_root"
+    # Fetch LLVM
     URL=$(curl -s https://api.github.com/repos/llvm/llvm-project/releases/latest | grep tarball_url | head -n1 | cut -d '"' -f4)
     curl -L "$URL" -o "$bootstrap_root/llvm.tar.gz"
     mkdir -p "$bootstrap_root/src"
     tar -xzf "$bootstrap_root/llvm.tar.gz" -C "$bootstrap_root/src" --strip-components=1
+    
+    # Fetch Zig
+    curl -L https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz -o "$bootstrap_root/zig.tar.xz"
+    tar -xJf "$bootstrap_root/zig.tar.xz" -C "$bootstrap_root"
+    ZIG="$bootstrap_root/zig-x86_64-linux-0.16.0/zig"
 
-    echo "==> Building bootstrap LLVM toolchain..."
+    echo "==> Building bootstrap LLVM toolchain with Zig..."
     mkdir -p "$bootstrap_root/build"
-    GENERATOR="Unix Makefiles"
-    if command -v ninja &> /dev/null; then GENERATOR="Ninja"; fi
+    export CC="$ZIG cc -target x86_64-linux-musl"
+    export CXX="$ZIG c++ -target x86_64-linux-musl"
 
     cmake -S "$bootstrap_root/src/llvm" -B "$bootstrap_root/build" -G "$GENERATOR" \
         -DCMAKE_BUILD_TYPE=Release \
