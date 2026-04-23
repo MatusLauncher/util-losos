@@ -68,8 +68,6 @@ llvm:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    USE_ZIG_BOOTSTRAP="${USE_ZIG_BOOTSTRAP:-false}" # Default to false
-
     repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"
     [[ "$cache_root" = /* ]] || cache_root="$repo_root/$cache_root"
@@ -117,7 +115,7 @@ llvm:
         -B "$bootstrap_root/build"
         -G "$generator"
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" -DCMAKE_C_COMPILER="ccache" -DCMAKE_CXX_COMPILER="ccache"
+        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" -DCMAKE_C_COMPILER="/usr/lib/ccache/bin/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/bin/clang++"
         -DLLVM_ENABLE_PROJECTS="clang;lld"
         -DLLVM_TARGETS_TO_BUILD="X86"
         -DLLVM_INCLUDE_TESTS=OFF
@@ -138,7 +136,7 @@ llvm:
         -B "$stage2_root/build"
         -G "$generator"
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="$install_dir" -DCMAKE_C_COMPILER="ccache" -DCMAKE_CXX_COMPILER="ccache"
+        -DCMAKE_INSTALL_PREFIX="$install_dir" -DCMAKE_C_COMPILER="/usr/lib/ccache/bin/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/bin/clang++"
         -DLLVM_ENABLE_PROJECTS="clang;lld"
         -DLLVM_TARGETS_TO_BUILD="X86"
         -DLLVM_INCLUDE_TESTS=OFF
