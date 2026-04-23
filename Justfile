@@ -69,10 +69,14 @@ llvm:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    cache_root="{{ build_cache }}"
+    repo_root="{{ pwd }}"
+    cache_root="${BUILD_CACHE:-{{ build_cache }}}"
+    [[ "$cache_root" = /* ]] || cache_root="$repo_root/$cache_root"
     bootstrap_root="${LLVM_BOOTSTRAP_ROOT:-$cache_root/llvm-bootstrap}"
     stage2_root="${LLVM_STAGE2_ROOT:-$cache_root/llvm-stage2}"
-    install_dir="{{ pwd }}/llvm"
+    [[ "$bootstrap_root" = /* ]] || bootstrap_root="$repo_root/$bootstrap_root"
+    [[ "$stage2_root" = /* ]] || stage2_root="$repo_root/$stage2_root"
+    install_dir="$repo_root/llvm"
     generator="${GENERATOR:-}"
 
     if [[ -f "$install_dir/bin/clang" ]]; then
@@ -165,8 +169,11 @@ kernel: llvm
     export PATH="{{ pwd }}/llvm/bin:$PATH"
 
     tag="{{ kernel_tag }}"
-    cache_root="{{ build_cache }}"
+    repo_root="{{ pwd }}"
+    cache_root="${BUILD_CACHE:-{{ build_cache }}}"
+    [[ "$cache_root" = /* ]] || cache_root="$repo_root/$cache_root"
     build_root="${KERNEL_BUILD_ROOT:-$cache_root/kernel}"
+    [[ "$build_root" = /* ]] || build_root="$repo_root/$build_root"
     archive="${build_root}/${tag}.tar.gz"
     src_dir="${build_root}/linux-${tag#v}"
 

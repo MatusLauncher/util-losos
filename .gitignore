@@ -8,3 +8,4 @@ os*.iso
 sb-key.pem
 sb-cert.pem
 secure-boot/
+.build*
