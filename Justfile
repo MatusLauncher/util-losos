@@ -219,7 +219,7 @@ kernel: llvm
         --set-str MODULE_SIG_KEY "{{ pwd }}/sb-key.pem" \
         --set-str MODULE_SIG_CERT "{{ pwd }}/sb-cert.pem"
     make olddefconfig LLVM=1
-    make LLVM=1 LD="${KERNEL_LD:-ld.lld}" \
+    LD="${KERNEL_LD:-ld.lld}" LDFLAGS="-fuse-ld=lld" \
         CLANG_AUTOFDO_PROFILE="${AUTOFDO_PROFILE:-}" \
         CLANG_PROPELLER_PROFILE_PREFIX="${PROPELLER_PREFIX:-}" \
         -j{{ threads }}
