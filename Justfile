@@ -78,10 +78,11 @@ llvm:
     [[ "$stage2_root" = /* ]] || stage2_root="$repo_root/$stage2_root"
     install_dir="$repo_root/llvm"
     generator="${GENERATOR:-}"
-    bootstrap_cc="${LLVM_BOOTSTRAP_CC:-}"
-    bootstrap_cxx="${LLVM_BOOTSTRAP_CXX:-}"
     bootstrap_linker="${LLVM_BOOTSTRAP_LINKER:-ld.lld}"
     stage2_linker="${LLVM_LINKER:-lld}"
+    zig_bin="${LLVM_BOOTSTRAP_ZIG:-}"
+    zig_cc="$bootstrap_root/zig-cc"
+    zig_cxx="$bootstrap_root/zig-c++"
 
     if [[ -f "$install_dir/bin/clang" ]]; then
         echo "==> LLVM already built at $install_dir"
@@ -104,19 +105,6 @@ llvm:
         fi
     fi
 
-    if [[ -z "$bootstrap_cc" || -z "$bootstrap_cxx" ]]; then
-        if command -v clang &> /dev/null && command -v clang++ &> /dev/null; then
-            bootstrap_cc="${bootstrap_cc:-$(command -v clang)}"
-            bootstrap_cxx="${bootstrap_cxx:-$(command -v clang++)}"
-        elif command -v gcc &> /dev/null && command -v g++ &> /dev/null; then
-            bootstrap_cc="${bootstrap_cc:-$(command -v gcc)}"
-            bootstrap_cxx="${bootstrap_cxx:-$(command -v g++)}"
-        else
-            echo "Error: no suitable bootstrap C/C++ compiler found."
-            exit 1
-        fi
-    fi
-
     echo "==> Downloading LLVM source and Zig bootstrap compiler..."
     rm -rf "$bootstrap_root" "$stage2_root"
     mkdir -p "$(dirname "$bootstrap_root")" "$(dirname "$stage2_root")"
@@ -126,11 +114,24 @@ llvm:
     curl -L "$URL" -o "$bootstrap_root/llvm.tar.gz"
     mkdir -p "$bootstrap_root/src"
     tar -xzf "$bootstrap_root/llvm.tar.gz" -C "$bootstrap_root/src" --strip-components=1
+
+    if [[ -z "$zig_bin" ]]; then
+        if command -v zig &> /dev/null; then
+            zig_bin="$(command -v zig)"
+        else
+            curl -L {{ zig_rel }} -o "$bootstrap_root/zig.tar.xz"
+            tar -xJf "$bootstrap_root/zig.tar.xz" -C "$bootstrap_root"
+            zig_bin="$bootstrap_root/zig-x86_64-linux-0.16.0/zig"
+        fi
+    fi
     
     echo "==> Building bootstrap LLVM toolchain..."
     mkdir -p "$bootstrap_root/build"
-    export CC="$bootstrap_cc"
-    export CXX="$bootstrap_cxx"
+    printf '%s\n' '#!/usr/bin/env bash' 'exec "'"$zig_bin"'" cc "$@"' > "$zig_cc"
+    printf '%s\n' '#!/usr/bin/env bash' 'exec "'"$zig_bin"'" c++ "$@"' > "$zig_cxx"
+    chmod +x "$zig_cc" "$zig_cxx"
+    export CC="$zig_cc"
+    export CXX="$zig_cxx"
 
     cmake -S "$bootstrap_root/src/llvm" -B "$bootstrap_root/build" -G "$generator" \
         -DCMAKE_BUILD_TYPE=Release \
