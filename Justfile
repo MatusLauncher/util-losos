@@ -78,6 +78,10 @@ llvm:
     [[ "$stage2_root" = /* ]] || stage2_root="$repo_root/$stage2_root"
     install_dir="$repo_root/llvm"
     generator="${GENERATOR:-}"
+    bootstrap_cc="${LLVM_BOOTSTRAP_CC:-}"
+    bootstrap_cxx="${LLVM_BOOTSTRAP_CXX:-}"
+    bootstrap_linker="${LLVM_BOOTSTRAP_LINKER:-ld.lld}"
+    stage2_linker="${LLVM_LINKER:-lld}"
 
     if [[ -f "$install_dir/bin/clang" ]]; then
         echo "==> LLVM already built at $install_dir"
@@ -100,6 +104,19 @@ llvm:
         fi
     fi
 
+    if [[ -z "$bootstrap_cc" || -z "$bootstrap_cxx" ]]; then
+        if command -v clang &> /dev/null && command -v clang++ &> /dev/null; then
+            bootstrap_cc="${bootstrap_cc:-$(command -v clang)}"
+            bootstrap_cxx="${bootstrap_cxx:-$(command -v clang++)}"
+        elif command -v gcc &> /dev/null && command -v g++ &> /dev/null; then
+            bootstrap_cc="${bootstrap_cc:-$(command -v gcc)}"
+            bootstrap_cxx="${bootstrap_cxx:-$(command -v g++)}"
+        else
+            echo "Error: no suitable bootstrap C/C++ compiler found."
+            exit 1
+        fi
+    fi
+
     echo "==> Downloading LLVM source and Zig bootstrap compiler..."
     rm -rf "$bootstrap_root" "$stage2_root"
     mkdir -p "$(dirname "$bootstrap_root")" "$(dirname "$stage2_root")"
@@ -110,24 +127,18 @@ llvm:
     mkdir -p "$bootstrap_root/src"
     tar -xzf "$bootstrap_root/llvm.tar.gz" -C "$bootstrap_root/src" --strip-components=1
     
-    # Fetch Zig
-    curl -L {{ zig_rel }} -o "$bootstrap_root/zig.tar.xz"
-    tar -xJf "$bootstrap_root/zig.tar.xz" -C "$bootstrap_root"
-    ZIG="$bootstrap_root/zig-x86_64-linux-0.16.0/zig"
-    ZIG_CC="$bootstrap_root/zig-cc"
-    ZIG_CXX="$bootstrap_root/zig-c++"
-
-    echo "==> Building bootstrap LLVM toolchain with Zig..."
+    echo "==> Building bootstrap LLVM toolchain..."
     mkdir -p "$bootstrap_root/build"
-    printf '%s\n' '#!/usr/bin/env bash' 'exec "'"$ZIG"'" cc -target x86_64-linux-musl "$@"' > "$ZIG_CC"
-    printf '%s\n' '#!/usr/bin/env bash' 'exec "'"$ZIG"'" c++ -target x86_64-linux-musl "$@"' > "$ZIG_CXX"
-    chmod +x "$ZIG_CC" "$ZIG_CXX"
-    export CC="$ZIG_CC"
-    export CXX="$ZIG_CXX"
+    export CC="$bootstrap_cc"
+    export CXX="$bootstrap_cxx"
 
     cmake -S "$bootstrap_root/src/llvm" -B "$bootstrap_root/build" -G "$generator" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" \
+        -DCMAKE_LINKER="$bootstrap_linker" \
+        -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" \
+        -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" \
+        -DCMAKE_MODULE_LINKER_FLAGS="-fuse-ld=lld" \
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
         -DLLVM_TARGETS_TO_BUILD="X86" \
         -DLLVM_INCLUDE_TESTS=OFF \
@@ -144,6 +155,10 @@ llvm:
     cmake -S "$bootstrap_root/src/llvm" -B "$stage2_root/build" -G "$generator" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$install_dir" \
+        -DCMAKE_LINKER="$bootstrap_linker" \
+        -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=$stage2_linker" \
+        -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=$stage2_linker" \
+        -DCMAKE_MODULE_LINKER_FLAGS="-fuse-ld=$stage2_linker" \
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
         -DLLVM_TARGETS_TO_BUILD="X86" \
         -DLLVM_INCLUDE_TESTS=OFF \
@@ -151,7 +166,7 @@ llvm:
         -DLLVM_ENABLE_BINDINGS=OFF \
         -DCLANG_VENDOR="LosOS" \
         -DPACKAGE_VENDOR="LosOS" \
-        -DLLVM_USE_LINKER=wild \
+        -DLLVM_USE_LINKER="$stage2_linker" \
         -DLLVM_ENABLE_LTO=Full \
         -DLLVM_USE_PGO_PROFILES=ON
     cmake --build "$stage2_root/build" -j{{ threads }}
@@ -203,7 +218,7 @@ kernel: llvm
         --set-str MODULE_SIG_KEY "{{ pwd }}/sb-key.pem" \
         --set-str MODULE_SIG_CERT "{{ pwd }}/sb-cert.pem"
     make olddefconfig LLVM=1
-    make LLVM=1 LD=wild \
+    make LLVM=1 LD="${KERNEL_LD:-ld.lld}" \
         CLANG_AUTOFDO_PROFILE="${AUTOFDO_PROFILE:-}" \
         CLANG_PROPELLER_PROFILE_PREFIX="${PROPELLER_PREFIX:-}" \
         -j{{ threads }}
