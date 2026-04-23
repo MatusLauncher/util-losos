@@ -17,7 +17,7 @@
 #   just setup-sbctl         Generate Secure Boot key hierarchy (PK/KEK/db) via sbctl in an ephemeral Arch Linux container
 # ── Configurable variables (override via env or 'just var=value recipe') ──────
 
-kernel := env("KERNEL", "")
+kernel := env("KERNEL", "vmlinuz")
 memory := env("MEMORY", "2G")
 cpus := env("CPUS", "4")
 kvm := env("KVM", "1")
@@ -26,7 +26,9 @@ output := env("OUTPUT", "os-client.iso")
 ovmf_code := env("OVMF_CODE", "/usr/share/edk2/x64/OVMF_CODE.4m.fd")
 ovmf_vars := env("OVMF_VARS", "/usr/share/edk2/x64/OVMF_VARS.4m.fd")
 isoman_config := env("ISOMAN_CONFIG", "")
-
+kernel_tag := `git ls-remote --tags --refs https://github.com/torvalds/linux 'v*' | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | cut -d '-' -f1 | tail -n1`
+threads := `nproc`
+pwd := `pwd`
 # ── Private helpers ───────────────────────────────────────────────────────────
 
 # Ensure cargo-nextest is installed
@@ -39,7 +41,10 @@ _ensure-nextest:
 
 # Load dm-integrity and ensure root access for cryptsetup loop-device operations.
 _dm-integrity:
-    sudo modprobe dm-integrity
+    #!/usr/bin/env bash
+    if ! lsmod | grep -q "^dm_integrity" && ! grep -q "^dm_integrity" /proc/modules; then
+        sudo modprobe dm-integrity
+    fi
 
 # Generate Secure Boot keys only when sb-key.pem / sb-cert.pem are absent.
 _ensure-sb-keys:
@@ -56,7 +61,28 @@ _ensure-sb-keys:
 dev:
     @echo "==> Pulling submodules..."
     git submodule update --remote --merge
+# Build a custom kernel optimised for LosOS.
 
+kernel:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    tag="{{ kernel_tag }}"
+    build_root=/tmp/kernel
+    archive="${build_root}/${tag}.tar.gz"
+    src_dir="${build_root}/linux-${tag#v}"
+
+    echo "==> Pulling in kernel ${tag}"
+    rm -rf "$build_root"
+    mkdir -p "$build_root"
+
+    curl -fL "https://github.com/torvalds/linux/archive/refs/tags/${tag}.tar.gz" -o "$archive"
+    tar -xzf "$archive" -C "$build_root"
+
+    cd "$src_dir"
+    make tinyconfig LLVM=1 USER_NS=1 KVM=1 LTO=1
+    make LLVM=1 -j{{ threads }}
+    cp arch/x86/boot/bzImage {{ pwd }}/vmlinuz
 # Generate a full UEFI Secure Boot key hierarchy (PK, KEK, db) via sbctl in an
 # ephemeral Arch Linux container.  The db signing key/cert are copied to
 # sb-key.pem / sb-cert.pem in the project root where isoman --secure-boot
@@ -96,45 +122,45 @@ setup-sbctl:
 default: build-secure-boot run
 
 # Build OS ISO image — Rust compiled on host (musl), podman does cpio/firmware assembly
-build: _dm-integrity
+build: _dm-integrity kernel
     @echo "==> Building OS ISO image (host-compiled Rust, podman cpio assembly)..."
-    cargo run -p isoman -- --build --output "{{ output }}"
+    cargo run -p isoman -- --build --output "{{ output }}" --kernel "{{ kernel }}"
     @echo "==> ISO image written to {{ output }}"
 
 # Build OS ISO image with Rust compiled fully inside podman (slower, no host toolchain needed)
-container-build: _dm-integrity
+container-build: _dm-integrity kernel
     @echo "==> Building OS ISO image (full container build)..."
     cargo run -p isoman -- --build --no-host-compile --output "{{ output }}"
     @echo "==> ISO image written to {{ output }}"
 
 # Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
-build-config config_path=isoman_config: _dm-integrity
+build-config config_path=isoman_config: _dm-integrity kernel
     @echo "==> Building from config: {{ config_path }}"
     cargo run -p isoman -- --build --config "{{ config_path }}" --output "{{ output }}"
 
 # Build a GSI (Fastboot + Odin) instead of a bootable ISO
-build-gsi:
+build-gsi: kernel
     @echo "==> Building GSI (Fastboot + Odin)..."
     cargo run -p isoman -- --build --gsi
 
 # Build a Fastboot-only GSI boot.img
-build-gsi-fastboot:
+build-gsi-fastboot: kernel
     cargo run -p isoman -- --build --gsi --gsi-fastboot
 
 # Build production-hardened OS image (loglevel=0 + security mitigations)
-build-prod: _dm-integrity _ensure-sb-keys
+build-prod: _dm-integrity _ensure-sb-keys kernel
     @echo "==> Building production OS disk image (hardened cmdline)..."
     cargo run -p isoman -- --build --profile prod --kernel "{{ kernel }}"
     @echo "==> Production disk image written to os-<mode>.img"
 
 # Build production live OS image (hardened cmdline + container-ready for preflight)
-build-prod-live: _dm-integrity _ensure-sb-keys
+build-prod-live: _dm-integrity _ensure-sb-keys kernel
     @echo "==> Building production live OS disk image (container-ready for preflight)..."
     cargo run -p isoman -- --build --profile prod-live --kernel "{{ kernel }}"
     @echo "==> Production live disk image written to os-<mode>.img"
 
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
-build-secure-boot: _dm-integrity _ensure-sb-keys
+build-secure-boot: _dm-integrity _ensure-sb-keys kernel
     @echo "==> Building with Secure Boot signing..."
     kernel_arg=$([[ -n "{{ kernel }}" ]] && echo "--kernel {{ kernel }}" || echo ""); \
     cargo run -p isoman -- --build --output "{{ output }}" --secure-boot true $kernel_arg
@@ -146,7 +172,7 @@ build-run: build run
 build-test: build test
 
 # Run testman integration tests in legacy BIOS mode (El Torito, no OVMF)
-test-bios: build _ensure-nextest
+test-bios: _ensure-nextest
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -165,7 +191,7 @@ test-bios: build _ensure-nextest
         cargo nextest run --manifest-path crates/testman/Cargo.toml --test-threads 1 --run-ignored all
 
 # Run testman integration tests (builds non-prod encrypted disk image first)
-test: build _ensure-nextest
+test: _ensure-nextest
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -180,6 +206,8 @@ test: build _ensure-nextest
         MEMORY="{{ memory }}" \
         CPUS="{{ cpus }}" \
         KVM="{{ kvm }}" \
+        OVMF_CODE="{{ ovmf_code }}" \
+        OVMF_VARS="{{ ovmf_vars }}" \
         cargo nextest run --manifest-path crates/testman/Cargo.toml --test-threads 1 --run-ignored all
 
 # Launch OS ISO image in QEMU via UEFI (OVMF pflash + virtio drive)
@@ -213,7 +241,7 @@ run:
         -smp "{{ cpus }}" \
         -drive "if=pflash,format=raw,readonly=on,file={{ ovmf_code }}" \
         -drive "if=pflash,format=raw,file=$tmp_vars" \
-        -drive "file={{ output }},format=raw,if=virtio" \
+        -drive "file={{ output }},format=raw,media=cdrom,readonly=on" \
         -nographic \
         -nic user \
         -netdev user,id=n0 \
@@ -242,7 +270,7 @@ run-bios:
     exec qemu-system-x86_64 \
         -m "{{ memory }}" \
         -smp "{{ cpus }}" \
-        -drive "file={{ output }},format=raw,if=virtio" \
+        -drive "file={{ output }},format=raw,media=cdrom,readonly=on" \
         -nographic \
         -nic user \
         -netdev user,id=n0 \
