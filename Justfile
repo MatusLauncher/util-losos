@@ -138,9 +138,7 @@ llvm:
         -B "$stage2_root/build"
         -G "$generator"
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="$install_dir"
-        -DCMAKE_LINKER="$stage2_linker"
-        -DLLVM_USE_LINKER="$stage2_linker"
+        -DCMAKE_INSTALL_PREFIX="$install_dir" -DCMAKE_C_COMPILER="ccache" -DCMAKE_CXX_COMPILER="ccache"
         -DLLVM_ENABLE_PROJECTS="clang;lld"
         -DLLVM_TARGETS_TO_BUILD="X86"
         -DLLVM_INCLUDE_TESTS=OFF
