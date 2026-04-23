@@ -50,7 +50,7 @@ _dm-integrity:
 
 # Generate Secure Boot keys only when sb-key.pem / sb-cert.pem are absent.
 _ensure-sb-keys:
-    #!/usr/bin/env bash
+    #!/usr/bin/bash
     set -euo pipefail
     if [[ ! -f sb-key.pem || ! -f sb-cert.pem ]]; then
         echo "==> Secure Boot keys not found — generating via sbctl..."
@@ -78,8 +78,8 @@ llvm:
     [[ "$stage2_root" = /* ]] || stage2_root="$repo_root/$stage2_root"
     install_dir="$repo_root/llvm"
     generator="${GENERATOR:-}"
-    bootstrap_linker="${LLVM_BOOTSTRAP_LINKER:-ld.lld}"
-    stage2_linker="${LLVM_LINKER:-lld}"
+    bootstrap_linker="lld"
+    stage2_linker="lld"
     zig_bin="${LLVM_BOOTSTRAP_ZIG:-}"
     zig_cc="$bootstrap_root/zig-cc"
     zig_cxx="$bootstrap_root/zig-c++"
@@ -127,23 +127,47 @@ llvm:
     
     echo "==> Building bootstrap LLVM toolchain..."
     mkdir -p "$bootstrap_root/build"
-    printf '%s\n' '#!/usr/bin/env bash' 'exec "'"$zig_bin"'" cc "$@"' > "$zig_cc"
-    printf '%s\n' '#!/usr/bin/env bash' 'exec "'"$zig_bin"'" c++ "$@"' > "$zig_cxx"
-    chmod +x "$zig_cc" "$zig_cxx"
+
+    # Create custom zig cc wrapper to filter out problematic linker flags
+    echo '#!/usr/bin/env bash' > "$zig_cc"
+    echo 'set -euo pipefail' >> "$zig_cc"
+    echo 'FILTERED_ARGS=()' >> "$zig_cc"
+    echo 'for arg in "$@"; do' >> "$zig_cc"
+    echo '  # Filter out unsupported linker arguments that cause build failures.' >> "$zig_cc"
+    echo '  if [[ "$arg" == "--dependency-file" ]]; then' >> "$zig_cc"
+    echo '    continue' >> "$zig_cc"
+    echo '  fi' >> "$zig_cc"
+    echo '  FILTERED_ARGS+=("$arg")' >> "$zig_cc"
+    echo 'done' >> "$zig_cc"
+    echo 'exec "'"$zig_bin"'" cc "${FILTERED_ARGS[@]}"' >> "$zig_cc"
+    chmod +x "$zig_cc"
+
+    # Create custom zig c++ wrapper to filter out problematic linker flags
+    echo '#!/usr/bin/env bash' > "$zig_cxx"
+    echo 'set -euo pipefail' >> "$zig_cxx"
+    echo 'FILTERED_ARGS=()' >> "$zig_cxx"
+    echo 'for arg in "$@"; do' >> "$zig_cxx"
+    echo '  # Filter out unsupported linker arguments that cause build failures.' >> "$zig_cxx"
+    echo '  if [[ "$arg" == "--dependency-file" ]]; then' >> "$zig_cxx"
+    echo '    continue' >> "$zig_cxx"
+    echo '  fi' >> "$zig_cxx"
+    echo '  FILTERED_ARGS+=("$arg")' >> "$zig_cxx"
+    echo 'done' >> "$zig_cxx"
+    echo 'exec "'"$zig_bin"'" c++ "${FILTERED_ARGS[@]}"' >> "$zig_cxx"
+    chmod +x "$zig_cxx"
+
     export CC="$zig_cc"
     export CXX="$zig_cxx"
 
-    cmake -S "$bootstrap_root/src/llvm" -B "$bootstrap_root/build" -G "$generator" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" \
-        -DCMAKE_LINKER="$bootstrap_linker" \
-        -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" \
-        -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld" \
-        -DCMAKE_MODULE_LINKER_FLAGS="-fuse-ld=lld" \
-        -DLLVM_ENABLE_PROJECTS="clang;lld" \
-        -DLLVM_TARGETS_TO_BUILD="X86" \
-        -DLLVM_INCLUDE_TESTS=OFF \
-        -DLLVM_INCLUDE_EXAMPLES=OFF \
+    cmake -S "$bootstrap_root/src/llvm" -B "$bootstrap_root/build" -G "$generator" 
+        -DCMAKE_BUILD_TYPE=Release 
+        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" 
+        -DCMAKE_LINKER="$bootstrap_linker" 
+        -DLLVM_USE_LINKER="$bootstrap_linker" 
+        -DLLVM_ENABLE_PROJECTS="clang;lld" 
+        -DLLVM_TARGETS_TO_BUILD="X86" 
+        -DLLVM_INCLUDE_TESTS=OFF 
+        -DLLVM_INCLUDE_EXAMPLES=OFF 
         -DLLVM_ENABLE_BINDINGS=OFF
     cmake --build "$bootstrap_root/build" -j{{ threads }}
     cmake --install "$bootstrap_root/build"
@@ -153,22 +177,19 @@ llvm:
     export CC="$bootstrap_root/install/bin/clang"
     export CXX="$bootstrap_root/install/bin/clang++"
 
-    cmake -S "$bootstrap_root/src/llvm" -B "$stage2_root/build" -G "$generator" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$install_dir" \
-        -DCMAKE_LINKER="$bootstrap_linker" \
-        -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=$stage2_linker" \
-        -DCMAKE_SHARED_LINKER_FLAGS="-fuse-ld=$stage2_linker" \
-        -DCMAKE_MODULE_LINKER_FLAGS="-fuse-ld=$stage2_linker" \
-        -DLLVM_ENABLE_PROJECTS="clang;lld" \
-        -DLLVM_TARGETS_TO_BUILD="X86" \
-        -DLLVM_INCLUDE_TESTS=OFF \
-        -DLLVM_INCLUDE_EXAMPLES=OFF \
-        -DLLVM_ENABLE_BINDINGS=OFF \
-        -DCLANG_VENDOR="LosOS" \
-        -DPACKAGE_VENDOR="LosOS" \
-        -DLLVM_USE_LINKER="$stage2_linker" \
-        -DLLVM_ENABLE_LTO=Full \
+    cmake -S "$bootstrap_root/src/llvm" -B "$stage2_root/build" -G "$generator" 
+        -DCMAKE_BUILD_TYPE=Release 
+        -DCMAKE_INSTALL_PREFIX="$install_dir" 
+        -DCMAKE_LINKER="$stage2_linker" 
+        -DLLVM_USE_LINKER="$stage2_linker" 
+        -DLLVM_ENABLE_PROJECTS="clang;lld" 
+        -DLLVM_TARGETS_TO_BUILD="X86" 
+        -DLLVM_INCLUDE_TESTS=OFF 
+        -DLLVM_INCLUDE_EXAMPLES=OFF 
+        -DLLVM_ENABLE_BINDINGS=OFF 
+        -DCLANG_VENDOR="LosOS" 
+        -DPACKAGE_VENDOR="LosOS" 
+        -DLLVM_ENABLE_LTO=Full 
         -DLLVM_USE_PGO_PROFILES=ON
     cmake --build "$stage2_root/build" -j{{ threads }}
     cmake --install "$stage2_root/build"
@@ -202,33 +223,33 @@ kernel: llvm
 
     cd "$src_dir"
     make tinyconfig LLVM=1
-    ./scripts/config \
-        -e 64BIT -e BLK_DEV_INITRD -e RD_GZIP -e BINFMT_ELF -e BINFMT_SCRIPT \
-        -e PRINTK -e EARLY_PRINTK -e TTY -e SERIAL_8250 -e SERIAL_8250_CONSOLE \
-        -e PCI -e VIRTUALIZATION -e KVM -e KVM_INTEL -e KVM_AMD \
-        -e VIRTIO -e VIRTIO_PCI -e VIRTIO_BLK -e VIRTIO_NET \
-        -e BLOCK -e BLK_DEV_SD -e BLK_DEV_DM -e DM_CRYPT -e DM_INTEGRITY -e DM_VERITY \
-        -e CRYPTO_AES_X86_64 -e CRYPTO_SHA256 -e CRYPTO_USER_API_SKCIPHER -e CRYPTO_USER_API_HASH \
-        -e NET -e INET -e NETDEVICES -e NAMESPACES -e UTS_NS -e IPC_NS -e USER_NS -e PID_NS -e NET_NS \
-        -e EFI -e EFIVAR_FS -e ISO9660_FS -e TMPFS -e DEVTMPFS -e DEVTMPFS_MOUNT \
-        -e RELOCATABLE -e RANDOMIZE_BASE -e RELR \
-        -e LTO_CLANG_FULL -e CFI_CLANG -e CC_OPTIMIZE_FOR_SIZE -e AUTOFDO_CLANG -e PROPELLER_CLANG -e SECURITY_LANDLOCK -e BPF_SYSCALL \
-        -e MODULES -e MODULE_SIG -e MODULE_SIG_ALL -e MODULE_SIG_FORCE -e MODULE_SIG_SHA256 \
-        --set-str LOCALVERSION "-losos" \
-        --set-str DEFAULT_HOSTNAME "losos" \
-        --set-str MODULE_SIG_KEY "{{ pwd }}/sb-key.pem" \
+    ./scripts/config 
+        -e 64BIT -e BLK_DEV_INITRD -e RD_GZIP -e BINFMT_ELF -e BINFMT_SCRIPT 
+        -e PRINTK -e EARLY_PRINTK -e TTY -e SERIAL_8250 -e SERIAL_8250_CONSOLE 
+        -e PCI -e VIRTUALIZATION -e KVM -e KVM_INTEL -e KVM_AMD 
+        -e VIRTIO -e VIRTIO_PCI -e VIRTIO_BLK -e VIRTIO_NET 
+        -e BLOCK -e BLK_DEV_SD -e BLK_DEV_DM -e DM_CRYPT -e DM_INTEGRITY -e DM_VERITY 
+        -e CRYPTO_AES_X86_64 -e CRYPTO_SHA256 -e CRYPTO_USER_API_SKCIPHER -e CRYPTO_USER_API_HASH 
+        -e NET -e INET -e NETDEVICES -e NAMESPACES -e UTS_NS -e IPC_NS -e USER_NS -e PID_NS -e NET_NS 
+        -e EFI -e EFIVAR_FS -e ISO9660_FS -e TMPFS -e DEVTMPFS -e DEVTMPFS_MOUNT 
+        -e RELOCATABLE -e RANDOMIZE_BASE -e RELR 
+        -e LTO_CLANG_FULL -e CFI_CLANG -e CC_OPTIMIZE_FOR_SIZE -e AUTOFDO_CLANG -e PROPELLER_CLANG -e SECURITY_LANDLOCK -e BPF_SYSCALL 
+        -e MODULES -e MODULE_SIG -e MODULE_SIG_ALL -e MODULE_SIG_FORCE -e MODULE_SIG_SHA256 
+        --set-str LOCALVERSION "-losos" 
+        --set-str DEFAULT_HOSTNAME "losos" 
+        --set-str MODULE_SIG_KEY "{{ pwd }}/sb-key.pem" 
         --set-str MODULE_SIG_CERT "{{ pwd }}/sb-cert.pem"
     make olddefconfig LLVM=1
-    LD="${KERNEL_LD:-ld.lld}" LDFLAGS="-fuse-ld=lld" \
-        CLANG_AUTOFDO_PROFILE="${AUTOFDO_PROFILE:-}" \
-        CLANG_PROPELLER_PROFILE_PREFIX="${PROPELLER_PREFIX:-}" \
+    LD="${KERNEL_LD:-ld.lld}" LDFLAGS="-fuse-ld=lld" 
+        CLANG_AUTOFDO_PROFILE="${AUTOFDO_PROFILE:-}" 
+        CLANG_PROPELLER_PROFILE_PREFIX="${PROPELLER_PREFIX:-}" 
         -j{{ threads }}
     
     echo "==> Signing kernel bzImage..."
-    if [[ -f "{{ pwd }}/sb-key.pem" && -f "{{ pwd }}/sb-cert.pem" ]]; then \
-        sbsign --key "{{ pwd }}/sb-key.pem" --cert "{{ pwd }}/sb-cert.pem" --output arch/x86/boot/bzImage arch/x86/boot/bzImage; \
-    else \
-        echo "WARNING: Secure Boot keys not found — kernel image will be unsigned. Run 'just setup-sbctl' to generate keys."; \
+    if [[ -f "{{ pwd }}/sb-key.pem" && -f "{{ pwd }}/sb-cert.pem" ]]; then 
+        sbsign --key "{{ pwd }}/sb-key.pem" --cert "{{ pwd }}/sb-cert.pem" --output arch/x86/boot/bzImage arch/x86/boot/bzImage; 
+    else 
+        echo "WARNING: Secure Boot keys not found — kernel image will be unsigned. Run 'just setup-sbctl' to generate keys."; 
     fi
     
     cp arch/x86/boot/bzImage {{ pwd }}/vmlinuz
@@ -244,10 +265,10 @@ setup-sbctl:
     mkdir -p "$SB_DIR"
 
     echo "==> Generating Secure Boot key hierarchy via sbctl (ephemeral archlinux container)..."
-    podman run --rm \
-        --name sbctl-setup \
-        -v "$SB_DIR:/usr/share/secureboot:Z" \
-        docker.io/archlinux:latest \
+    podman run --rm 
+        --name sbctl-setup 
+        -v "$SB_DIR:/usr/share/secureboot:Z" 
+        docker.io/archlinux:latest 
         bash -c "
             pacman -Sy --noconfirm --quiet sbctl 2>&1 | tail -3
             sbctl create-keys
@@ -311,7 +332,7 @@ build-prod-live: _dm-integrity _ensure-sb-keys kernel
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
 build-secure-boot: _dm-integrity _ensure-sb-keys kernel
     @echo "==> Building with Secure Boot signing..."
-    kernel_arg=$([[ -n "{{ kernel }}" ]] && echo "--kernel {{ kernel }}" || echo ""); \
+    kernel_arg=$([[ -n "{{ kernel }}" ]] && echo "--kernel {{ kernel }}" || echo ""); 
     cargo run -p isoman -- --build --output "{{ output }}" --secure-boot true $kernel_arg
 
 # Build initramfs then launch in QEMU
@@ -331,12 +352,12 @@ test-bios: _ensure-nextest
     echo "    CPUs:        {{ cpus }}"
     echo ""
 
-    exec env \
-        ISO="{{ output }}" \
-        MEMORY="{{ memory }}" \
-        CPUS="{{ cpus }}" \
-        KVM="{{ kvm }}" \
-        BIOS=1 \
+    exec env 
+        ISO="{{ output }}" 
+        MEMORY="{{ memory }}" 
+        CPUS="{{ cpus }}" 
+        KVM="{{ kvm }}" 
+        BIOS=1 
         cargo nextest run --manifest-path crates/testman/Cargo.toml --test-threads 1 --run-ignored all
 
 # Run testman integration tests (builds non-prod encrypted disk image first)
@@ -350,13 +371,13 @@ test: _ensure-nextest
     echo "    CPUs:        {{ cpus }}"
     echo ""
 
-    exec env \
-        ISO="{{ output }}" \
-        MEMORY="{{ memory }}" \
-        CPUS="{{ cpus }}" \
-        KVM="{{ kvm }}" \
-        OVMF_CODE="{{ ovmf_code }}" \
-        OVMF_VARS="{{ ovmf_vars }}" \
+    exec env 
+        ISO="{{ output }}" 
+        MEMORY="{{ memory }}" 
+        CPUS="{{ cpus }}" 
+        KVM="{{ kvm }}" 
+        OVMF_CODE="{{ ovmf_code }}" 
+        OVMF_VARS="{{ ovmf_vars }}" 
         cargo nextest run --manifest-path crates/testman/Cargo.toml --test-threads 1 --run-ignored all
 
 # Launch OS ISO image in QEMU via UEFI (OVMF pflash + virtio drive)
@@ -385,17 +406,17 @@ run:
     cp "{{ ovmf_vars }}" "$tmp_vars"
     trap "rm -f $tmp_vars" EXIT
 
-    exec qemu-system-x86_64 \
-        -m "{{ memory }}" \
-        -smp "{{ cpus }}" \
-        -drive "if=pflash,format=raw,readonly=on,file={{ ovmf_code }}" \
-        -drive "if=pflash,format=raw,file=$tmp_vars" \
-        -drive "file={{ output }},format=raw,media=cdrom,readonly=on" \
-        -nographic \
-        -nic user \
-        -netdev user,id=n0 \
-        -device virtio-net-pci,netdev=n0 \
-        "${data_disk_args[@]}" \
+    exec qemu-system-x86_64 
+        -m "{{ memory }}" 
+        -smp "{{ cpus }}" 
+        -drive "if=pflash,format=raw,readonly=on,file={{ ovmf_code }}" 
+        -drive "if=pflash,format=raw,file=$tmp_vars" 
+        -drive "file={{ output }},format=raw,media=cdrom,readonly=on" 
+        -nographic 
+        -nic user 
+        -netdev user,id=n0 
+        -device virtio-net-pci,netdev=n0 
+        "${data_disk_args[@]}" 
         "${kvm_flag[@]}"
 
 # Launch OS ISO image in QEMU via Legacy BIOS
@@ -416,13 +437,13 @@ run-bios:
     data_disk_args=()
     [[ -n "{{ disk }}" ]] && data_disk_args=(-drive "file={{ disk }},format=raw,if=virtio")
 
-    exec qemu-system-x86_64 \
-        -m "{{ memory }}" \
-        -smp "{{ cpus }}" \
-        -drive "file={{ output }},format=raw,media=cdrom,readonly=on" \
-        -nographic \
-        -nic user \
-        -netdev user,id=n0 \
-        -device virtio-net-pci,netdev=n0 \
-        "${data_disk_args[@]}" \
+    exec qemu-system-x86_64 
+        -m "{{ memory }}" 
+        -smp "{{ cpus }}" 
+        -drive "file={{ output }},format=raw,media=cdrom,readonly=on" 
+        -nographic 
+        -nic user 
+        -netdev user,id=n0 
+        -device virtio-net-pci,netdev=n0 
+        "${data_disk_args[@]}" 
         "${kvm_flag[@]}"
