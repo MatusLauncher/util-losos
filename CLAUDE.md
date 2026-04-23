@@ -156,7 +156,22 @@ Before pushing, verify:
 2. ✅ Tests pass (`cargo nextest run`)
 3. ✅ No clippy warnings (`cargo clippy`)
 4. ✅ Code is formatted (`cargo fmt`)
-5. ✅ Documentation updated if API changed
+5. ✅ Documentation updated if API changed (update `book/src/*.md`)
+
+## Documentation & Book
+
+The project documentation is located in the `book/` submodule. **Always update the relevant markdown files in `book/src/` whenever you change features, APIs, or architectural components.**
+
+- Use `mdbook build` to verify changes.
+- Ensure new files are added to `book/src/SUMMARY.md`.
+
+## Kernel Configuration
+
+The kernel is configured in the root `Justfile` under the `kernel` recipe using `./scripts/config`.
+
+- **To add a feature**: Add `-e CONFIG_FEATURE_NAME` to the `./scripts/config` call.
+- **To remove a feature**: Add `-d CONFIG_FEATURE_NAME` to the `./scripts/config` call.
+- Always run `just kernel` after modifying the configuration to verify it still builds.
 
 ## Architecture
 

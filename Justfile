@@ -61,11 +61,53 @@ _ensure-sb-keys:
 dev:
     @echo "==> Pulling submodules..."
     git submodule update --remote --merge
-# Build a custom kernel optimised for LosOS.
 
-kernel:
+# Download and build the latest LLVM (clang + lld) from source.
+llvm:
     #!/usr/bin/env bash
     set -euo pipefail
+
+    build_root=/tmp/llvm-build
+    install_dir="{{ pwd }}/llvm"
+
+    if [[ -f "$install_dir/bin/clang" ]]; then
+        echo "==> LLVM already built at $install_dir"
+        exit 0
+    fi
+
+    echo "==> Downloading and building LLVM (this will take a while)..."
+    rm -rf "$build_root"
+    mkdir -p "$build_root"
+    echo "==> Fetching latest LLVM release URL..."
+    URL=$(curl -s https://api.github.com/repos/llvm/llvm-project/releases/latest | grep tarball_url | head -n1 | cut -d '"' -f4)
+    curl -L "$URL" -o "$build_root/llvm.tar.gz"
+    mkdir -p "$build_root/llvm-project"
+    tar -xzf "$build_root/llvm.tar.gz" -C "$build_root/llvm-project" --strip-components=1
+
+    cd "$build_root/llvm-project"
+    # Use Ninja if available, otherwise fallback to Unix Makefiles
+    GENERATOR="Unix Makefiles"
+    if command -v ninja &> /dev/null; then GENERATOR="Ninja"; fi
+
+    cmake -S llvm -B build -G "$GENERATOR" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$install_dir" \
+        -DLLVM_ENABLE_PROJECTS="clang;lld" \
+        -DLLVM_TARGETS_TO_BUILD="X86" \
+        -DLLVM_INCLUDE_TESTS=OFF \
+        -DLLVM_INCLUDE_EXAMPLES=OFF \
+        -DLLVM_ENABLE_BINDINGS=OFF
+    
+    cmake --build build -j{{ threads }}
+    cmake --install build
+
+# Build a custom kernel optimised for LosOS.
+kernel: llvm
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Use the locally built LLVM
+    export PATH="{{ pwd }}/llvm/bin:$PATH"
 
     tag="{{ kernel_tag }}"
     build_root=/tmp/kernel
@@ -80,8 +122,36 @@ kernel:
     tar -xzf "$archive" -C "$build_root"
 
     cd "$src_dir"
-    make tinyconfig LLVM=1 USER_NS=1 KVM=1 LTO=1
-    make LLVM=1 -j{{ threads }}
+    make tinyconfig LLVM=1
+    ./scripts/config \
+        -e 64BIT -e BLK_DEV_INITRD -e RD_GZIP -e BINFMT_ELF -e BINFMT_SCRIPT \
+        -e PRINTK -e EARLY_PRINTK -e TTY -e SERIAL_8250 -e SERIAL_8250_CONSOLE \
+        -e PCI -e VIRTUALIZATION -e KVM -e KVM_INTEL -e KVM_AMD \
+        -e VIRTIO -e VIRTIO_PCI -e VIRTIO_BLK -e VIRTIO_NET \
+        -e BLOCK -e BLK_DEV_SD -e BLK_DEV_DM -e DM_CRYPT -e DM_INTEGRITY -e DM_VERITY \
+        -e CRYPTO_AES_X86_64 -e CRYPTO_SHA256 -e CRYPTO_USER_API_SKCIPHER -e CRYPTO_USER_API_HASH \
+        -e NET -e INET -e NETDEVICES -e NAMESPACES -e UTS_NS -e IPC_NS -e USER_NS -e PID_NS -e NET_NS \
+        -e EFI -e EFIVAR_FS -e ISO9660_FS -e TMPFS -e DEVTMPFS -e DEVTMPFS_MOUNT \
+        -e RELOCATABLE -e RANDOMIZE_BASE -e RELR \
+        -e LTO_CLANG_FULL -e CFI_CLANG -e CC_OPTIMIZE_FOR_SIZE -e AUTOFDO_CLANG -e PROPELLER_CLANG -e SECURITY_LANDLOCK -e BPF_SYSCALL \
+        -e MODULES -e MODULE_SIG -e MODULE_SIG_ALL -e MODULE_SIG_FORCE -e MODULE_SIG_SHA256 \
+        --set-str LOCALVERSION "-losos" \
+        --set-str DEFAULT_HOSTNAME "losos" \
+        --set-str MODULE_SIG_KEY "{{ pwd }}/sb-key.pem" \
+        --set-str MODULE_SIG_CERT "{{ pwd }}/sb-cert.pem"
+    make olddefconfig LLVM=1
+    make LLVM=1 LD=wild \
+        CLANG_AUTOFDO_PROFILE="${AUTOFDO_PROFILE:-}" \
+        CLANG_PROPELLER_PROFILE_PREFIX="${PROPELLER_PREFIX:-}" \
+        -j{{ threads }}
+    
+    echo "==> Signing kernel bzImage..."
+    if [[ -f "{{ pwd }}/sb-key.pem" && -f "{{ pwd }}/sb-cert.pem" ]]; then \
+        sbsign --key "{{ pwd }}/sb-key.pem" --cert "{{ pwd }}/sb-cert.pem" --output arch/x86/boot/bzImage arch/x86/boot/bzImage; \
+    else \
+        echo "WARNING: Secure Boot keys not found — kernel image will be unsigned. Run 'just setup-sbctl' to generate keys."; \
+    fi
+    
     cp arch/x86/boot/bzImage {{ pwd }}/vmlinuz
 # Generate a full UEFI Secure Boot key hierarchy (PK, KEK, db) via sbctl in an
 # ephemeral Arch Linux container.  The db signing key/cert are copied to
