@@ -101,7 +101,7 @@ llvm:
         fi
     fi
 
-    echo "==> Downloading LLVM source and Zig bootstrap compiler..."
+    echo "==> Downloading LLVM source"
     rm -rf "$bootstrap_root" "$stage2_root"
     mkdir -p "$(dirname "$bootstrap_root")" "$(dirname "$stage2_root")"
     mkdir -p "$bootstrap_root"
@@ -117,7 +117,7 @@ llvm:
         -B "$bootstrap_root/build"
         -G "$generator"
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install"
+        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" -DCMAKE_C_COMPILER="clang" -DCMAKE_CXX_COMPILER="clang++"
         -DLLVM_ENABLE_PROJECTS="clang;lld"
         -DLLVM_TARGETS_TO_BUILD="X86"
         -DLLVM_INCLUDE_TESTS=OFF
