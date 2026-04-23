@@ -27,7 +27,6 @@ ovmf_code := env("OVMF_CODE", "/usr/share/edk2/x64/OVMF_CODE.4m.fd")
 ovmf_vars := env("OVMF_VARS", "/usr/share/edk2/x64/OVMF_VARS.4m.fd")
 isoman_config := env("ISOMAN_CONFIG", "")
 kernel_tag := `git ls-remote --tags --refs https://github.com/torvalds/linux 'v*' | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | cut -d '-' -f1 | tail -n1`
-zig_rel := `curl https://ziglang.org/download/index.json | grep "tarball" | sort -V | grep "linux" | grep $(uname -m) | tail -n1 | awk '{print $2}' | cut -d ',' -f1 | cut -d '"' -f2`
 threads := `nproc`
 pwd := `pwd`
 build_cache := env("BUILD_CACHE", ".build-cache")
@@ -69,7 +68,9 @@ llvm:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    repo_root="{{ pwd }}"
+    USE_ZIG_BOOTSTRAP="${USE_ZIG_BOOTSTRAP:-false}" # Default to false
+
+    repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"
     [[ "$cache_root" = /* ]] || cache_root="$repo_root/$cache_root"
     bootstrap_root="${LLVM_BOOTSTRAP_ROOT:-$cache_root/llvm-bootstrap}"
@@ -78,11 +79,6 @@ llvm:
     [[ "$stage2_root" = /* ]] || stage2_root="$repo_root/$stage2_root"
     install_dir="$repo_root/llvm"
     generator="${GENERATOR:-}"
-    bootstrap_linker="lld"
-    stage2_linker="lld"
-    zig_bin="${LLVM_BOOTSTRAP_ZIG:-}"
-    zig_cc="$bootstrap_root/zig-cc"
-    zig_cxx="$bootstrap_root/zig-c++"
 
     if [[ -f "$install_dir/bin/clang" ]]; then
         echo "==> LLVM already built at $install_dir"
@@ -114,59 +110,14 @@ llvm:
     curl -L "$URL" -o "$bootstrap_root/llvm.tar.gz"
     mkdir -p "$bootstrap_root/src"
     tar -xzf "$bootstrap_root/llvm.tar.gz" -C "$bootstrap_root/src" --strip-components=1
-
-    if [[ -z "$zig_bin" ]]; then
-        if command -v zig &> /dev/null; then
-            zig_bin="$(command -v zig)"
-        else
-            curl -L {{ zig_rel }} -o "$bootstrap_root/zig.tar.xz"
-            tar -xJf "$bootstrap_root/zig.tar.xz" -C "$bootstrap_root"
-            zig_bin="$bootstrap_root/zig-x86_64-linux-0.16.0/zig"
-        fi
-    fi
-    
-    echo "==> Building bootstrap LLVM toolchain..."
-    mkdir -p "$bootstrap_root/build"
-
-    # Create custom zig cc wrapper to filter out problematic linker flags
-    echo '#!/usr/bin/env bash' > "$zig_cc"
-    echo 'set -euo pipefail' >> "$zig_cc"
-    echo 'FILTERED_ARGS=()' >> "$zig_cc"
-    echo 'for arg in "$@"; do' >> "$zig_cc"
-    echo '  # Filter out unsupported linker arguments that cause build failures.' >> "$zig_cc"
-    echo '  if [[ "$arg" == "--dependency-file" ]]; then' >> "$zig_cc"
-    echo '    continue' >> "$zig_cc"
-    echo '  fi' >> "$zig_cc"
-    echo '  FILTERED_ARGS+=("$arg")' >> "$zig_cc"
-    echo 'done' >> "$zig_cc"
-    echo 'exec "'"$zig_bin"'" cc "${FILTERED_ARGS[@]}"' >> "$zig_cc"
-    chmod +x "$zig_cc"
-
-    # Create custom zig c++ wrapper to filter out problematic linker flags
-    echo '#!/usr/bin/env bash' > "$zig_cxx"
-    echo 'set -euo pipefail' >> "$zig_cxx"
-    echo 'FILTERED_ARGS=()' >> "$zig_cxx"
-    echo 'for arg in "$@"; do' >> "$zig_cxx"
-    echo '  # Filter out unsupported linker arguments that cause build failures.' >> "$zig_cxx"
-    echo '  if [[ "$arg" == "--dependency-file" ]]; then' >> "$zig_cxx"
-    echo '    continue' >> "$zig_cxx"
-    echo '  fi' >> "$zig_cxx"
-    echo '  FILTERED_ARGS+=("$arg")' >> "$zig_cxx"
-    echo 'done' >> "$zig_cxx"
-    echo 'exec "'"$zig_bin"'" c++ "${FILTERED_ARGS[@]}"' >> "$zig_cxx"
-    chmod +x "$zig_cxx"
-
-    export CC="$zig_cc"
-    export CXX="$zig_cxx"
-
+    export CC="clang"
+    export CXX="clang++"
     CMAKE_ARGS=(
         -S "$bootstrap_root/src/llvm"
         -B "$bootstrap_root/build"
         -G "$generator"
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install"
-        -DCMAKE_LINKER="$bootstrap_linker"
-        -DLLVM_USE_LINKER="$bootstrap_linker"
         -DLLVM_ENABLE_PROJECTS="clang;lld"
         -DLLVM_TARGETS_TO_BUILD="X86"
         -DLLVM_INCLUDE_TESTS=OFF
@@ -174,7 +125,7 @@ llvm:
         -DLLVM_ENABLE_BINDINGS=OFF
     )
     cmake "${CMAKE_ARGS[@]}"
-    cmake --build "$bootstrap_root/build" -j{{ threads }}
+    cmake --build "$bootstrap_root/build" -j`nproc`
     cmake --install "$bootstrap_root/build"
 
     echo "==> Building branded LosOS LLVM toolchain (Stage 2)..."
@@ -201,7 +152,7 @@ llvm:
         -DLLVM_USE_PGO_PROFILES=ON
     )
     cmake "${CMAKE_ARGS[@]}"
-    cmake --build "$stage2_root/build" -j{{ threads }}
+    cmake --build "$stage2_root/build" -j`nproc`
     cmake --install "$stage2_root/build"
     
     echo "==> Clean up build artifacts..."
@@ -213,10 +164,10 @@ kernel: llvm
     set -euo pipefail
 
     # Use the locally built LLVM
-    export PATH="{{ pwd }}/llvm/bin:$PATH"
+    export PATH="`pwd`/llvm/bin:$PATH"
 
     tag="{{ kernel_tag }}"
-    repo_root="{{ pwd }}"
+    repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"
     [[ "$cache_root" = /* ]] || cache_root="$repo_root/$cache_root"
     build_root="${KERNEL_BUILD_ROOT:-$cache_root/kernel}"
@@ -253,7 +204,7 @@ kernel: llvm
     LD="${KERNEL_LD:-ld.lld}" LDFLAGS="-fuse-ld=lld" 
         CLANG_AUTOFDO_PROFILE="${AUTOFDO_PROFILE:-}" 
         CLANG_PROPELLER_PROFILE_PREFIX="${PROPELLER_PREFIX:-}" 
-        -j{{ threads }}
+        -j`nproc`
     
     echo "==> Signing kernel bzImage..."
     if [[ -f "{{ pwd }}/sb-key.pem" && -f "{{ pwd }}/sb-cert.pem" ]]; then 
@@ -271,7 +222,7 @@ setup-sbctl:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    SB_DIR="$(pwd)/secure-boot"
+    SB_DIR="`pwd`/secure-boot"
     mkdir -p "$SB_DIR"
 
     echo "==> Generating Secure Boot key hierarchy via sbctl (ephemeral archlinux container)..."
