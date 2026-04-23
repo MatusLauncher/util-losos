@@ -67,7 +67,8 @@ llvm:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    build_root=/tmp/llvm-build
+    bootstrap_root=/tmp/llvm-bootstrap
+    stage2_root=/tmp/llvm-stage2
     install_dir="{{ pwd }}/llvm"
 
     if [[ -f "$install_dir/bin/clang" ]]; then
@@ -83,31 +84,50 @@ llvm:
         fi
     done
 
-    echo "==> Downloading and building LLVM (this will take a while)..."
-    rm -rf "$build_root"
-    mkdir -p "$build_root"
-    echo "==> Fetching latest LLVM release URL..."
+    echo "==> Downloading LLVM source..."
+    rm -rf "$bootstrap_root" "$stage2_root"
+    mkdir -p "$bootstrap_root"
     URL=$(curl -s https://api.github.com/repos/llvm/llvm-project/releases/latest | grep tarball_url | head -n1 | cut -d '"' -f4)
-    curl -L "$URL" -o "$build_root/llvm.tar.gz"
-    mkdir -p "$build_root/llvm-project"
-    tar -xzf "$build_root/llvm.tar.gz" -C "$build_root/llvm-project" --strip-components=1
+    curl -L "$URL" -o "$bootstrap_root/llvm.tar.gz"
+    mkdir -p "$bootstrap_root/src"
+    tar -xzf "$bootstrap_root/llvm.tar.gz" -C "$bootstrap_root/src" --strip-components=1
 
-    cd "$build_root/llvm-project"
-    # Use Ninja if available, otherwise fallback to Unix Makefiles
+    echo "==> Building bootstrap LLVM toolchain..."
+    mkdir -p "$bootstrap_root/build"
     GENERATOR="Unix Makefiles"
     if command -v ninja &> /dev/null; then GENERATOR="Ninja"; fi
 
-    cmake -S llvm -B build -G "$GENERATOR" \
+    cmake -S "$bootstrap_root/src/llvm" -B "$bootstrap_root/build" -G "$GENERATOR" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" \
+        -DLLVM_ENABLE_PROJECTS="clang;lld" \
+        -DLLVM_TARGETS_TO_BUILD="X86" \
+        -DLLVM_INCLUDE_TESTS=OFF \
+        -DLLVM_INCLUDE_EXAMPLES=OFF \
+        -DLLVM_ENABLE_BINDINGS=OFF
+    cmake --build "$bootstrap_root/build" -j{{ threads }}
+    cmake --install "$bootstrap_root/build"
+
+    echo "==> Building branded LosOS LLVM toolchain (Stage 2)..."
+    mkdir -p "$stage2_root/build"
+    export CC="$bootstrap_root/install/bin/clang"
+    export CXX="$bootstrap_root/install/bin/clang++"
+
+    cmake -S "$bootstrap_root/src/llvm" -B "$stage2_root/build" -G "$GENERATOR" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$install_dir" \
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
         -DLLVM_TARGETS_TO_BUILD="X86" \
         -DLLVM_INCLUDE_TESTS=OFF \
         -DLLVM_INCLUDE_EXAMPLES=OFF \
-        -DLLVM_ENABLE_BINDINGS=OFF
+        -DLLVM_ENABLE_BINDINGS=OFF \
+        -DCLANG_VENDOR="LosOS" \
+        -DPACKAGE_VENDOR="LosOS"
+    cmake --build "$stage2_root/build" -j{{ threads }}
+    cmake --install "$stage2_root/build"
     
-    cmake --build build -j{{ threads }}
-    cmake --install build
+    echo "==> Clean up build artifacts..."
+    rm -rf "$bootstrap_root" "$stage2_root"
 
 # Build a custom kernel optimised for LosOS.
 kernel: llvm
