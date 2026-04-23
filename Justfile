@@ -27,8 +27,10 @@ ovmf_code := env("OVMF_CODE", "/usr/share/edk2/x64/OVMF_CODE.4m.fd")
 ovmf_vars := env("OVMF_VARS", "/usr/share/edk2/x64/OVMF_VARS.4m.fd")
 isoman_config := env("ISOMAN_CONFIG", "")
 kernel_tag := `git ls-remote --tags --refs https://github.com/torvalds/linux 'v*' | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | cut -d '-' -f1 | tail -n1`
+zig_rel := `curl https://ziglang.org/download/index.json | grep "tarball" | sort -V | grep "linux" | grep $(uname -m) | tail -n1 | awk '{print $2}' | cut -d ',' -f1 | cut -d '"' -f2`
 threads := `nproc`
 pwd := `pwd`
+build_cache := env("BUILD_CACHE", ".build-cache")
 # ── Private helpers ───────────────────────────────────────────────────────────
 
 # Ensure cargo-nextest is installed
@@ -67,9 +69,11 @@ llvm:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    bootstrap_root=/tmp/llvm-bootstrap
-    stage2_root=/tmp/llvm-stage2
+    cache_root="{{ build_cache }}"
+    bootstrap_root="${LLVM_BOOTSTRAP_ROOT:-$cache_root/llvm-bootstrap}"
+    stage2_root="${LLVM_STAGE2_ROOT:-$cache_root/llvm-stage2}"
     install_dir="{{ pwd }}/llvm"
+    generator="${GENERATOR:-}"
 
     if [[ -f "$install_dir/bin/clang" ]]; then
         echo "==> LLVM already built at $install_dir"
@@ -84,8 +88,17 @@ llvm:
         fi
     done
 
+    if [[ -z "$generator" ]]; then
+        if command -v ninja &> /dev/null; then
+            generator="Ninja"
+        else
+            generator="Unix Makefiles"
+        fi
+    fi
+
     echo "==> Downloading LLVM source and Zig bootstrap compiler..."
     rm -rf "$bootstrap_root" "$stage2_root"
+    mkdir -p "$(dirname "$bootstrap_root")" "$(dirname "$stage2_root")"
     mkdir -p "$bootstrap_root"
     # Fetch LLVM
     URL=$(curl -s https://api.github.com/repos/llvm/llvm-project/releases/latest | grep tarball_url | head -n1 | cut -d '"' -f4)
@@ -94,7 +107,7 @@ llvm:
     tar -xzf "$bootstrap_root/llvm.tar.gz" -C "$bootstrap_root/src" --strip-components=1
     
     # Fetch Zig
-    curl -L https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz -o "$bootstrap_root/zig.tar.xz"
+    curl -L {{ zig_rel }} -o "$bootstrap_root/zig.tar.xz"
     tar -xJf "$bootstrap_root/zig.tar.xz" -C "$bootstrap_root"
     ZIG="$bootstrap_root/zig-x86_64-linux-0.16.0/zig"
 
@@ -103,7 +116,7 @@ llvm:
     export CC="$ZIG cc -target x86_64-linux-musl"
     export CXX="$ZIG c++ -target x86_64-linux-musl"
 
-    cmake -S "$bootstrap_root/src/llvm" -B "$bootstrap_root/build" -G "$GENERATOR" \
+    cmake -S "$bootstrap_root/src/llvm" -B "$bootstrap_root/build" -G "$generator" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" \
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
@@ -119,7 +132,7 @@ llvm:
     export CC="$bootstrap_root/install/bin/clang"
     export CXX="$bootstrap_root/install/bin/clang++"
 
-    cmake -S "$bootstrap_root/src/llvm" -B "$stage2_root/build" -G "$GENERATOR" \
+    cmake -S "$bootstrap_root/src/llvm" -B "$stage2_root/build" -G "$generator" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$install_dir" \
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
@@ -147,7 +160,8 @@ kernel: llvm
     export PATH="{{ pwd }}/llvm/bin:$PATH"
 
     tag="{{ kernel_tag }}"
-    build_root=/tmp/kernel
+    cache_root="{{ build_cache }}"
+    build_root="${KERNEL_BUILD_ROOT:-$cache_root/kernel}"
     archive="${build_root}/${tag}.tar.gz"
     src_dir="${build_root}/linux-${tag#v}"
 
