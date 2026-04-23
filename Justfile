@@ -128,7 +128,10 @@ llvm:
         -DLLVM_INCLUDE_EXAMPLES=OFF \
         -DLLVM_ENABLE_BINDINGS=OFF \
         -DCLANG_VENDOR="LosOS" \
-        -DPACKAGE_VENDOR="LosOS"
+        -DPACKAGE_VENDOR="LosOS" \
+        -DLLVM_USE_LINKER=wild \
+        -DLLVM_ENABLE_LTO=Full \
+        -DLLVM_USE_PGO_PROFILES=ON
     cmake --build "$stage2_root/build" -j{{ threads }}
     cmake --install "$stage2_root/build"
     
