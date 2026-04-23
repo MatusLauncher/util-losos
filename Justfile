@@ -159,16 +159,21 @@ llvm:
     export CC="$zig_cc"
     export CXX="$zig_cxx"
 
-    cmake -S "$bootstrap_root/src/llvm" -B "$bootstrap_root/build" -G "$generator" 
-        -DCMAKE_BUILD_TYPE=Release 
-        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" 
-        -DCMAKE_LINKER="$bootstrap_linker" 
-        -DLLVM_USE_LINKER="$bootstrap_linker" 
-        -DLLVM_ENABLE_PROJECTS="clang;lld" 
-        -DLLVM_TARGETS_TO_BUILD="X86" 
-        -DLLVM_INCLUDE_TESTS=OFF 
-        -DLLVM_INCLUDE_EXAMPLES=OFF 
+    CMAKE_ARGS=(
+        -S "$bootstrap_root/src/llvm"
+        -B "$bootstrap_root/build"
+        -G "$generator"
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install"
+        -DCMAKE_LINKER="$bootstrap_linker"
+        -DLLVM_USE_LINKER="$bootstrap_linker"
+        -DLLVM_ENABLE_PROJECTS="clang;lld"
+        -DLLVM_TARGETS_TO_BUILD="X86"
+        -DLLVM_INCLUDE_TESTS=OFF
+        -DLLVM_INCLUDE_EXAMPLES=OFF
         -DLLVM_ENABLE_BINDINGS=OFF
+    )
+    cmake "${CMAKE_ARGS[@]}"
     cmake --build "$bootstrap_root/build" -j{{ threads }}
     cmake --install "$bootstrap_root/build"
 
@@ -177,20 +182,25 @@ llvm:
     export CC="$bootstrap_root/install/bin/clang"
     export CXX="$bootstrap_root/install/bin/clang++"
 
-    cmake -S "$bootstrap_root/src/llvm" -B "$stage2_root/build" -G "$generator" 
-        -DCMAKE_BUILD_TYPE=Release 
-        -DCMAKE_INSTALL_PREFIX="$install_dir" 
-        -DCMAKE_LINKER="$stage2_linker" 
-        -DLLVM_USE_LINKER="$stage2_linker" 
-        -DLLVM_ENABLE_PROJECTS="clang;lld" 
-        -DLLVM_TARGETS_TO_BUILD="X86" 
-        -DLLVM_INCLUDE_TESTS=OFF 
-        -DLLVM_INCLUDE_EXAMPLES=OFF 
-        -DLLVM_ENABLE_BINDINGS=OFF 
-        -DCLANG_VENDOR="LosOS" 
-        -DPACKAGE_VENDOR="LosOS" 
-        -DLLVM_ENABLE_LTO=Full 
+    CMAKE_ARGS=(
+        -S "$bootstrap_root/src/llvm"
+        -B "$stage2_root/build"
+        -G "$generator"
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_INSTALL_PREFIX="$install_dir"
+        -DCMAKE_LINKER="$stage2_linker"
+        -DLLVM_USE_LINKER="$stage2_linker"
+        -DLLVM_ENABLE_PROJECTS="clang;lld"
+        -DLLVM_TARGETS_TO_BUILD="X86"
+        -DLLVM_INCLUDE_TESTS=OFF
+        -DLLVM_INCLUDE_EXAMPLES=OFF
+        -DLLVM_ENABLE_BINDINGS=OFF
+        -DCLANG_VENDOR="LosOS"
+        -DPACKAGE_VENDOR="LosOS"
+        -DLLVM_ENABLE_LTO=Full
         -DLLVM_USE_PGO_PROFILES=ON
+    )
+    cmake "${CMAKE_ARGS[@]}"
     cmake --build "$stage2_root/build" -j{{ threads }}
     cmake --install "$stage2_root/build"
     
