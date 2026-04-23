@@ -115,14 +115,14 @@ llvm:
         -B "$bootstrap_root/build"
         -G "$generator"
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" -DCMAKE_C_COMPILER="/usr/lib/ccache/bin/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/bin/clang++"
+        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" 
         -DLLVM_ENABLE_PROJECTS="clang;lld"
         -DLLVM_TARGETS_TO_BUILD="X86"
         -DLLVM_INCLUDE_TESTS=OFF
         -DLLVM_INCLUDE_EXAMPLES=OFF
         -DLLVM_ENABLE_BINDINGS=OFF
     )
-    cmake "${CMAKE_ARGS[@]}"
+    cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/bin/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/bin/clang++" || cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/clang++" 
     cmake --build "$bootstrap_root/build" -j`nproc`
     cmake --install "$bootstrap_root/build"
 
@@ -136,7 +136,7 @@ llvm:
         -B "$stage2_root/build"
         -G "$generator"
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="$install_dir" -DCMAKE_C_COMPILER="/usr/lib/ccache/bin/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/bin/clang++"
+        -DCMAKE_INSTALL_PREFIX="$install_dir" -DCMAKE_C_COMPILER="$bootstrap_root/install/bin/clang" -DCMAKE_CXX_COMPILER="$bootstrap_root/install/bin/clang++"
         -DLLVM_ENABLE_PROJECTS="clang;lld"
         -DLLVM_TARGETS_TO_BUILD="X86"
         -DLLVM_INCLUDE_TESTS=OFF
@@ -147,7 +147,7 @@ llvm:
         -DLLVM_ENABLE_LTO=Full
         -DLLVM_USE_PGO_PROFILES=ON
     )
-    cmake "${CMAKE_ARGS[@]}"
+    cmake "${CMAKE_ARGS[@]}" 
     cmake --build "$stage2_root/build" -j`nproc`
     cmake --install "$stage2_root/build"
     
