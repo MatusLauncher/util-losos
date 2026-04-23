@@ -117,7 +117,7 @@ llvm:
         -B "$bootstrap_root/build"
         -G "$generator"
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" -DCMAKE_C_COMPILER="clang" -DCMAKE_CXX_COMPILER="clang++"
+        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" -DCMAKE_C_COMPILER="ccache" -DCMAKE_CXX_COMPILER="ccache"
         -DLLVM_ENABLE_PROJECTS="clang;lld"
         -DLLVM_TARGETS_TO_BUILD="X86"
         -DLLVM_INCLUDE_TESTS=OFF
