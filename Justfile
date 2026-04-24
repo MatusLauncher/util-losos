@@ -157,31 +157,56 @@ llvm:
     echo "==> Clean up build artifacts..."
     rm -rf "$bootstrap_root" "$stage2_root"
 
-# Build a custom kernel optimised for LosOS.
+# Build a custom kernel optimised for LosOS inside an isolated container.
+# Requires: Containerfile.kernel image (built automatically on first run).
 kernel: llvm
     #!/usr/bin/env bash
     set -euo pipefail
 
-    # Use the locally built LLVM
-    export PATH="`pwd`/llvm/bin:$PATH"
-
-    tag="{{ kernel_tag }}"
     repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"
     [[ "$cache_root" = /* ]] || cache_root="$repo_root/$cache_root"
     build_root="${KERNEL_BUILD_ROOT:-$cache_root/kernel}"
     [[ "$build_root" = /* ]] || build_root="$repo_root/$build_root"
+
+    tag="{{ kernel_tag }}"
     archive="${build_root}/${tag}.tar.gz"
     src_dir="${build_root}/linux-${tag#v}"
 
-    echo "==> Pulling in kernel ${tag}"
+    echo "==> Ensuring kernel build environment image..."
+    podman build -q -f Containerfile.kernel -t losos-kernel-build "$repo_root"
+
+    echo "==> Pulling kernel ${tag}"
     rm -rf "$build_root"
     mkdir -p "$build_root"
-
     curl -fL "https://github.com/torvalds/linux/archive/refs/tags/${tag}.tar.gz" -o "$archive"
     tar -xzf "$archive" -C "$build_root"
 
-    cd "$src_dir"
+    afdo_env=""
+    propeller_env=""
+    afdo_prof="${AUTOFDO_PROFILE:-}"
+    [[ -z "$afdo_prof" && -f "$cache_root/kernel.afdo" ]] && afdo_prof="$cache_root/kernel.afdo"
+    propeller_prefix="${PROPELLER_PREFIX:-}"
+    [[ -z "$propeller_prefix" && -f "$cache_root/kernel-propeller.symorder" ]] \
+        && propeller_prefix="$cache_root/kernel-propeller"
+    [[ -n "$afdo_prof" ]] \
+        && { echo "==> AutoFDO profile: $afdo_prof"; afdo_env="CLANG_AUTOFDO_PROFILE=/cache/kernel.afdo"; }
+    [[ -n "$propeller_prefix" ]] \
+        && { echo "==> Propeller prefix: $propeller_prefix"; propeller_env="CLANG_PROPELLER_PROFILE_PREFIX=/cache/kernel-propeller"; }
+
+    echo "==> Building kernel ${tag} in container..."
+    podman run --rm \
+        -v "$repo_root/llvm:/llvm:ro,Z" \
+        -v "$build_root:/src:Z" \
+        -v "$cache_root:/cache:Z" \
+        -v "$repo_root:/repo:ro,Z" \
+        -e KERNEL_TAG="$tag" \
+        -e AFDO_ENV="$afdo_env" \
+        -e PROPELLER_ENV="$propeller_env" \
+        losos-kernel-build bash -s <<'KERNELBUILD'
+    set -euo pipefail
+    export PATH="/llvm/bin:$PATH"
+    cd "/src/linux-${KERNEL_TAG#v}"
     make tinyconfig LLVM=1
     ./scripts/config \
         -e 64BIT -e BLK_DEV_INITRD -e RD_GZIP -e BINFMT_ELF -e BINFMT_SCRIPT \
@@ -193,36 +218,29 @@ kernel: llvm
         -e NET -e INET -e NETDEVICES -e NAMESPACES -e UTS_NS -e IPC_NS -e USER_NS -e PID_NS -e NET_NS \
         -e EFI -e EFIVAR_FS -e ISO9660_FS -e TMPFS -e DEVTMPFS -e DEVTMPFS_MOUNT \
         -e RELOCATABLE -e RANDOMIZE_BASE -e RELR \
-        -e LTO_CLANG_FULL -e CFI_CLANG -e CC_OPTIMIZE_FOR_SIZE -e AUTOFDO_CLANG -e PROPELLER_CLANG -e SECURITY_LANDLOCK -e BPF_SYSCALL \
+        -e LTO_CLANG_FULL -e CFI_CLANG -e CC_OPTIMIZE_FOR_SIZE -e AUTOFDO_CLANG -e PROPELLER_CLANG \
+        -e SECURITY_LANDLOCK -e BPF_SYSCALL \
         -e MODULES -e MODULE_SIG -e MODULE_SIG_ALL -e MODULE_SIG_FORCE -e MODULE_SIG_SHA256 \
         --set-str LOCALVERSION "-losos" \
         --set-str DEFAULT_HOSTNAME "losos" \
-        --set-str MODULE_SIG_KEY "{{ pwd }}/sb-key.pem" \
-        --set-str MODULE_SIG_CERT "{{ pwd }}/sb-cert.pem"
+        --set-str MODULE_SIG_KEY "/repo/sb-key.pem" \
+        --set-str MODULE_SIG_CERT "/repo/sb-cert.pem"
     make olddefconfig LLVM=1
-
-    afdo_prof="${AUTOFDO_PROFILE:-}"
-    [[ -z "$afdo_prof" && -f "$cache_root/kernel.afdo" ]] && afdo_prof="$cache_root/kernel.afdo"
-    propeller_prefix="${PROPELLER_PREFIX:-}"
-    [[ -z "$propeller_prefix" && -f "$cache_root/kernel-propeller.symorder" ]] && propeller_prefix="$cache_root/kernel-propeller"
-
-    afdo_arg=()
-    [[ -n "$afdo_prof" ]] && { echo "==> AutoFDO profile: $afdo_prof"; afdo_arg=(CLANG_AUTOFDO_PROFILE="$afdo_prof"); }
-    propeller_arg=()
-    [[ -n "$propeller_prefix" ]] && { echo "==> Propeller prefix: $propeller_prefix"; propeller_arg=(CLANG_PROPELLER_PROFILE_PREFIX="$propeller_prefix"); }
-
-    # LTO_CLANG_FULL requires LD_IS_LLD (kernel checks $(LD) --version for "LLD");
-    # mold won't satisfy that check so lld is kept here even though mold is used elsewhere.
-    make LLVM=1 LD="${KERNEL_LD:-ld.lld}" "${afdo_arg[@]}" "${propeller_arg[@]}" -j`nproc`
-    
+    profile_args=()
+    [[ -n "$AFDO_ENV" ]] && profile_args+=("$AFDO_ENV")
+    [[ -n "$PROPELLER_ENV" ]] && profile_args+=("$PROPELLER_ENV")
+    # LTO_CLANG_FULL requires LD_IS_LLD; mold won't satisfy that check.
+    make LLVM=1 LD=ld.lld "${profile_args[@]}" -j$(nproc)
     echo "==> Signing kernel bzImage..."
-    if [[ -f "{{ pwd }}/sb-key.pem" && -f "{{ pwd }}/sb-cert.pem" ]]; then 
-        sbsign --key "{{ pwd }}/sb-key.pem" --cert "{{ pwd }}/sb-cert.pem" --output arch/x86/boot/bzImage arch/x86/boot/bzImage; 
-    else 
-        echo "WARNING: Secure Boot keys not found — kernel image will be unsigned. Run 'just setup-sbctl' to generate keys."; 
+    if [[ -f /repo/sb-key.pem && -f /repo/sb-cert.pem ]]; then
+        sbsign --key /repo/sb-key.pem --cert /repo/sb-cert.pem \
+            --output arch/x86/boot/bzImage arch/x86/boot/bzImage
+    else
+        echo "WARNING: Secure Boot keys not found — kernel image will be unsigned."
     fi
-    
-    cp arch/x86/boot/bzImage {{ pwd }}/vmlinuz
+    KERNELBUILD
+
+    cp "$src_dir/arch/x86/boot/bzImage" "$repo_root/vmlinuz"
 
 # Collect AutoFDO samples for kernel PGO.  Boots the ISO under perf-kvm to
 # capture guest branch samples, converts them to an AFDO profile, then the
