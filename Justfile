@@ -122,6 +122,7 @@ llvm:
         -DLLVM_INCLUDE_TESTS=OFF
         -DLLVM_INCLUDE_EXAMPLES=OFF
         -DLLVM_ENABLE_BINDINGS=OFF
+        -DLLVM_USE_LINKER=mold
     )
     cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/bin/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/bin/clang++" || cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/clang++" 
     cmake --build "$bootstrap_root/build" -j`nproc`
@@ -147,7 +148,7 @@ llvm:
         -DPACKAGE_VENDOR="LosOS"
         -DLLVM_ENABLE_LTO=Full
         -DLLVM_ENABLE_CFI=ON
-        -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld"
+        -DLLVM_USE_LINKER=mold
     )
     cmake "${CMAKE_ARGS[@]}" 
     cmake --build "$stage2_root/build" -j`nproc`
@@ -210,6 +211,8 @@ kernel: llvm
     propeller_arg=()
     [[ -n "$propeller_prefix" ]] && { echo "==> Propeller prefix: $propeller_prefix"; propeller_arg=(CLANG_PROPELLER_PROFILE_PREFIX="$propeller_prefix"); }
 
+    # LTO_CLANG_FULL requires LD_IS_LLD (kernel checks $(LD) --version for "LLD");
+    # mold won't satisfy that check so lld is kept here even though mold is used elsewhere.
     make LLVM=1 LD="${KERNEL_LD:-ld.lld}" "${afdo_arg[@]}" "${propeller_arg[@]}" -j`nproc`
     
     echo "==> Signing kernel bzImage..."
