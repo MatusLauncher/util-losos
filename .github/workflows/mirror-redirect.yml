@@ -1,0 +1,30 @@
+name: Mirror redirect
+
+# pull_request_target runs in the base-repo context and always carries write
+# permissions — unlike pull_request which is read-only for fork PRs.
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  redirect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close PR and redirect to GitLab
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REDIRECT_MSG: |
+            ## This repository is a read-only mirror
+
+            All development happens on **GitLab**:
+            https://gitlab.com/losos-linux/util-losos
+
+            Please open your contribution there. This PR has been automatically closed.
+        run: |
+          gh pr close "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --comment "$REDIRECT_MSG"
