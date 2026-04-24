@@ -111,12 +111,14 @@ llvm:
     tar -xzf "$bootstrap_root/llvm.tar.gz" -C "$bootstrap_root/src" --strip-components=1
     export CC="clang"
     export CXX="clang++"
-    CMAKE_ARGS=(
+    BOOTSTRAP_CMAKE_ARGS=(
         -S "$bootstrap_root/src/llvm"
         -B "$bootstrap_root/build"
         -G "$generator"
         -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" 
+        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install"
+        -DCMAKE_C_COMPILER=clang
+        -DCMAKE_CXX_COMPILER=clang++
         -DLLVM_ENABLE_PROJECTS="clang;lld"
         -DLLVM_TARGETS_TO_BUILD="X86"
         -DLLVM_INCLUDE_TESTS=OFF
@@ -124,11 +126,19 @@ llvm:
         -DLLVM_ENABLE_BINDINGS=OFF
         -DLLVM_USE_LINKER=mold
     )
-    cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/bin/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/bin/clang++" \
-        || cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/clang++" \
-        || cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ 
+    if command -v ccache &>/dev/null; then
+        BOOTSTRAP_CMAKE_ARGS+=(
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        )
+    fi
+    cmake "${BOOTSTRAP_CMAKE_ARGS[@]}"
     cmake --build "$bootstrap_root/build" -j`nproc`
     cmake --install "$bootstrap_root/build" --prefix "$bootstrap_root/install"
+    if [[ ! -x "$bootstrap_root/install/bin/clang" ]]; then
+        echo "Error: bootstrap clang not found at $bootstrap_root/install/bin/clang" >&2
+        exit 1
+    fi
 
     echo "==> Building branded LosOS LLVM toolchain (Stage 2)..."
     mkdir -p "$stage2_root/build"
