@@ -128,7 +128,7 @@ llvm:
         || cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/clang++" \
         || cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ 
     cmake --build "$bootstrap_root/build" -j`nproc`
-    cmake --install "$bootstrap_root/build"
+    cmake --install "$bootstrap_root/build" --prefix "$bootstrap_root/install"
 
     echo "==> Building branded LosOS LLVM toolchain (Stage 2)..."
     mkdir -p "$stage2_root/build"
@@ -154,7 +154,7 @@ llvm:
     )
     cmake "${CMAKE_ARGS[@]}" 
     cmake --build "$stage2_root/build" -j`nproc`
-    cmake --install "$stage2_root/build"
+    cmake --install "$stage2_root/build" --prefix "$install_dir"
     
     echo "==> Clean up build artifacts..."
     rm -rf "$bootstrap_root" "$stage2_root"
