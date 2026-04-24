@@ -62,10 +62,22 @@ _ensure-nerdctl:
     fi
     echo "==> nerdctl not found — downloading static binary to /tmp/nerdctl-bin/..."
     mkdir -p /tmp/nerdctl-bin
-    URL=$(curl -fsSL https://api.github.com/repos/containerd/nerdctl/releases/latest \
-        | grep '"browser_download_url"' \
-        | grep '"nerdctl-[0-9][^"]*-linux-amd64\.tar\.gz"' \
-        | grep -v full | head -1 | cut -d '"' -f4)
+    API=$(curl -fsSL https://api.github.com/repos/containerd/nerdctl/releases/latest)
+    # Match lines that contain a download URL ending in linux-amd64.tar.gz, excluding the
+    # "full" bundle (which bundles containerd, buildkit, etc. and is much larger).
+    URL=$(printf '%s\n' "$API" \
+        | grep 'browser_download_url' \
+        | grep 'linux-amd64\.tar\.gz' \
+        | grep -v 'full' \
+        | head -1 \
+        | cut -d '"' -f4)
+    if [ -z "$URL" ]; then
+        echo "ERROR: could not find a nerdctl linux-amd64 download URL." >&2
+        echo "       GitHub API response (first 10 lines):" >&2
+        printf '%s\n' "$API" | head -10 >&2
+        exit 1
+    fi
+    echo "==> Fetching $URL"
     curl -fsSL "$URL" | tar -xz -C /tmp/nerdctl-bin nerdctl
     chmod +x /tmp/nerdctl-bin/nerdctl
     echo "==> nerdctl downloaded to /tmp/nerdctl-bin/nerdctl"
