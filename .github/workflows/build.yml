@@ -58,7 +58,8 @@ jobs:
     runs-on: ubuntu-24.04
     needs: lint
     permissions:
-      contents: write   # required for gh release create
+      contents: write   # gh release create
+      packages: write   # ghcr.io container push
 
     steps:
       - name: Checkout (with submodules)
@@ -154,6 +155,30 @@ jobs:
           path: os-client.iso
           retention-days: 7
 
+      # Publish the OS disk image as a container image so updman can pull it
+      # via `nerdctl pull`.  The image contains a single layer with `os.img`
+      # (the disk image renamed) so updman's extraction logic finds it.
+      - name: Publish OS image to ghcr.io (container release)
+        run: |
+          image="ghcr.io/${{ github.repository_owner }}/util-losos"
+          short_sha="${GITHUB_SHA::7}"
+          printf '%s' "${{ github.token }}" \
+            | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+          printf 'FROM scratch\nCOPY os-client.iso /os.img\n' \
+            | podman build -t "${image}:${short_sha}" -t "${image}:latest" -f - .
+          podman push "${image}:${short_sha}"
+          podman push "${image}:latest"
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            podman tag "${image}:${short_sha}" "${image}:${{ github.ref_name }}"
+            podman push "${image}:${{ github.ref_name }}"
+          fi
+
+      # On version tags: publish kernel + LLVM toolchain as GitHub release assets.
+      # The ISO is distributed via the container registry (for updman), not here.
+      - name: Package LLVM toolchain
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: tar -czf llvm-toolchain-linux-x86_64.tar.gz llvm/
+
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -161,4 +186,5 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" \
             --generate-notes \
-            os-client.iso
+            vmlinuz \
+            llvm-toolchain-linux-x86_64.tar.gz
