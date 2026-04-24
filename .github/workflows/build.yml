@@ -1,0 +1,128 @@
+# CI build — runs on GitHub (mirror of gitlab.com/losos-linux/util-losos).
+#
+# Mirror setup (one-time, GitLab-side):
+#   GitLab project → Settings → Repository → Mirroring repositories
+#   → Mirror direction: Push  → URL: https://github.com/losos-linux/util-losos.git
+#   → Authentication: GitHub personal-access-token with repo scope
+#
+# GitHub Actions then triggers automatically on every mirrored push.
+
+name: Build
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Fast lint gate ──────────────────────────────────────────────────────────
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-lint-
+
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+
+  # ── Full OS image build ─────────────────────────────────────────────────────
+  build:
+    runs-on: ubuntu-24.04
+    needs: lint
+    permissions:
+      contents: write   # required for gh release create
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build mold clang lld curl ca-certificates \
+            podman \
+            musl-tools \
+            libssl-dev libelf-dev \
+            python3 perl flex bison bc \
+            sbsigntool
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+          components: clippy,rustfmt
+
+      - name: Set up just
+        uses: extractions/setup-just@v2
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-
+
+      # LLVM is keyed by upstream release tag so the cache is invalidated
+      # automatically when a new LLVM version ships.
+      - name: Resolve latest LLVM release tag
+        id: llvm
+        run: |
+          tag=$(curl -sf https://api.github.com/repos/llvm/llvm-project/releases/latest \
+            | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Restore LLVM from cache
+        id: llvm-cache
+        uses: actions/cache@v4
+        with:
+          path: llvm
+          key: llvm-${{ steps.llvm.outputs.tag }}-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Build LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: just llvm
+
+      - name: Build OS ISO (kernel → profile-collect → assembly)
+        run: just build
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: os-client-${{ github.sha }}
+          path: os-client.iso
+          retention-days: 7
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --generate-notes \
+            os-client.iso

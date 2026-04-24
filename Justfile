@@ -45,7 +45,7 @@ _ensure-nextest:
 _dm-integrity:
     #!/usr/bin/env bash
     if ! lsmod | grep -q "^dm_integrity" && ! grep -q "^dm_integrity" /proc/modules; then
-        sudo modprobe dm-integrity
+        sudo modprobe dm-integrity || echo "WARNING: dm-integrity unavailable (restricted environment) — continuing."
     fi
 
 # Generate Secure Boot keys only when sb-key.pem / sb-cert.pem are absent.
@@ -124,7 +124,9 @@ llvm:
         -DLLVM_ENABLE_BINDINGS=OFF
         -DLLVM_USE_LINKER=mold
     )
-    cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/bin/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/bin/clang++" || cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/clang++" 
+    cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/bin/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/bin/clang++" \
+        || cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER="/usr/lib/ccache/clang" -DCMAKE_CXX_COMPILER="/usr/lib/ccache/clang++" \
+        || cmake "${CMAKE_ARGS[@]}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ 
     cmake --build "$bootstrap_root/build" -j`nproc`
     cmake --install "$bootstrap_root/build"
 
