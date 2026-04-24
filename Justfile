@@ -1,8 +1,8 @@
 # util-mdl — build, launch, and test the initramfs OS.
 #
 # Recipes:
-#   just build               Build OS disk image (host-compiled Rust + podman cpio assembly)
-#   just container-build     Build OS disk image with Rust compiled fully inside podman
+#   just build               Build OS disk image (isoman built in Alpine, full container assembly)
+#   just container-build     Build OS disk image with Rust compiled fully inside nerdctl
 #   just build-config        Build from a JSON config file (ISOMAN_CONFIG)
 #   just build-gsi           Build a GSI (Fastboot + Odin)
 #   just build-gsi-fastboot  Build a Fastboot-only GSI boot.img
@@ -15,7 +15,7 @@
 #   just build-test          Build then test
 #   just dev                 Pull all submodules and build the workspace
 #   just kernel-profiles     Collect AutoFDO samples; next 'just kernel' applies them
-#   just setup-sbctl         Generate Secure Boot key hierarchy (PK/KEK/db) via sbctl in an ephemeral Arch Linux container
+#   just setup-sbctl         Generate Secure Boot key hierarchy (PK/KEK/db) via sbctl in an ephemeral Alpine container
 # ── Configurable variables (override via env or 'just var=value recipe') ──────
 
 kernel := env("KERNEL", "vmlinuz")
@@ -31,6 +31,10 @@ kernel_tag := `git ls-remote --tags --refs https://github.com/torvalds/linux 'v*
 threads := `nproc`
 pwd := `pwd`
 build_cache := env("BUILD_CACHE", ".build-cache")
+# nerdctl binary: prefer system install, fall back to bootstrap copy in /tmp.
+nerdctl_bin := `command -v nerdctl 2>/dev/null || echo /tmp/nerdctl-bin/nerdctl`
+# Pre-built isoman binary (built inside Alpine by _build-isoman).
+isoman_bin := env("ISOMAN_BIN", ".build-cache/isoman")
 # ── Private helpers ───────────────────────────────────────────────────────────
 
 # Ensure cargo-nextest is installed
@@ -47,6 +51,47 @@ _dm-integrity:
     if ! lsmod | grep -q "^dm_integrity" && ! grep -q "^dm_integrity" /proc/modules; then
         sudo modprobe dm-integrity || echo "WARNING: dm-integrity unavailable (restricted environment) — continuing."
     fi
+
+# Download the static nerdctl binary to /tmp/nerdctl-bin/ when nerdctl is not
+# already installed on the host.  All recipes that invoke nerdctl depend on this.
+_ensure-nerdctl:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -x "{{ nerdctl_bin }}" ]; then
+        exit 0
+    fi
+    echo "==> nerdctl not found — downloading static binary to /tmp/nerdctl-bin/..."
+    mkdir -p /tmp/nerdctl-bin
+    URL=$(curl -fsSL https://api.github.com/repos/containerd/nerdctl/releases/latest \
+        | grep '"browser_download_url"' \
+        | grep '"nerdctl-[0-9][^"]*-linux-amd64\.tar\.gz"' \
+        | grep -v full | head -1 | cut -d '"' -f4)
+    curl -fsSL "$URL" | tar -xz -C /tmp/nerdctl-bin nerdctl
+    chmod +x /tmp/nerdctl-bin/nerdctl
+    echo "==> nerdctl downloaded to /tmp/nerdctl-bin/nerdctl"
+
+# Build the isoman binary inside a Rust:Alpine container — no host Rust toolchain needed.
+# The result is cached at {{ isoman_bin }}; delete it to force a rebuild.
+_build-isoman: _ensure-nerdctl
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="{{ isoman_bin }}"
+    mkdir -p "$(dirname "$out")"
+    if [ -x "$out" ]; then
+        echo "==> isoman binary found at $out (delete to rebuild)"
+        exit 0
+    fi
+    echo "==> Building isoman inside Rust:Alpine container..."
+    "{{ nerdctl_bin }}" build \
+        --no-cache \
+        -f Containerfile.isoman \
+        -t losos-isoman-build \
+        "{{ pwd }}"
+    CID=$("{{ nerdctl_bin }}" create losos-isoman-build)
+    "{{ nerdctl_bin }}" cp "$CID:/isoman" "$out"
+    "{{ nerdctl_bin }}" rm "$CID"
+    chmod +x "$out"
+    echo "==> isoman binary at $out"
 
 # Generate Secure Boot keys only when sb-key.pem / sb-cert.pem are absent.
 _ensure-sb-keys:
@@ -171,7 +216,7 @@ llvm:
 
 # Build a custom kernel optimised for LosOS inside an isolated container.
 # Requires: Containerfile.kernel image (built automatically on first run).
-kernel: llvm
+kernel: llvm _ensure-nerdctl
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -186,7 +231,7 @@ kernel: llvm
     src_dir="${build_root}/linux-${tag#v}"
 
     echo "==> Ensuring kernel build environment image..."
-    podman build -q -f Containerfile.kernel -t losos-kernel-build "$repo_root"
+    "{{ nerdctl_bin }}" build -q -f Containerfile.kernel -t losos-kernel-build "$repo_root"
 
     echo "==> Pulling kernel ${tag}"
     rm -rf "$build_root"
@@ -209,12 +254,12 @@ kernel: llvm
     mkdir -p "$cache_root/ccache-kernel"
 
     echo "==> Building kernel ${tag} in container..."
-    podman run --rm \
-        -v "$repo_root/llvm:/llvm:ro,Z" \
-        -v "$build_root:/src:Z" \
-        -v "$cache_root:/cache:Z" \
-        -v "$cache_root/ccache-kernel:/ccache:Z" \
-        -v "$repo_root:/repo:ro,Z" \
+    "{{ nerdctl_bin }}" run --rm --runtime=krun -i \
+        -v "$repo_root/llvm:/llvm:ro" \
+        -v "$build_root:/src" \
+        -v "$cache_root:/cache" \
+        -v "$cache_root/ccache-kernel:/ccache" \
+        -v "$repo_root:/repo:ro" \
         -e KERNEL_TAG="$tag" \
         -e AFDO_ENV="$afdo_env" \
         -e PROPELLER_ENV="$propeller_env" \
@@ -334,13 +379,13 @@ setup-sbctl:
     SB_DIR="`pwd`/secure-boot"
     mkdir -p "$SB_DIR"
 
-    echo "==> Generating Secure Boot key hierarchy via sbctl (ephemeral archlinux container)..."
-    podman run --rm 
-        --name sbctl-setup 
-        -v "$SB_DIR:/usr/share/secureboot:Z" 
-        docker.io/archlinux:latest 
-        bash -c "
-            pacman -Sy --noconfirm --quiet sbctl 2>&1 | tail -3
+    echo "==> Generating Secure Boot key hierarchy via sbctl (ephemeral Alpine container)..."
+    "{{ nerdctl_bin }}" run --rm --runtime=krun \
+        --name sbctl-setup \
+        -v "$SB_DIR:/usr/share/secureboot" \
+        docker.io/library/alpine:latest \
+        sh -c "
+            apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community sbctl 2>&1 | tail -3
             sbctl create-keys
         "
 
@@ -361,49 +406,49 @@ setup-sbctl:
 # Launch initramfs in QEMU (default)
 default: build-secure-boot run
 
-# Build OS ISO image — Rust compiled on host (musl), podman does cpio/firmware assembly
-build: _dm-integrity kernel-profiles
-    @echo "==> Building OS ISO image (host-compiled Rust, podman cpio assembly)..."
+# Build OS ISO image — isoman built in Alpine, full container assembly (no host Rust toolchain needed)
+build: _dm-integrity _build-isoman _ensure-nerdctl kernel-profiles
+    @echo "==> Building OS ISO image (Alpine container, full nerdctl assembly)..."
+    "{{ isoman_bin }}" --build --no-host-compile --output "{{ output }}"
+    @echo "==> ISO image written to {{ output }}"
+
+# Build OS ISO image with host-compiled Rust (requires cargo; faster incremental rebuilds)
+container-build: _dm-integrity _ensure-nerdctl kernel-profiles
+    @echo "==> Building OS ISO image (host-compiled Rust, nerdctl cpio assembly)..."
     cargo run -p isoman -- --build --output "{{ output }}" --kernel "{{ kernel }}"
     @echo "==> ISO image written to {{ output }}"
 
-# Build OS ISO image with Rust compiled fully inside podman (slower, no host toolchain needed)
-container-build: _dm-integrity kernel-profiles
-    @echo "==> Building OS ISO image (full container build)..."
-    cargo run -p isoman -- --build --no-host-compile --output "{{ output }}"
-    @echo "==> ISO image written to {{ output }}"
-
 # Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
-build-config config_path=isoman_config: _dm-integrity kernel-profiles
+build-config config_path=isoman_config: _dm-integrity _build-isoman _ensure-nerdctl kernel-profiles
     @echo "==> Building from config: {{ config_path }}"
-    cargo run -p isoman -- --build --config "{{ config_path }}" --output "{{ output }}"
+    "{{ isoman_bin }}" --build --config "{{ config_path }}" --output "{{ output }}"
 
 # Build a GSI (Fastboot + Odin) instead of a bootable ISO
-build-gsi: kernel-profiles
+build-gsi: _build-isoman _ensure-nerdctl kernel-profiles
     @echo "==> Building GSI (Fastboot + Odin)..."
-    cargo run -p isoman -- --build --gsi
+    "{{ isoman_bin }}" --build --gsi
 
 # Build a Fastboot-only GSI boot.img
-build-gsi-fastboot: kernel-profiles
-    cargo run -p isoman -- --build --gsi --gsi-fastboot
+build-gsi-fastboot: _build-isoman _ensure-nerdctl kernel-profiles
+    "{{ isoman_bin }}" --build --gsi --gsi-fastboot
 
 # Build production-hardened OS image (loglevel=0 + security mitigations)
-build-prod: _dm-integrity _ensure-sb-keys kernel-profiles
+build-prod: _dm-integrity _ensure-sb-keys _build-isoman _ensure-nerdctl kernel-profiles
     @echo "==> Building production OS disk image (hardened cmdline)..."
-    cargo run -p isoman -- --build --profile prod --kernel "{{ kernel }}"
+    "{{ isoman_bin }}" --build --profile prod --kernel "{{ kernel }}"
     @echo "==> Production disk image written to os-<mode>.img"
 
 # Build production live OS image (hardened cmdline + container-ready for preflight)
-build-prod-live: _dm-integrity _ensure-sb-keys kernel-profiles
+build-prod-live: _dm-integrity _ensure-sb-keys _build-isoman _ensure-nerdctl kernel-profiles
     @echo "==> Building production live OS disk image (container-ready for preflight)..."
-    cargo run -p isoman -- --build --profile prod-live --kernel "{{ kernel }}"
+    "{{ isoman_bin }}" --build --profile prod-live --kernel "{{ kernel }}"
     @echo "==> Production live disk image written to os-<mode>.img"
 
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
-build-secure-boot: _dm-integrity _ensure-sb-keys kernel-profiles
+build-secure-boot: _dm-integrity _ensure-sb-keys _build-isoman _ensure-nerdctl kernel-profiles
     @echo "==> Building with Secure Boot signing..."
-    kernel_arg=$([[ -n "{{ kernel }}" ]] && echo "--kernel {{ kernel }}" || echo ""); 
-    cargo run -p isoman -- --build --output "{{ output }}" --secure-boot true $kernel_arg
+    kernel_arg=$([[ -n "{{ kernel }}" ]] && echo "--kernel {{ kernel }}" || echo "");
+    "{{ isoman_bin }}" --build --output "{{ output }}" --secure-boot true $kernel_arg
 
 # Build initramfs then launch in QEMU
 build-run: build run

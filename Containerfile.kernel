@@ -1,7 +1,7 @@
-FROM docker.io/archlinux:latest
+FROM docker.io/library/alpine:latest
 
-RUN pacman -Syu --noconfirm --needed \
-        make perl python flex bison bc \
-        openssl libelf pahole sbsigntools \
-        ccache \
-    && pacman -Scc --noconfirm
+RUN apk add --no-cache \
+        make perl python3 flex bison bc \
+        openssl-dev elfutils-dev \
+        pahole sbsigntools \
+        ccache
