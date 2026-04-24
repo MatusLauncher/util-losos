@@ -31,8 +31,9 @@ kernel_tag := `git ls-remote --tags --refs https://github.com/torvalds/linux 'v*
 threads := `nproc`
 pwd := `pwd`
 build_cache := env("BUILD_CACHE", ".build-cache")
-# nerdctl binary: prefer system install, fall back to bootstrap copy in /tmp.
-nerdctl_bin := `command -v nerdctl 2>/dev/null || echo /tmp/nerdctl-bin/nerdctl`
+# nerdctl binary: prefer system install, fall back to full-bundle copy in /tmp.
+# The full bundle extracts under bin/, hence the bin/ suffix.
+nerdctl_bin := `command -v nerdctl 2>/dev/null || echo /tmp/nerdctl-bin/bin/nerdctl`
 # Pre-built isoman binary (built inside Alpine by _build-isoman).
 isoman_bin := env("ISOMAN_BIN", ".build-cache/isoman")
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -52,39 +53,102 @@ _dm-integrity:
         sudo modprobe dm-integrity || echo "WARNING: dm-integrity unavailable (restricted environment) — continuing."
     fi
 
-# Download the static nerdctl binary to /tmp/nerdctl-bin/ when nerdctl is not
-# already installed on the host.  All recipes that invoke nerdctl depend on this.
+# Download the nerdctl *full* bundle to /tmp/nerdctl-bin/.
+# The full bundle (bin/ + lib/cni/) includes containerd, runc, buildkitd,
+# containerd-rootless-setuptool.sh, and the CNI plugins — everything needed
+# to bootstrap rootless containerd without any host container runtime installed.
+# Skipped when the setup script is already present (bundle already extracted).
 _ensure-nerdctl:
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ -x "{{ nerdctl_bin }}" ]; then
-        exit 0
-    fi
-    echo "==> nerdctl not found — downloading static binary to /tmp/nerdctl-bin/..."
+    SETUP=/tmp/nerdctl-bin/bin/containerd-rootless-setuptool.sh
+    [ -f "$SETUP" ] && exit 0
+    echo "==> Downloading nerdctl full bundle to /tmp/nerdctl-bin/ ..."
     mkdir -p /tmp/nerdctl-bin
     API=$(curl -fsSL https://api.github.com/repos/containerd/nerdctl/releases/latest)
-    # Match lines that contain a download URL ending in linux-amd64.tar.gz, excluding the
-    # "full" bundle (which bundles containerd, buildkit, etc. and is much larger).
     URL=$(printf '%s\n' "$API" \
         | grep 'browser_download_url' \
-        | grep 'linux-amd64\.tar\.gz' \
-        | grep -v 'full' \
+        | grep 'nerdctl-full.*linux-amd64\.tar\.gz' \
         | head -1 \
         | cut -d '"' -f4)
     if [ -z "$URL" ]; then
-        echo "ERROR: could not find a nerdctl linux-amd64 download URL." >&2
-        echo "       GitHub API response (first 10 lines):" >&2
+        echo "ERROR: could not find nerdctl full bundle URL." >&2
         printf '%s\n' "$API" | head -10 >&2
         exit 1
     fi
     echo "==> Fetching $URL"
-    curl -fsSL "$URL" | tar -xz -C /tmp/nerdctl-bin nerdctl
-    chmod +x /tmp/nerdctl-bin/nerdctl
-    echo "==> nerdctl downloaded to /tmp/nerdctl-bin/nerdctl"
+    curl -fsSL "$URL" | tar -xz -C /tmp/nerdctl-bin
+    echo "==> nerdctl full bundle extracted to /tmp/nerdctl-bin/"
+
+# Ensure rootless containerd is running.
+# On first run: patches containerd-rootless-setuptool.sh to recognise the
+# LosOS/actman init system, runs it, then starts containerd if needed.
+_ensure-containerd-rootless: _ensure-nerdctl
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PATH="/tmp/nerdctl-bin/bin:${PATH}"
+    SOCK="/run/user/$(id -u)/containerd-rootless/containerd.sock"
+    [ -S "$SOCK" ] && exit 0
+
+    SETUP=/tmp/nerdctl-bin/bin/containerd-rootless-setuptool.sh
+    ROOTLESS=/tmp/nerdctl-bin/bin/containerd-rootless.sh
+    [ -f "$SETUP" ] || { echo "ERROR: $SETUP missing — delete /tmp/nerdctl-bin/ to redownload" >&2; exit 1; }
+
+    # ── LosOS (actman): register containerd-rootless as an actman init service ─
+    # This runs on the host only when the host IS LosOS; on other distros it is
+    # a no-op.  It enables salmon-completeness: LosOS can rebuild itself.
+    if [ -f /etc/isoman.json ] || [ -x /bin/updman ]; then
+        echo "==> LosOS (actman) detected — writing /etc/init/start/containerd-rootless"
+        mkdir -p /etc/init/start
+        printf '#!/bin/busybox sh\nexport XDG_RUNTIME_DIR=/run/user/$(id -u)\nexec "%s"\n' \
+            "$ROOTLESS" > /etc/init/start/containerd-rootless
+        chmod +x /etc/init/start/containerd-rootless
+    fi
+
+    # ── Patch setup script: inject actman guard before the first systemd check ─
+    # awk inserts the LosOS branch once (the !injected guard prevents duplication)
+    # so the script returns 0 on actman without printing "Unknown init system".
+    PATCHED=/tmp/nerdctl-bin/bin/containerd-rootless-setuptool-losos.sh
+    awk '
+        /systemctl|\/run\/systemd|openrc/ && !injected {
+            print "  # LosOS/actman — skip service-manager detection on actman systems"
+            print "  if [ -f /etc/isoman.json ] || [ -x /bin/updman ]; then"
+            print "    echo \"==> LosOS (actman): containerd-rootless init service registered\""
+            print "    return 0"
+            print "  fi"
+            injected = 1
+        }
+        { print }
+    ' "$SETUP" > "$PATCHED"
+    chmod +x "$PATCHED"
+
+    echo "==> Running containerd-rootless-setuptool.sh install (LosOS-patched)..."
+    "$PATCHED" install || echo "==> WARNING: setup script returned non-zero — will attempt manual start"
+
+    # Always configure krun as the default nerdctl runtime
+    mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/nerdctl"
+    printf 'default_runtime = "krun"\n' \
+        > "${XDG_CONFIG_HOME:-$HOME/.config}/nerdctl/nerdctl.toml"
+    echo "==> nerdctl: default_runtime = krun"
+
+    # ── Wait for socket; fall back to a background manual start ───────────────
+    for i in $(seq 10); do [ -S "$SOCK" ] && break; sleep 1; done
+    [ -S "$SOCK" ] && { echo "==> rootless containerd is up ($SOCK)"; exit 0; }
+
+    echo "==> Starting rootless containerd in the background..."
+    nohup "$ROOTLESS" >/tmp/nerdctl-bin/containerd.log 2>&1 &
+    disown
+    for i in $(seq 20); do
+        [ -S "$SOCK" ] && { echo "==> rootless containerd is up ($SOCK)"; exit 0; }
+        sleep 1
+    done
+    echo "ERROR: containerd did not start within 20 s" >&2
+    tail -20 /tmp/nerdctl-bin/containerd.log >&2
+    exit 1
 
 # Build the isoman binary inside a Rust:Alpine container — no host Rust toolchain needed.
 # The result is cached at {{ isoman_bin }}; delete it to force a rebuild.
-_build-isoman: _ensure-nerdctl
+_build-isoman: _ensure-containerd-rootless
     #!/usr/bin/env bash
     set -euo pipefail
     out="{{ isoman_bin }}"
@@ -228,7 +292,7 @@ llvm:
 
 # Build a custom kernel optimised for LosOS inside an isolated container.
 # Requires: Containerfile.kernel image (built automatically on first run).
-kernel: llvm _ensure-nerdctl
+kernel: llvm _ensure-containerd-rootless
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -419,45 +483,45 @@ setup-sbctl:
 default: build-secure-boot run
 
 # Build OS ISO image — isoman built in Alpine, full container assembly (no host Rust toolchain needed)
-build: _dm-integrity _build-isoman _ensure-nerdctl kernel-profiles
+build: _dm-integrity _build-isoman kernel-profiles
     @echo "==> Building OS ISO image (Alpine container, full nerdctl assembly)..."
     "{{ isoman_bin }}" --build --no-host-compile --output "{{ output }}"
     @echo "==> ISO image written to {{ output }}"
 
 # Build OS ISO image with host-compiled Rust (requires cargo; faster incremental rebuilds)
-container-build: _dm-integrity _ensure-nerdctl kernel-profiles
+container-build: _dm-integrity _ensure-containerd-rootless kernel-profiles
     @echo "==> Building OS ISO image (host-compiled Rust, nerdctl cpio assembly)..."
     cargo run -p isoman -- --build --output "{{ output }}" --kernel "{{ kernel }}"
     @echo "==> ISO image written to {{ output }}"
 
 # Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
-build-config config_path=isoman_config: _dm-integrity _build-isoman _ensure-nerdctl kernel-profiles
+build-config config_path=isoman_config: _dm-integrity _build-isoman kernel-profiles
     @echo "==> Building from config: {{ config_path }}"
     "{{ isoman_bin }}" --build --config "{{ config_path }}" --output "{{ output }}"
 
 # Build a GSI (Fastboot + Odin) instead of a bootable ISO
-build-gsi: _build-isoman _ensure-nerdctl kernel-profiles
+build-gsi: _build-isoman kernel-profiles
     @echo "==> Building GSI (Fastboot + Odin)..."
     "{{ isoman_bin }}" --build --gsi
 
 # Build a Fastboot-only GSI boot.img
-build-gsi-fastboot: _build-isoman _ensure-nerdctl kernel-profiles
+build-gsi-fastboot: _build-isoman kernel-profiles
     "{{ isoman_bin }}" --build --gsi --gsi-fastboot
 
 # Build production-hardened OS image (loglevel=0 + security mitigations)
-build-prod: _dm-integrity _ensure-sb-keys _build-isoman _ensure-nerdctl kernel-profiles
+build-prod: _dm-integrity _ensure-sb-keys _build-isoman kernel-profiles
     @echo "==> Building production OS disk image (hardened cmdline)..."
     "{{ isoman_bin }}" --build --profile prod --kernel "{{ kernel }}"
     @echo "==> Production disk image written to os-<mode>.img"
 
 # Build production live OS image (hardened cmdline + container-ready for preflight)
-build-prod-live: _dm-integrity _ensure-sb-keys _build-isoman _ensure-nerdctl kernel-profiles
+build-prod-live: _dm-integrity _ensure-sb-keys _build-isoman kernel-profiles
     @echo "==> Building production live OS disk image (container-ready for preflight)..."
     "{{ isoman_bin }}" --build --profile prod-live --kernel "{{ kernel }}"
     @echo "==> Production live disk image written to os-<mode>.img"
 
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
-build-secure-boot: _dm-integrity _ensure-sb-keys _build-isoman _ensure-nerdctl kernel-profiles
+build-secure-boot: _dm-integrity _ensure-sb-keys _build-isoman kernel-profiles
     @echo "==> Building with Secure Boot signing..."
     kernel_arg=$([[ -n "{{ kernel }}" ]] && echo "--kernel {{ kernel }}" || echo "");
     "{{ isoman_bin }}" --build --output "{{ output }}" --secure-boot true $kernel_arg
