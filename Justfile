@@ -14,6 +14,7 @@
 #   just build-run           Build then launch
 #   just build-test          Build then test
 #   just dev                 Pull all submodules and build the workspace
+#   just kernel-profiles     Collect AutoFDO samples; next 'just kernel' applies them
 #   just setup-sbctl         Generate Secure Boot key hierarchy (PK/KEK/db) via sbctl in an ephemeral Arch Linux container
 # ── Configurable variables (override via env or 'just var=value recipe') ──────
 
@@ -145,6 +146,7 @@ llvm:
         -DCLANG_VENDOR="LosOS"
         -DPACKAGE_VENDOR="LosOS"
         -DLLVM_ENABLE_LTO=Full
+        -DLLVM_ENABLE_CFI=ON
         -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld"
     )
     cmake "${CMAKE_ARGS[@]}" 
@@ -190,14 +192,25 @@ kernel: llvm
         -e NET -e INET -e NETDEVICES -e NAMESPACES -e UTS_NS -e IPC_NS -e USER_NS -e PID_NS -e NET_NS \
         -e EFI -e EFIVAR_FS -e ISO9660_FS -e TMPFS -e DEVTMPFS -e DEVTMPFS_MOUNT \
         -e RELOCATABLE -e RANDOMIZE_BASE -e RELR \
-        -e LTO_CLANG_FULL -e CFI_CLANG -e CC_OPTIMIZE_FOR_SIZE -e SECURITY_LANDLOCK -e BPF_SYSCALL \
+        -e LTO_CLANG_FULL -e CFI_CLANG -e CC_OPTIMIZE_FOR_SIZE -e AUTOFDO_CLANG -e PROPELLER_CLANG -e SECURITY_LANDLOCK -e BPF_SYSCALL \
         -e MODULES -e MODULE_SIG -e MODULE_SIG_ALL -e MODULE_SIG_FORCE -e MODULE_SIG_SHA256 \
         --set-str LOCALVERSION "-losos" \
         --set-str DEFAULT_HOSTNAME "losos" \
         --set-str MODULE_SIG_KEY "{{ pwd }}/sb-key.pem" \
         --set-str MODULE_SIG_CERT "{{ pwd }}/sb-cert.pem"
     make olddefconfig LLVM=1
-    make LLVM=1 LD="${KERNEL_LD:-ld.lld}" -j`nproc`
+
+    afdo_prof="${AUTOFDO_PROFILE:-}"
+    [[ -z "$afdo_prof" && -f "$cache_root/kernel.afdo" ]] && afdo_prof="$cache_root/kernel.afdo"
+    propeller_prefix="${PROPELLER_PREFIX:-}"
+    [[ -z "$propeller_prefix" && -f "$cache_root/kernel-propeller.symorder" ]] && propeller_prefix="$cache_root/kernel-propeller"
+
+    afdo_arg=()
+    [[ -n "$afdo_prof" ]] && { echo "==> AutoFDO profile: $afdo_prof"; afdo_arg=(CLANG_AUTOFDO_PROFILE="$afdo_prof"); }
+    propeller_arg=()
+    [[ -n "$propeller_prefix" ]] && { echo "==> Propeller prefix: $propeller_prefix"; propeller_arg=(CLANG_PROPELLER_PROFILE_PREFIX="$propeller_prefix"); }
+
+    make LLVM=1 LD="${KERNEL_LD:-ld.lld}" "${afdo_arg[@]}" "${propeller_arg[@]}" -j`nproc`
     
     echo "==> Signing kernel bzImage..."
     if [[ -f "{{ pwd }}/sb-key.pem" && -f "{{ pwd }}/sb-cert.pem" ]]; then 
@@ -207,6 +220,65 @@ kernel: llvm
     fi
     
     cp arch/x86/boot/bzImage {{ pwd }}/vmlinuz
+
+# Collect AutoFDO samples for kernel PGO.  Boots the ISO under perf-kvm to
+# capture guest branch samples, converts them to an AFDO profile, then the
+# next 'just kernel' build picks it up automatically from the cache.
+kernel-profiles: llvm
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    export PATH="`pwd`/llvm/bin:$PATH"
+
+    repo_root="`pwd`"
+    cache_root="${BUILD_CACHE:-{{ build_cache }}}"
+    [[ "$cache_root" = /* ]] || cache_root="$repo_root/$cache_root"
+    build_root="${KERNEL_BUILD_ROOT:-$cache_root/kernel}"
+    [[ "$build_root" = /* ]] || build_root="$repo_root/$build_root"
+
+    tag="{{ kernel_tag }}"
+    src_dir="${build_root}/linux-${tag#v}"
+    vmlinux="$src_dir/vmlinux"
+
+    if [[ ! -f "$vmlinux" ]]; then
+        echo "Error: $vmlinux not found — run 'just kernel' first to produce a baseline build."
+        exit 1
+    fi
+
+    perf_data="$cache_root/kernel-perf.data"
+    afdo_out="$cache_root/kernel.afdo"
+    mkdir -p "$cache_root"
+
+    echo "==> Booting ISO under perf-kvm for ~60 s to collect AutoFDO branch samples..."
+    tmp_vars=$(mktemp --suffix=.fd)
+    cp "{{ ovmf_vars }}" "$tmp_vars"
+    trap "rm -f $tmp_vars" EXIT
+
+    timeout 60 perf kvm --guest record \
+        -e cycles -b \
+        -o "$perf_data" -- \
+        qemu-system-x86_64 \
+            -cpu host \
+            -m "{{ memory }}" \
+            -smp "{{ cpus }}" \
+            -enable-kvm \
+            -drive "if=pflash,format=raw,readonly=on,file={{ ovmf_code }}" \
+            -drive "if=pflash,format=raw,file=$tmp_vars" \
+            -drive "file={{ output }},format=raw,media=cdrom,readonly=on" \
+            -nographic \
+            -netdev user,id=n0 \
+            -device virtio-net-pci,netdev=n0 \
+        || true
+
+    echo "==> Converting perf data → AutoFDO profile..."
+    llvm-profgen --kernel \
+        --perfdata="$perf_data" \
+        --binary="$vmlinux" \
+        --output="$afdo_out"
+
+    echo "==> Profile written to $afdo_out"
+    echo "    Run 'just kernel' to rebuild the kernel with AutoFDO PGO applied."
+
 # Generate a full UEFI Secure Boot key hierarchy (PK, KEK, db) via sbctl in an
 # ephemeral Arch Linux container.  The db signing key/cert are copied to
 # sb-key.pem / sb-cert.pem in the project root where isoman --secure-boot
