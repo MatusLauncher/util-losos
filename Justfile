@@ -145,7 +145,7 @@ llvm:
         -DCLANG_VENDOR="LosOS"
         -DPACKAGE_VENDOR="LosOS"
         -DLLVM_ENABLE_LTO=Full
-        -DLLVM_USE_PGO_PROFILES=ON
+        -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld"
     )
     cmake "${CMAKE_ARGS[@]}" 
     cmake --build "$stage2_root/build" -j`nproc`
@@ -197,9 +197,10 @@ kernel: llvm
         --set-str MODULE_SIG_KEY "{{ pwd }}/sb-key.pem" 
         --set-str MODULE_SIG_CERT "{{ pwd }}/sb-cert.pem"
     make olddefconfig LLVM=1
-    LD="${KERNEL_LD:-ld.lld}" LDFLAGS="-fuse-ld=lld" 
-        CLANG_AUTOFDO_PROFILE="${AUTOFDO_PROFILE:-}" 
-        CLANG_PROPELLER_PROFILE_PREFIX="${PROPELLER_PREFIX:-}" 
+    make LLVM=1 \
+        LD="${KERNEL_LD:-ld.lld}" \
+        CLANG_AUTOFDO_PROFILE="${AUTOFDO_PROFILE:-}" \
+        CLANG_PROPELLER_PROFILE_PREFIX="${PROPELLER_PREFIX:-}" \
         -j`nproc`
     
     echo "==> Signing kernel bzImage..."
