@@ -224,7 +224,7 @@ kernel: llvm
 # Collect AutoFDO samples for kernel PGO.  Boots the ISO under perf-kvm to
 # capture guest branch samples, converts them to an AFDO profile, then the
 # next 'just kernel' build picks it up automatically from the cache.
-kernel-profiles: llvm
+kernel-profiles: kernel
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -240,9 +240,9 @@ kernel-profiles: llvm
     src_dir="${build_root}/linux-${tag#v}"
     vmlinux="$src_dir/vmlinux"
 
-    if [[ ! -f "$vmlinux" ]]; then
-        echo "Error: $vmlinux not found — run 'just kernel' first to produce a baseline build."
-        exit 1
+    if [[ ! -f "{{ output }}" ]]; then
+        echo "==> No ISO at {{ output }} yet — skipping profile collection (will run after first build)."
+        exit 0
     fi
 
     perf_data="$cache_root/kernel-perf.data"
@@ -318,45 +318,45 @@ setup-sbctl:
 default: build-secure-boot run
 
 # Build OS ISO image — Rust compiled on host (musl), podman does cpio/firmware assembly
-build: _dm-integrity kernel
+build: _dm-integrity kernel-profiles
     @echo "==> Building OS ISO image (host-compiled Rust, podman cpio assembly)..."
     cargo run -p isoman -- --build --output "{{ output }}" --kernel "{{ kernel }}"
     @echo "==> ISO image written to {{ output }}"
 
 # Build OS ISO image with Rust compiled fully inside podman (slower, no host toolchain needed)
-container-build: _dm-integrity kernel
+container-build: _dm-integrity kernel-profiles
     @echo "==> Building OS ISO image (full container build)..."
     cargo run -p isoman -- --build --no-host-compile --output "{{ output }}"
     @echo "==> ISO image written to {{ output }}"
 
 # Build using a JSON config file (ISOMAN_CONFIG env or explicit path)
-build-config config_path=isoman_config: _dm-integrity kernel
+build-config config_path=isoman_config: _dm-integrity kernel-profiles
     @echo "==> Building from config: {{ config_path }}"
     cargo run -p isoman -- --build --config "{{ config_path }}" --output "{{ output }}"
 
 # Build a GSI (Fastboot + Odin) instead of a bootable ISO
-build-gsi: kernel
+build-gsi: kernel-profiles
     @echo "==> Building GSI (Fastboot + Odin)..."
     cargo run -p isoman -- --build --gsi
 
 # Build a Fastboot-only GSI boot.img
-build-gsi-fastboot: kernel
+build-gsi-fastboot: kernel-profiles
     cargo run -p isoman -- --build --gsi --gsi-fastboot
 
 # Build production-hardened OS image (loglevel=0 + security mitigations)
-build-prod: _dm-integrity _ensure-sb-keys kernel
+build-prod: _dm-integrity _ensure-sb-keys kernel-profiles
     @echo "==> Building production OS disk image (hardened cmdline)..."
     cargo run -p isoman -- --build --profile prod --kernel "{{ kernel }}"
     @echo "==> Production disk image written to os-<mode>.img"
 
 # Build production live OS image (hardened cmdline + container-ready for preflight)
-build-prod-live: _dm-integrity _ensure-sb-keys kernel
+build-prod-live: _dm-integrity _ensure-sb-keys kernel-profiles
     @echo "==> Building production live OS disk image (container-ready for preflight)..."
     cargo run -p isoman -- --build --profile prod-live --kernel "{{ kernel }}"
     @echo "==> Production live disk image written to os-<mode>.img"
 
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
-build-secure-boot: _dm-integrity _ensure-sb-keys kernel
+build-secure-boot: _dm-integrity _ensure-sb-keys kernel-profiles
     @echo "==> Building with Secure Boot signing..."
     kernel_arg=$([[ -n "{{ kernel }}" ]] && echo "--kernel {{ kernel }}" || echo ""); 
     cargo run -p isoman -- --build --output "{{ output }}" --secure-boot true $kernel_arg
