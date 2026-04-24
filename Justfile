@@ -196,17 +196,22 @@ kernel: llvm
     [[ -n "$propeller_prefix" ]] \
         && { echo "==> Propeller prefix: $propeller_prefix"; propeller_env="CLANG_PROPELLER_PROFILE_PREFIX=/cache/kernel-propeller"; }
 
+    mkdir -p "$cache_root/ccache-kernel"
+
     echo "==> Building kernel ${tag} in container..."
     podman run --rm \
         -v "$repo_root/llvm:/llvm:ro,Z" \
         -v "$build_root:/src:Z" \
         -v "$cache_root:/cache:Z" \
+        -v "$cache_root/ccache-kernel:/ccache:Z" \
         -v "$repo_root:/repo:ro,Z" \
         -e KERNEL_TAG="$tag" \
         -e AFDO_ENV="$afdo_env" \
         -e PROPELLER_ENV="$propeller_env" \
         losos-kernel-build bash -s <<'KERNELBUILD'
     set -euo pipefail
+    export CCACHE_DIR=/ccache
+    export CCACHE_COMPILERCHECK=content
     export PATH="/llvm/bin:$PATH"
     cd "/src/linux-${KERNEL_TAG#v}"
     make tinyconfig LLVM=1
@@ -232,7 +237,13 @@ kernel: llvm
     [[ -n "$AFDO_ENV" ]] && profile_args+=("$AFDO_ENV")
     [[ -n "$PROPELLER_ENV" ]] && profile_args+=("$PROPELLER_ENV")
     # LTO_CLANG_FULL requires LD_IS_LLD; mold won't satisfy that check.
-    make LLVM=1 LD=ld.lld "${profile_args[@]}" -j$(nproc)
+    # Absolute compiler path so ccache's content-hash check is unambiguous.
+    make LLVM=1 LD=ld.lld \
+        CC="ccache /llvm/bin/clang" \
+        CXX="ccache /llvm/bin/clang++" \
+        HOSTCC="ccache /llvm/bin/clang" \
+        HOSTCXX="ccache /llvm/bin/clang++" \
+        "${profile_args[@]}" -j$(nproc)
     echo "==> Signing kernel bzImage..."
     if [[ -f /repo/sb-key.pem && -f /repo/sb-cert.pem ]]; then
         sbsign --key /repo/sb-key.pem --cert /repo/sb-cert.pem \

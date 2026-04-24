@@ -1,10 +1,16 @@
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
+  # ccache and Cargo inside the project dir so GitLab's cache can snapshot them.
+  CCACHE_DIR: "$CI_PROJECT_DIR/.ccache"
+  CCACHE_COMPILERCHECK: content
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
+  CARGO_TERM_COLOR: always
 
 stages:
   - check
   - test
   - build-docs
+  - build-iso
   - deploy
 
 # ── shared ─────────────────────────────────────────────────────────────────────
@@ -19,9 +25,9 @@ stages:
       files:
         - Cargo.lock
     paths:
-      - ~/.cargo/registry/index
-      - ~/.cargo/registry/cache
-      - ~/.cargo/git/db
+      - .cargo/registry/index
+      - .cargo/registry/cache
+      - .cargo/git/db
       - target
 
 # ── fmt ────────────────────────────────────────────────────────────────────────
@@ -98,3 +104,60 @@ pages:
       - public
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ── OS ISO build ───────────────────────────────────────────────────────────────
+
+build-iso:
+  stage: build-iso
+  image: ubuntu:24.04
+  cache:
+    # LLVM binary — rebuild when Justfile changes (recipe drives the build).
+    - key:
+        files: [Justfile]
+        prefix: llvm
+      paths: [llvm/]
+      policy: pull-push
+    # ccache for LLVM C++ compilation objects (host-side bootstrap + stage2).
+    - key: "ccache-llvm-$CI_RUNNER_EXECUTABLE_ARCH"
+      fallback_keys: ["ccache-llvm"]
+      paths: [.ccache/]
+      policy: pull-push
+    # ccache for kernel C compilation objects (inside the build container).
+    - key: "ccache-kernel-$CI_RUNNER_EXECUTABLE_ARCH"
+      fallback_keys: ["ccache-kernel"]
+      paths: [.build-cache/ccache-kernel/]
+      policy: pull-push
+    # Cargo registry and installed binaries (just, isoman, etc.).
+    - key:
+        files: ["**/Cargo.lock"]
+        prefix: cargo-iso
+      paths: [.cargo/]
+      policy: pull-push
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends
+        cmake ninja-build mold clang lld curl ca-certificates
+        ccache
+        podman
+        musl-tools
+        libssl-dev libelf-dev
+        python3 perl flex bison bc
+        sbsigntool
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs
+        | sh -s -- -y --default-toolchain stable
+            --target x86_64-unknown-linux-musl
+            --no-modify-path
+    - source "$CARGO_HOME/env"
+    - command -v just || cargo install just --locked
+    - ccache --max-size=5G
+  script:
+    - just build
+    - ccache --show-stats
+    - ccache --dir .build-cache/ccache-kernel --show-stats
+  artifacts:
+    paths: [os-client.iso]
+    expire_in: 7 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
