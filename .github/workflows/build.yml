@@ -36,6 +36,11 @@ jobs:
         with:
           components: clippy,rustfmt
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libudev-dev
+
       - uses: actions/cache@v4
         with:
           path: |
@@ -69,7 +74,7 @@ jobs:
             ccache \
             podman \
             musl-tools \
-            libssl-dev libelf-dev \
+            libssl-dev libelf-dev libudev-dev \
             python3 perl flex bison bc \
             sbsigntool
 
