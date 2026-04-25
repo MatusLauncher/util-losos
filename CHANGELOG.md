@@ -188,6 +188,7 @@
 
 ### Miscellaneous
 
+- Update isoman submodule
 - Update all submodules — fix corrupted .gitignore files
 - Update gpuman submodule
 - Update all submodules and switch linker from mold to lld

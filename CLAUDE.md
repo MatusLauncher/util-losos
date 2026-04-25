@@ -226,3 +226,52 @@ Multi-stage OCI build:
 3. **stage1**: Assembles final filesystem hierarchy, creates cpio archive → `os.initramfs.tar.gz`
 
 The final artifact (`os.initramfs.tar.gz`) is what gets deployed to the BOOT partition and loaded by the kernel as an initramfs.
+
+## Profiling — Agent Workflow
+
+Non-prod ISOs built with `--profile profiling` embed Valgrind and stream
+profiling output back to the host over the QEMU serial port.
+
+### Build
+
+```bash
+just build-profiling          # or: isoman --build --profile profiling
+```
+
+Add a `build-profiling` recipe to the Justfile if it doesn't exist yet:
+```just
+build-profiling:
+    cargo run --manifest-path crates/isoman/Cargo.toml -- \
+        --build --profile profiling --mode client
+```
+
+### Capture (Rust — testman)
+
+```rust
+use testman::{HarnessConfig, TestHarness};
+use std::time::Duration;
+
+let cfg = HarnessConfig::from_env();
+let mut h = TestHarness::start(cfg)?;
+h.wait_for("login:", Duration::from_secs(120))?;
+
+h.send("callgrind /bin/actman")?;
+if let Some(cap) = h.collect_profile(Duration::from_secs(300))? {
+    std::fs::write(&cap.filename, &cap.content)?;
+    // Feed cap.content to an AI agent for hotspot analysis
+}
+h.shutdown();
+```
+
+### Serial protocol (tool-agnostic)
+
+```
+<<<PROFILE_BEGIN:tool:filename>>>
+[verbatim KCachegrind-format text — plain ASCII, no encoding]
+<<<PROFILE_END>>>
+```
+
+The `content` field is standard KCachegrind format.  Pass it verbatim to an
+LLM with a prompt such as:
+> "Annotate the hottest functions in this callgrind output and suggest
+> specific Rust optimisations for the top 5 by inclusive instruction count."
