@@ -355,6 +355,7 @@ llvm:
         -B "$stage2_root/build" \
         -G "$generator" \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TRY_COMPILE_CONFIGURATION=Debug \
         -DCMAKE_INSTALL_PREFIX="$install_dir" \
         -DCMAKE_C_COMPILER="$bootstrap_root/install/bin/clang" \
         -DCMAKE_CXX_COMPILER="$bootstrap_root/install/bin/clang++" \
