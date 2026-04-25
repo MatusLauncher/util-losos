@@ -79,6 +79,7 @@
 
 ### Features
 
+- Install pre-commit hook in just dev; remove book hooks dir
 - Auto-setup rootless containerd; patch for LosOS/actman (salmon-complete)
 - Alpine-based builds, static nerdctl bootstrap, nerdctl+krun everywhere
 - Linux-native hidapi, container release for updman, kernel+LLVM GitHub release
