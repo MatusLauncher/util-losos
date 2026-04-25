@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Correct Fedora musl package names for isoman build
 - Switch isoman build image from Alpine to Fedora
 - Use triple-based runtime lib dir for all bootstrap path references
 - Set CMAKE_BUILD_RPATH to bootstrap lib so stage2 binaries can run

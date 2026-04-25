@@ -2,25 +2,27 @@
 # Build isoman as a static musl binary inside Fedora (no host Rust toolchain required).
 # Fedora is used instead of Alpine because bindgen (bootimg-sys) requires a dynamically
 # loadable libclang.so, which Alpine's statically-compiled LLVM cannot provide.
+# zig is used as the musl C/C++ cross-compiler; it bundles musl internally so no
+# separate musl package is needed. cargo-zigbuild wires zig into the full cargo build.
 FROM fedora:latest AS build
 
 RUN dnf install -y \
         git pkg-config \
         clang clang-devel \
         systemd-devel \
-        musl-libc musl-libc-static \
+        zig \
     && dnf clean all
 
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+# Install Rust toolchain + cargo-zigbuild with registry cache to speed up reinstalls
+RUN --mount=type=cache,sharing=locked,target=/usr/local/cargo/registry \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --no-modify-path --default-toolchain stable \
-    && rustup target add x86_64-unknown-linux-musl
-
-# Tell the cc crate which C compiler to use for the musl target
-ENV CC_x86_64_unknown_linux_musl=musl-gcc
+    && rustup target add x86_64-unknown-linux-musl \
+    && cargo install cargo-zigbuild
 
 COPY . /src
 WORKDIR /src
@@ -28,7 +30,7 @@ WORKDIR /src
 RUN --mount=type=cache,sharing=locked,target=/usr/local/cargo/registry \
     --mount=type=cache,sharing=locked,target=/usr/local/cargo/git \
     --mount=type=cache,sharing=locked,target=/src/target \
-    cargo build --release --target x86_64-unknown-linux-musl -p isoman \
+    cargo zigbuild --release --target x86_64-unknown-linux-musl -p isoman \
     && cp /src/target/x86_64-unknown-linux-musl/release/isoman /isoman
 
 FROM scratch
