@@ -1,9 +1,31 @@
 # check=skip=FromAsCasing
-# Build isoman as a static musl binary inside Alpine (no host Rust toolchain required).
-FROM docker.io/library/rust:alpine AS build
-RUN apk add --no-cache pkgconfig eudev-dev linux-headers musl-dev git
+# Build isoman as a static musl binary inside Fedora (no host Rust toolchain required).
+# Fedora is used instead of Alpine because bindgen (bootimg-sys) requires a dynamically
+# loadable libclang.so, which Alpine's statically-compiled LLVM cannot provide.
+FROM fedora:latest AS build
+
+RUN dnf install -y \
+        curl git pkg-config \
+        clang clang-devel \
+        systemd-devel \
+        musl-libc-devel musl-libc-static \
+        kernel-headers \
+    && dnf clean all
+
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+    sh -s -- -y --no-modify-path --default-toolchain stable \
+    && rustup target add x86_64-unknown-linux-musl
+
+# Tell the cc crate which C compiler to use for the musl target
+ENV CC_x86_64_unknown_linux_musl=musl-gcc
+
 COPY . /src
 WORKDIR /src
+
 RUN --mount=type=cache,sharing=locked,target=/usr/local/cargo/registry \
     --mount=type=cache,sharing=locked,target=/usr/local/cargo/git \
     --mount=type=cache,sharing=locked,target=/src/target \
