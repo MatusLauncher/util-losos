@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Use bootstrap lld for Stage 2 LLVM LTO link instead of mold
 - Prevent just parse failure when nerdctl is not on PATH
 - Resolve nerdctl_bin literal {{ }} interpolation failure in Just
 - Robust nerdctl URL detection and explicit error on API parse failure

@@ -186,6 +186,8 @@ _ensure-sb-keys:
 dev:
     @echo "==> Pulling submodules..."
     git submodule update --remote --merge
+    @echo "==> Vendoring dependencies..."
+    cargo vendor
 
 # Download and build the latest LLVM (clang + lld) from source.
 llvm:
