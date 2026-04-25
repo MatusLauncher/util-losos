@@ -400,6 +400,7 @@ llvm:
         -DCLANG_DEFAULT_RTLIB=compiler-rt \
         -DCLANG_DEFAULT_UNWINDLIB=libunwind \
         "-DCMAKE_INSTALL_RPATH=$install_dir/lib" \
+        "-DCMAKE_BUILD_RPATH=$bootstrap_root/install/lib" \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=OFF \
         "-DCMAKE_EXE_LINKER_FLAGS=$extra_linker_flags" \
         "-DCMAKE_SHARED_LINKER_FLAGS=$extra_linker_flags" \

@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Remove CMAKE_*_FLAGS_RELEASE to stop LTO contaminating cmake probes
 - Add bootstrap sanity checks and cmake error log output for stage2
 - Set CMAKE_TRY_COMPILE_CONFIGURATION=Debug for stage2
 - Build compiler-rt in bootstrap and expose it to stage2
