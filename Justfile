@@ -389,7 +389,6 @@ llvm:
         -B "$stage2_root/build" \
         -G "$generator" \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_TRY_COMPILE_CONFIGURATION=Debug \
         -DCMAKE_INSTALL_PREFIX="$install_dir" \
         -DCMAKE_C_COMPILER="$bootstrap_root/install/bin/clang" \
         -DCMAKE_CXX_COMPILER="$bootstrap_root/install/bin/clang++" \
@@ -415,15 +414,10 @@ llvm:
         -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld" \
         -DLLVM_ENABLE_LIBXML2=OFF \
         "-DCMAKE_C_FLAGS=-fvisibility=hidden -fvisibility-inlines-hidden" \
-        "-DCMAKE_CXX_FLAGS=-fvisibility=hidden -fvisibility-inlines-hidden" \
-        "-DCMAKE_C_FLAGS_RELEASE=-flto=thin -fsanitize=cfi" \
-        "-DCMAKE_CXX_FLAGS_RELEASE=-flto=thin -fsanitize=cfi" \
-        "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=-flto=thin -fsanitize=cfi" \
-        "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=-flto=thin -fsanitize=cfi" \
-        "-DCMAKE_MODULE_LINKER_FLAGS_RELEASE=-flto=thin -fsanitize=cfi"
+        "-DCMAKE_CXX_FLAGS=-fvisibility=hidden -fvisibility-inlines-hidden"
     cmake "$@" || {
-        printf '\n==> Stage2 CMake configure failed.  CMakeError.log:\n'
-        cat "$stage2_root/build/CMakeFiles/CMakeError.log" 2>/dev/null || true
+        printf '\n==> Stage2 CMake configure failed.  Configure log (last 60 lines):\n'
+        tail -60 "$stage2_root/build/CMakeFiles/CMakeConfigureLog.yaml" 2>/dev/null || true
         exit 1
     }
     cmake --build "$stage2_root/build" -j`nproc`

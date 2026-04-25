@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Add bootstrap sanity checks and cmake error log output for stage2
 - Set CMAKE_TRY_COMPILE_CONFIGURATION=Debug for stage2
 - Build compiler-rt in bootstrap and expose it to stage2
 - Use LIBRARY_PATH and CMAKE_EXE_LINKER_FLAGS to expose bootstrap libc++
