@@ -1,7 +1,8 @@
-FROM docker.io/library/alpine:latest
+FROM docker.io/library/debian:stable-slim
 
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
         make perl python3 flex bison bc \
-        openssl-dev elfutils-dev \
+        libssl-dev libelf-dev \
         pahole sbsigntool \
-        ccache
+        ccache \
+    && rm -rf /var/lib/apt/lists/*
