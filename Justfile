@@ -358,8 +358,10 @@ llvm:
         -DLLVM_PARALLEL_LINK_JOBS=1 \
         -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld" \
         -DLLVM_ENABLE_LIBXML2=OFF \
-        "-DCMAKE_C_FLAGS=-fsanitize=cfi -fvisibility=hidden -fvisibility-inlines-hidden" \
-        "-DCMAKE_CXX_FLAGS=-fsanitize=cfi -fvisibility=hidden -fvisibility-inlines-hidden" \
+        "-DCMAKE_C_FLAGS=-fvisibility=hidden -fvisibility-inlines-hidden" \
+        "-DCMAKE_CXX_FLAGS=-fvisibility=hidden -fvisibility-inlines-hidden" \
+        "-DCMAKE_C_FLAGS_RELEASE=-fsanitize=cfi" \
+        "-DCMAKE_CXX_FLAGS_RELEASE=-fsanitize=cfi" \
         "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=cfi" \
         "-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=cfi" \
         "-DCMAKE_MODULE_LINKER_FLAGS=-fsanitize=cfi"
