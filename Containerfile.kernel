@@ -1,8 +1,5 @@
-FROM docker.io/library/debian:stable-slim
+FROM docker.io/library/fedora:latest
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        make perl python3 flex bison bc \
-        libssl-dev libelf-dev \
-        pahole sbsigntool \
-        ccache \
-    && rm -rf /var/lib/apt/lists/*
+RUN dnf builddep -y kernel \
+    && dnf install -y ccache sbsigntools \
+    && dnf clean all

@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Base kernel build container on Debian to match host glibc
 - Move pre-commit hook to scripts/pre-commit to fix just --fmt
 - Remove --runtime=krun from kernel build container run
 - Correct nerdctl 2.x toml config — cni_path valid, default_runtime removed
