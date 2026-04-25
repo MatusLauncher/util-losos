@@ -362,9 +362,9 @@ llvm:
         "-DCMAKE_CXX_FLAGS=-fvisibility=hidden -fvisibility-inlines-hidden" \
         "-DCMAKE_C_FLAGS_RELEASE=-fsanitize=cfi" \
         "-DCMAKE_CXX_FLAGS_RELEASE=-fsanitize=cfi" \
-        "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=cfi" \
-        "-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=cfi" \
-        "-DCMAKE_MODULE_LINKER_FLAGS=-fsanitize=cfi"
+        "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=-fsanitize=cfi" \
+        "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=-fsanitize=cfi" \
+        "-DCMAKE_MODULE_LINKER_FLAGS_RELEASE=-fsanitize=cfi"
     cmake "$@"
     cmake --build "$stage2_root/build" -j`nproc`
     cmake --install "$stage2_root/build" --prefix "$install_dir"

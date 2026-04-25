@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Move -fsanitize=cfi to CMAKE_*_FLAGS_RELEASE to bypass CMake compiler check
 - Remove non-existent LLVM_ENABLE_CFI cmake variable from stage2 build
 - Mount host libxml2.so.16 into kernel build container; disable xml2 in LLVM stage2
 - Switch kernel build container to Fedora with dnf builddep kernel
