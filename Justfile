@@ -31,9 +31,11 @@ kernel_tag := `git ls-remote --tags --refs https://github.com/torvalds/linux 'v*
 threads := `nproc`
 pwd := `pwd`
 build_cache := env("BUILD_CACHE", ".build-cache")
-# nerdctl binary: prefer system install, fall back to full-bundle copy in /tmp.
-# The full bundle extracts under bin/, hence the bin/ suffix.
-nerdctl_bin := `command -v nerdctl 2>/dev/null || echo /tmp/nerdctl-bin/bin/nerdctl`
+# Persistent directory for the nerdctl full bundle (survives host reboots).
+nerdctl_bundle := pwd + "/" + build_cache + "/nerdctl-bin"
+# nerdctl binary: prefer system install, fall back to persistent bundle copy.
+_nerdctl_system := `command -v nerdctl 2>/dev/null`
+nerdctl_bin := if _nerdctl_system != "" { _nerdctl_system } else { nerdctl_bundle + "/bin/nerdctl" }
 # Pre-built isoman binary (built inside Alpine by _build-isoman).
 isoman_bin := env("ISOMAN_BIN", ".build-cache/isoman")
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -53,7 +55,7 @@ _dm-integrity:
         sudo modprobe dm-integrity || echo "WARNING: dm-integrity unavailable (restricted environment) — continuing."
     fi
 
-# Download the nerdctl *full* bundle to /tmp/nerdctl-bin/.
+# Download the nerdctl *full* bundle to {{ nerdctl_bundle }}/.
 # The full bundle (bin/ + lib/cni/) includes containerd, runc, buildkitd,
 # containerd-rootless-setuptool.sh, and the CNI plugins — everything needed
 # to bootstrap rootless containerd without any host container runtime installed.
@@ -61,10 +63,10 @@ _dm-integrity:
 _ensure-nerdctl:
     #!/usr/bin/env bash
     set -euo pipefail
-    SETUP=/tmp/nerdctl-bin/bin/containerd-rootless-setuptool.sh
+    SETUP={{ nerdctl_bundle }}/bin/containerd-rootless-setuptool.sh
     [ -f "$SETUP" ] && exit 0
-    echo "==> Downloading nerdctl full bundle to /tmp/nerdctl-bin/ ..."
-    mkdir -p /tmp/nerdctl-bin
+    echo "==> Downloading nerdctl full bundle to {{ nerdctl_bundle }}/ ..."
+    mkdir -p {{ nerdctl_bundle }}
     API=$(curl -fsSL https://api.github.com/repos/containerd/nerdctl/releases/latest)
     URL=$(printf '%s\n' "$API" \
         | grep 'browser_download_url' \
@@ -77,8 +79,8 @@ _ensure-nerdctl:
         exit 1
     fi
     echo "==> Fetching $URL"
-    curl -fsSL "$URL" | tar -xz -C /tmp/nerdctl-bin
-    echo "==> nerdctl full bundle extracted to /tmp/nerdctl-bin/"
+    curl -fsSL "$URL" | tar -xz -C {{ nerdctl_bundle }}
+    echo "==> nerdctl full bundle extracted to {{ nerdctl_bundle }}/"
 
 # Ensure rootless containerd is running.
 # On first run: patches containerd-rootless-setuptool.sh to recognise the
@@ -86,13 +88,13 @@ _ensure-nerdctl:
 _ensure-containerd-rootless: _ensure-nerdctl
     #!/usr/bin/env bash
     set -euo pipefail
-    export PATH="/tmp/nerdctl-bin/bin:${PATH}"
-    SOCK="/run/user/$(id -u)/containerd-rootless/containerd.sock"
+    export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
+    SOCK="/run/user/$(id -u)/containerd/containerd.sock"
     [ -S "$SOCK" ] && exit 0
 
-    SETUP=/tmp/nerdctl-bin/bin/containerd-rootless-setuptool.sh
-    ROOTLESS=/tmp/nerdctl-bin/bin/containerd-rootless.sh
-    [ -f "$SETUP" ] || { echo "ERROR: $SETUP missing — delete /tmp/nerdctl-bin/ to redownload" >&2; exit 1; }
+    SETUP={{ nerdctl_bundle }}/bin/containerd-rootless-setuptool.sh
+    ROOTLESS={{ nerdctl_bundle }}/bin/containerd-rootless.sh
+    [ -f "$SETUP" ] || { echo "ERROR: $SETUP missing — delete {{ nerdctl_bundle }}/ to redownload" >&2; exit 1; }
 
     # ── LosOS (actman): register containerd-rootless as an actman init service ─
     # This runs on the host only when the host IS LosOS; on other distros it is
@@ -108,7 +110,7 @@ _ensure-containerd-rootless: _ensure-nerdctl
     # ── Patch setup script: inject actman guard before the first systemd check ─
     # awk inserts the LosOS branch once (the !injected guard prevents duplication)
     # so the script returns 0 on actman without printing "Unknown init system".
-    PATCHED=/tmp/nerdctl-bin/bin/containerd-rootless-setuptool-losos.sh
+    PATCHED={{ nerdctl_bundle }}/bin/containerd-rootless-setuptool-losos.sh
     awk '
         /systemctl|\/run\/systemd|openrc/ && !injected {
             print "  # LosOS/actman — skip service-manager detection on actman systems"
@@ -136,14 +138,14 @@ _ensure-containerd-rootless: _ensure-nerdctl
     [ -S "$SOCK" ] && { echo "==> rootless containerd is up ($SOCK)"; exit 0; }
 
     echo "==> Starting rootless containerd in the background..."
-    nohup "$ROOTLESS" >/tmp/nerdctl-bin/containerd.log 2>&1 &
+    nohup "$ROOTLESS" >{{ nerdctl_bundle }}/containerd.log 2>&1 &
     disown
     for i in $(seq 20); do
         [ -S "$SOCK" ] && { echo "==> rootless containerd is up ($SOCK)"; exit 0; }
         sleep 1
     done
     echo "ERROR: containerd did not start within 20 s" >&2
-    tail -20 /tmp/nerdctl-bin/containerd.log >&2
+    tail -20 {{ nerdctl_bundle }}/containerd.log >&2
     exit 1
 
 # Build the isoman binary inside a Rust:Alpine container — no host Rust toolchain needed.
