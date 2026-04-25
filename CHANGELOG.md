@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Switch kernel build container to Fedora with dnf builddep kernel
 - Base kernel build container on Debian to match host glibc
 - Move pre-commit hook to scripts/pre-commit to fix just --fmt
 - Remove --runtime=krun from kernel build container run

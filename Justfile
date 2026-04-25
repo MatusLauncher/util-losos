@@ -357,7 +357,8 @@ llvm:
         -DLLVM_ENABLE_LTO=Thin \
         -DLLVM_PARALLEL_LINK_JOBS=1 \
         -DLLVM_ENABLE_CFI=ON \
-        -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld"
+        -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld" \
+        -DLLVM_ENABLE_LIBXML2=OFF
     cmake "$@"
     cmake --build "$stage2_root/build" -j`nproc`
     cmake --install "$stage2_root/build" --prefix "$install_dir"
@@ -410,12 +411,21 @@ kernel: llvm _ensure-buildkit
     mkdir -p "$cache_root/ccache-kernel"
 
     echo "==> Building kernel ${tag} in container..."
+    # Mount host libxml2 so that the host-built ld.lld (which links against
+    # libxml2.so.16, bumped from .so.2 in libxml2 2.13) can load it inside
+    # the container whose distro still ships the older soname.
+    host_xml2=$(readlink -f /usr/lib/libxml2.so.16 2>/dev/null || true)
+    xml2_mounts=""
+    if [ -n "$host_xml2" ]; then
+        xml2_mounts="-v /usr/lib/libxml2.so.16:/usr/lib/libxml2.so.16:ro -v ${host_xml2}:${host_xml2}:ro"
+    fi
     "{{ nerdctl_bin }}" run --rm -i \
         -v "$repo_root/llvm:/llvm:ro" \
         -v "$build_root:/src" \
         -v "$cache_root:/cache" \
         -v "$cache_root/ccache-kernel:/ccache" \
         -v "$repo_root:/repo:ro" \
+        ${xml2_mounts} \
         -e KERNEL_TAG="$tag" \
         -e AFDO_ENV="$afdo_env" \
         -e PROPELLER_ENV="$propeller_env" \
