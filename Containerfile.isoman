@@ -5,11 +5,10 @@
 FROM fedora:latest AS build
 
 RUN dnf install -y \
-        curl git pkg-config \
+        git pkg-config \
         clang clang-devel \
         systemd-devel \
-        musl-libc-devel musl-libc-static \
-        kernel-headers \
+        musl-libc musl-libc-static \
     && dnf clean all
 
 ENV RUSTUP_HOME=/usr/local/rustup \
