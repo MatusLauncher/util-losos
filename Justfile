@@ -342,6 +342,7 @@ llvm:
 kernel: llvm _ensure-buildkit
     #!/usr/bin/env bash
     set -euo pipefail
+    export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
 
     repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"
