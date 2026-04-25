@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Use triple-based runtime lib dir for all bootstrap path references
 - Set CMAKE_BUILD_RPATH to bootstrap lib so stage2 binaries can run
 - Remove CMAKE_*_FLAGS_RELEASE to stop LTO contaminating cmake probes
 - Add bootstrap sanity checks and cmake error log output for stage2

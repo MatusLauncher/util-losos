@@ -448,7 +448,7 @@ kernel: llvm _ensure-buildkit
     src_dir="${build_root}/linux-${tag#v}"
 
     echo "==> Ensuring kernel build environment image..."
-    "{{ nerdctl_bin }}" build -q -f Containerfile.kernel -t losos-kernel-build "$repo_root"
+    "{{ nerdctl_bin }}" build -f Containerfile.kernel -t losos-kernel-build "$repo_root"
 
     echo "==> Pulling kernel ${tag}"
     rm -rf "$build_root"
@@ -497,26 +497,28 @@ kernel: llvm _ensure-buildkit
     set -eu
     export CCACHE_DIR=/ccache
     export CCACHE_COMPILERCHECK=content
-    export PATH="/llvm/bin:$PATH"
+    export PATH="/llvm/bin${PATH:+:$PATH}"
+    export LD_LIBRARY_PATH="/llvm/lib:/llvm/lib/x86_64-unknown-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export LIBRARY_PATH="/llvm/lib:/llvm/lib/x86_64-unknown-linux-gnu${LIBRARY_PATH:+:$LIBRARY_PATH}"
     cd "/src/linux-${KERNEL_TAG#v}"
     make tinyconfig LLVM=1
+    cat /repo/sb-key.pem /repo/sb-cert.pem > certs/signing_key.pem
     ./scripts/config \
         -e 64BIT -e BLK_DEV_INITRD -e RD_GZIP -e BINFMT_ELF -e BINFMT_SCRIPT \
         -e PRINTK -e EARLY_PRINTK -e TTY -e SERIAL_8250 -e SERIAL_8250_CONSOLE \
-        -e PCI -e VIRTUALIZATION -e KVM -e KVM_INTEL -e KVM_AMD \
+        -e PCI -e ACPI -e VIRTUALIZATION -e KVM -e KVM_INTEL -e KVM_AMD \
         -e VIRTIO -e VIRTIO_PCI -e VIRTIO_BLK -e VIRTIO_NET -e VIRTIO_VSOCK -e VHOST_VSOCK \
         -e BLOCK -e BLK_DEV_SD -e BLK_DEV_DM -e DM_CRYPT -e DM_INTEGRITY -e DM_VERITY \
         -e CRYPTO_AES_X86_64 -e CRYPTO_SHA256 -e CRYPTO_USER_API_SKCIPHER -e CRYPTO_USER_API_HASH \
         -e NET -e INET -e NETDEVICES -e NAMESPACES -e UTS_NS -e IPC_NS -e USER_NS -e PID_NS -e NET_NS \
-        -e EFI -e EFIVAR_FS -e ISO9660_FS -e TMPFS -e DEVTMPFS -e DEVTMPFS_MOUNT \
+        -e EFI -e EFI_STUB -e EFIVAR_FS -e ISO9660_FS -e TMPFS -e DEVTMPFS -e DEVTMPFS_MOUNT \
         -e RELOCATABLE -e RANDOMIZE_BASE -e RELR \
-        -e LTO_CLANG_FULL -e CFI_CLANG -e CC_OPTIMIZE_FOR_SIZE -e AUTOFDO_CLANG -e PROPELLER_CLANG \
+        -e LTO_CLANG_FULL -e LD_IS_LLD -e CFI_CLANG -e CC_OPTIMIZE_FOR_SIZE -e AUTOFDO_CLANG -e PROPELLER_CLANG \
         -e SECURITY_LANDLOCK -e BPF_SYSCALL \
         -e MODULES -e MODULE_SIG -e MODULE_SIG_ALL -e MODULE_SIG_FORCE -e MODULE_SIG_SHA256 \
         --set-str LOCALVERSION "-losos" \
         --set-str DEFAULT_HOSTNAME "losos" \
-        --set-str MODULE_SIG_KEY "/repo/sb-key.pem" \
-        --set-str MODULE_SIG_CERT "/repo/sb-cert.pem"
+        --set-str MODULE_SIG_KEY "certs/signing_key.pem"
     make olddefconfig LLVM=1
     # LTO_CLANG_FULL requires LD_IS_LLD; mold won't satisfy that check.
     # Absolute compiler path so ccache's content-hash check is unambiguous.
@@ -526,9 +528,9 @@ kernel: llvm _ensure-buildkit
         CXX="ccache /llvm/bin/clang++" \
         HOSTCC="ccache /llvm/bin/clang" \
         HOSTCXX="ccache /llvm/bin/clang++" \
-        KCFLAGS="-fsanitize=cfi -fvisibility=hidden -fvisibility-inlines-hidden" \
-        HOSTCFLAGS="-fsanitize=cfi -fvisibility=hidden -fvisibility-inlines-hidden" \
-        HOSTCXXFLAGS="-fsanitize=cfi -fvisibility=hidden -fvisibility-inlines-hidden" \
+        KCFLAGS="-fvisibility=hidden -fvisibility-inlines-hidden" \
+        HOSTCFLAGS="-fvisibility=hidden -fvisibility-inlines-hidden" \
+        HOSTCXXFLAGS="-fvisibility=hidden -fvisibility-inlines-hidden" \
         ${AFDO_ENV:+$AFDO_ENV} \
         ${PROPELLER_ENV:+$PROPELLER_ENV} \
         -j$(nproc)
@@ -550,7 +552,8 @@ kernel-profiles: kernel
     #!/bin/sh
     set -eu
 
-    export PATH="`pwd`/llvm/bin:$PATH"
+    export PATH="`pwd`/llvm/bin${PATH:+:$PATH}"
+    export LD_LIBRARY_PATH="`pwd`/llvm/lib:`pwd`/llvm/lib/x86_64-unknown-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
     repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"
