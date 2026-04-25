@@ -155,9 +155,44 @@ _ensure-containerd-rootless: _ensure-nerdctl
     tail -20 {{ nerdctl_bundle }}/containerd.log >&2
     exit 1
 
+# Ensure rootless buildkitd is running (needed by nerdctl build).
+# Runs buildkitd inside the same rootlesskit user namespace as containerd so it
+# can use the containerd worker (shared image store, no second OCI layer).
+_ensure-buildkit: _ensure-containerd-rootless
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
+    BSOCK="/run/user/$(id -u)/buildkit/buildkitd.sock"
+    SETUP="{{ nerdctl_bundle }}/bin/containerd-rootless-setuptool.sh"
+    # Quick liveness probe: buildctl exits 0 if the daemon is reachable.
+    if [ -S "$BSOCK" ] && buildctl --addr "unix://$BSOCK" debug info >/dev/null 2>&1; then
+        echo "==> rootless buildkitd is up ($BSOCK)"
+        exit 0
+    fi
+    [ -S "$BSOCK" ] && { echo "==> Stale buildkitd socket — removing..."; rm -f "$BSOCK"; }
+    mkdir -p "$(dirname "$BSOCK")"
+    echo "==> Starting rootless buildkitd (containerd worker, nsenter into rootlesskit ns)..."
+    # nsenter subcommand enters the containerd rootlesskit user namespace so
+    # buildkitd runs as the mapped root — same mechanism used by the systemd unit.
+    nohup "$SETUP" nsenter -- buildkitd \
+        --addr "unix://$BSOCK" \
+        --oci-worker=false \
+        --containerd-worker=true \
+        --containerd-worker-rootless=true \
+        >"{{ nerdctl_bundle }}/buildkitd.log" 2>&1 &
+    disown
+    for i in $(seq 20); do
+        buildctl --addr "unix://$BSOCK" debug info >/dev/null 2>&1 \
+            && { echo "==> rootless buildkitd is up ($BSOCK)"; exit 0; }
+        sleep 1
+    done
+    echo "ERROR: buildkitd did not start within 20 s" >&2
+    tail -20 "{{ nerdctl_bundle }}/buildkitd.log" >&2
+    exit 1
+
 # Build the isoman binary inside a Rust:Alpine container — no host Rust toolchain needed.
 # The result is cached at {{ isoman_bin }}; delete it to force a rebuild.
-_build-isoman: _ensure-containerd-rootless
+_build-isoman: _ensure-buildkit
     #!/usr/bin/env bash
     set -euo pipefail
     out="{{ isoman_bin }}"
@@ -304,7 +339,7 @@ llvm:
 
 # Build a custom kernel optimised for LosOS inside an isolated container.
 # Requires: Containerfile.kernel image (built automatically on first run).
-kernel: llvm _ensure-containerd-rootless
+kernel: llvm _ensure-buildkit
     #!/usr/bin/env bash
     set -euo pipefail
 

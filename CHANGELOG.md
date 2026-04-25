@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Detect stale rootless containerd socket before trusting it
 - Use bootstrap lld for Stage 2 LLVM LTO link instead of mold
 - Prevent just parse failure when nerdctl is not on PATH
 - Resolve nerdctl_bin literal {{ }} interpolation failure in Just
