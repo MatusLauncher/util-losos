@@ -2,6 +2,22 @@
 
 ### Bug Fixes
 
+- Resolve nerdctl_bin literal {{ }} interpolation failure in Just
+- Robust nerdctl URL detection and explicit error on API parse failure
+- Use CMAKE_C_COMPILER_LAUNCHER for ccache in LLVM bootstrap
+- Pass explicit --prefix to cmake --install in llvm recipe
+- Repair scripts/config continuations and trim kernel feature set
+- Repair LLVM stage2 LTO linker and kernel make command
+- Some distributions just can't help themselves
+- Change paths to ccache's symlinks
+- Finish conversion for static LLVM to system cc
+- Restore zig wrappers for llvm bootstrap
+- Use host compiler for llvm bootstrap
+- Normalize llvm and kernel build roots
+- Use wrapper scripts for zig bootstrap compiler
+- Make kernel llvm build path configurable
+- Gate libblkid on discovery feature; only bootenv opts in
+- Correct data_disk_args bash bug; update submodule refs
 - Fix test compilation errors in bench and preflight
 - Move bootenv to separate submodule
 - Fix ISO not booting in test mode
@@ -35,6 +51,12 @@
 - *(launch)* Disable podman layer cache on build
 - Correct three bugs preventing initramfs from booting
 
+### CI
+
+- Install libudev-dev for hidapi (ctap-hid-fido2 dependency)
+- Auto-close mirror PRs and redirect to GitLab
+- Add GitHub Actions build workflow and fix CI-blocking issues
+
 ### Documentation
 
 - Add iptman chapter to book and update cluman docs
@@ -48,6 +70,18 @@
 
 ### Features
 
+- Auto-setup rootless containerd; patch for LosOS/actman (salmon-complete)
+- Alpine-based builds, static nerdctl bootstrap, nerdctl+krun everywhere
+- Linux-native hidapi, container release for updman, kernel+LLVM GitHub release
+- Add ccache for LLVM and kernel build objects on GitHub and GitLab
+- Containerise kernel build via Containerfile.kernel
+- Wire kernel-profiles into all ISO build recipes
+- Enable AutoFDO/Propeller PGO + CFI for kernel and LLVM stage2
+- Add KVM + vsock for krun microVM container isolation
+- Add ccache to stage2
+- Set default LLVM compiler to ccache
+- Add kernel build recipe and optimize musl builds
+- Add setup-sbctl recipe to bootstrap Secure Boot keys via Arch Linux container
 - Remove pakman integration tests and benchmarks
 - Merge pakman into pcm
 - Add prod and prod-live ISO profiles to Justfile; update isoman
@@ -126,6 +160,65 @@
 
 ### Miscellaneous
 
+- Update gpuman submodule
+- Update all submodules and switch linker from mold to lld
+- Use Zig for LLVM bootstrap build
+- Implement staged, branded LLVM toolchain build
+- Add dependency checks to LLVM build recipe
+- Switch LLVM source download to GitHub API
+- Update submodule pointers to latest commits
+- Update isoman submodule
+- Switch to cargo-nextest and fix naming in benchmarks
+- Update bootlib, bootenv, actman submodules
+- Update bootlib, bootenv, isoman submodules
+- Update isoman submodule
+- Update isoman submodule
+- Update bootlib submodule
+- Update isoman submodule
+- Update bootlib submodule; add libblkid-rs dependency
+- Update isoman submodule
+- Update isoman submodule
+- Update isoman submodule
+- Update isoman submodule
+- Update isoman submodule
+- Update isoman submodule
+- Update isoman submodule
+- Update isoman — tolerate sgdisk exit 4 on hybrid ISO
+- Update isoman; host-compile is now default; rename host-build → container-build
+- Update isoman; add host-build Justfile recipe
+- Update isoman submodule
+- Update isoman, bootenv submodules
+- Update book and bootlib submodules
+- Update isoman, testman; add test-bios Justfile recipe
+- Update isoman — restore -efi-boot-part for UEFI boot
+- Update bootenv, actman, testman submodules
+- Update isoman — remove limine bios-install for ISO images
+- Update isoman — sfdisk + Limine v11 path fix
+- Update isoman — fix dangling --efi-boot-image xorriso arg
+- Update isoman — drop -efi-boot-part from xorriso
+- Update isoman — accept sgdisk exit 4 for hybrid ISO
+- Update isoman — replace sbctl sign with sbsign
+- Update isoman — switch Limine to system package
+- Update isoman — upgrade systemd in container for ukify
+- Update isoman — fix pcrsign KeyError in uki-profilify preset
+- Update isoman — switch UKI generation to uki-profilify
+- Update isoman — pull fresh archlinux image for ukify
+- Update isoman — install python+python-pefile for ukify
+- Update isoman — UKI built with systemd-ukify in container
+- Update isoman — sbsign replaces sbctl sign for UKI signing
+- Update isoman — fix sbctl DB read-write mount
+- Update isoman — containerized sbctl signing
+- Update isoman — fix sbctl signing flag
+- Update isoman — sbctl replaces sbsign for UKI signing
+- Update isoman — UEFI boot via UKI, Limine BIOS-only
+- Update isoman submodule — hybrid BIOS+UEFI ISO via Limine
+- Update isoman submodule; revert sudo-E cargo run in Justfile
+- Load dm-integrity module and run isoman with sudo in build recipes
+- Update isoman submodule
+- Update isoman submodule
+- Update book submodule
+- Update isoman submodule to feat/image-mount-extraction
+- Update isoman submodule
 - Update isoman submodule
 - Update isoman submodule
 - Update isoman submodule
@@ -194,8 +287,13 @@
 - Remove all sshman references (merged into cluman)
 - Format.
 
+### Performance
+
+- Use mold as default linker for LLVM stage1 and stage2
+
 ### Refactor
 
+- Enable LTO, PGO, and wild linker for Stage 2 LLVM build
 - Strip bootenv to data_drive= only, remove stage2/luks/switch_root
 - Refactor CmdLineOptions::param_search to accept &str
 - *(ci)* Refactor CI/CD pipeline into discrete stages

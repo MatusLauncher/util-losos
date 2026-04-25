@@ -34,7 +34,7 @@ build_cache := env("BUILD_CACHE", ".build-cache")
 # Persistent directory for the nerdctl full bundle (survives host reboots).
 nerdctl_bundle := pwd + "/" + build_cache + "/nerdctl-bin"
 # nerdctl binary: prefer system install, fall back to persistent bundle copy.
-_nerdctl_system := `command -v nerdctl 2>/dev/null`
+_nerdctl_system := `command -v nerdctl 2>/dev/null || true`
 nerdctl_bin := if _nerdctl_system != "" { _nerdctl_system } else { nerdctl_bundle + "/bin/nerdctl" }
 # Pre-built isoman binary (built inside Alpine by _build-isoman).
 isoman_bin := env("ISOMAN_BIN", ".build-cache/isoman")
