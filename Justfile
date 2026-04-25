@@ -42,15 +42,15 @@ isoman_bin := env("ISOMAN_BIN", ".build-cache/isoman")
 
 # Ensure cargo-nextest is installed
 _ensure-nextest:
-    #!/usr/bin/env bash
-    if ! command -v cargo-nextest &> /dev/null; then
+    #!/bin/sh
+    if ! command -v cargo-nextest >/dev/null 2>&1; then
         echo "==> cargo-nextest not found — installing..."
         cargo install cargo-nextest --locked
     fi
 
 # Load dm-integrity and ensure root access for cryptsetup loop-device operations.
 _dm-integrity:
-    #!/usr/bin/env bash
+    #!/bin/sh
     if ! lsmod | grep -q "^dm_integrity" && ! grep -q "^dm_integrity" /proc/modules; then
         sudo modprobe dm-integrity || echo "WARNING: dm-integrity unavailable (restricted environment) — continuing."
     fi
@@ -61,8 +61,8 @@ _dm-integrity:
 # to bootstrap rootless containerd without any host container runtime installed.
 # Skipped when the setup script is already present (bundle already extracted).
 _ensure-nerdctl:
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
     SETUP={{ nerdctl_bundle }}/bin/containerd-rootless-setuptool.sh
     [ -f "$SETUP" ] && exit 0
     echo "==> Downloading nerdctl full bundle to {{ nerdctl_bundle }}/ ..."
@@ -86,8 +86,8 @@ _ensure-nerdctl:
 # On first run: patches containerd-rootless-setuptool.sh to recognise the
 # LosOS/actman init system, runs it, then starts containerd if needed.
 _ensure-containerd-rootless: _ensure-nerdctl
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
     export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
     SOCK="/run/user/$(id -u)/containerd/containerd.sock"
     ROOTLESSKIT_STATE="/run/user/$(id -u)/containerd-rootless"
@@ -169,8 +169,8 @@ _ensure-containerd-rootless: _ensure-nerdctl
 # Runs buildkitd inside the same rootlesskit user namespace as containerd so it
 # can use the containerd worker (shared image store, no second OCI layer).
 _ensure-buildkit: _ensure-containerd-rootless
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
     export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
     BSOCK="/run/user/$(id -u)/buildkit/buildkitd.sock"
     SETUP="{{ nerdctl_bundle }}/bin/containerd-rootless-setuptool.sh"
@@ -203,8 +203,8 @@ _ensure-buildkit: _ensure-containerd-rootless
 # Build the isoman binary inside a Rust:Alpine container — no host Rust toolchain needed.
 # The result is cached at {{ isoman_bin }}; delete it to force a rebuild.
 _build-isoman: _ensure-buildkit
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
     export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
     out="{{ isoman_bin }}"
     mkdir -p "$(dirname "$out")"
@@ -226,9 +226,9 @@ _build-isoman: _ensure-buildkit
 
 # Generate Secure Boot keys only when sb-key.pem / sb-cert.pem are absent.
 _ensure-sb-keys:
-    #!/usr/bin/bash
-    set -euo pipefail
-    if [[ ! -f sb-key.pem || ! -f sb-cert.pem ]]; then
+    #!/bin/sh
+    set -eu
+    if [ ! -f sb-key.pem ] || [ ! -f sb-cert.pem ]; then
         echo "==> Secure Boot keys not found — generating via sbctl..."
         just setup-sbctl
     fi
@@ -244,34 +244,34 @@ dev:
 
 # Download and build the latest LLVM (clang + lld) from source.
 llvm:
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
 
     repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"
-    [[ "$cache_root" = /* ]] || cache_root="$repo_root/$cache_root"
+    case "$cache_root" in /*) ;; *) cache_root="$repo_root/$cache_root" ;; esac
     bootstrap_root="${LLVM_BOOTSTRAP_ROOT:-$cache_root/llvm-bootstrap}"
     stage2_root="${LLVM_STAGE2_ROOT:-$cache_root/llvm-stage2}"
-    [[ "$bootstrap_root" = /* ]] || bootstrap_root="$repo_root/$bootstrap_root"
-    [[ "$stage2_root" = /* ]] || stage2_root="$repo_root/$stage2_root"
+    case "$bootstrap_root" in /*) ;; *) bootstrap_root="$repo_root/$bootstrap_root" ;; esac
+    case "$stage2_root" in /*) ;; *) stage2_root="$repo_root/$stage2_root" ;; esac
     install_dir="$repo_root/llvm"
     generator="${GENERATOR:-}"
 
-    if [[ -f "$install_dir/bin/clang" ]]; then
+    if [ -f "$install_dir/bin/clang" ]; then
         echo "==> LLVM already built at $install_dir"
         exit 0
     fi
 
     echo "==> Checking dependencies..."
     for cmd in curl tar cmake; do
-        if ! command -v $cmd &> /dev/null; then
+        if ! command -v "$cmd" >/dev/null 2>&1; then
             echo "Error: $cmd is required but not installed."
             exit 1
         fi
     done
 
-    if [[ -z "$generator" ]]; then
-        if command -v ninja &> /dev/null; then
+    if [ -z "$generator" ]; then
+        if command -v ninja >/dev/null 2>&1; then
             generator="Ninja"
         else
             generator="Unix Makefiles"
@@ -289,31 +289,29 @@ llvm:
     tar -xzf "$bootstrap_root/llvm.tar.gz" -C "$bootstrap_root/src" --strip-components=1
     export CC="clang"
     export CXX="clang++"
-    BOOTSTRAP_CMAKE_ARGS=(
-        -S "$bootstrap_root/src/llvm"
-        -B "$bootstrap_root/build"
-        -G "$generator"
-        -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install"
-        -DCMAKE_C_COMPILER=clang
-        -DCMAKE_CXX_COMPILER=clang++
-        -DLLVM_ENABLE_PROJECTS="clang;lld"
-        -DLLVM_TARGETS_TO_BUILD="X86"
-        -DLLVM_INCLUDE_TESTS=OFF
-        -DLLVM_INCLUDE_EXAMPLES=OFF
-        -DLLVM_ENABLE_BINDINGS=OFF
+    set -- \
+        -S "$bootstrap_root/src/llvm" \
+        -B "$bootstrap_root/build" \
+        -G "$generator" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" \
+        -DCMAKE_C_COMPILER=clang \
+        -DCMAKE_CXX_COMPILER=clang++ \
+        -DLLVM_ENABLE_PROJECTS="clang;lld" \
+        -DLLVM_TARGETS_TO_BUILD="X86" \
+        -DLLVM_INCLUDE_TESTS=OFF \
+        -DLLVM_INCLUDE_EXAMPLES=OFF \
+        -DLLVM_ENABLE_BINDINGS=OFF \
         -DLLVM_USE_LINKER=mold
-    )
-    if command -v ccache &>/dev/null; then
-        BOOTSTRAP_CMAKE_ARGS+=(
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache
+    if command -v ccache >/dev/null 2>&1; then
+        set -- "$@" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-        )
     fi
-    cmake "${BOOTSTRAP_CMAKE_ARGS[@]}"
+    cmake "$@"
     cmake --build "$bootstrap_root/build" -j`nproc`
     cmake --install "$bootstrap_root/build" --prefix "$bootstrap_root/install"
-    if [[ ! -x "$bootstrap_root/install/bin/clang" ]]; then
+    if [ ! -x "$bootstrap_root/install/bin/clang" ]; then
         echo "Error: bootstrap clang not found at $bootstrap_root/install/bin/clang" >&2
         exit 1
     fi
@@ -323,25 +321,26 @@ llvm:
     export CC="$bootstrap_root/install/bin/clang"
     export CXX="$bootstrap_root/install/bin/clang++"
 
-    CMAKE_ARGS=(
-        -S "$bootstrap_root/src/llvm"
-        -B "$stage2_root/build"
-        -G "$generator"
-        -DCMAKE_BUILD_TYPE=Release
-        -DCMAKE_INSTALL_PREFIX="$install_dir" -DCMAKE_C_COMPILER="$bootstrap_root/install/bin/clang" -DCMAKE_CXX_COMPILER="$bootstrap_root/install/bin/clang++"
-        -DLLVM_ENABLE_PROJECTS="clang;lld"
-        -DLLVM_TARGETS_TO_BUILD="X86"
-        -DLLVM_INCLUDE_TESTS=OFF
-        -DLLVM_INCLUDE_EXAMPLES=OFF
-        -DLLVM_ENABLE_BINDINGS=OFF
-        -DCLANG_VENDOR="LosOS"
-        -DPACKAGE_VENDOR="LosOS"
-        -DLLVM_ENABLE_LTO=Thin
-        -DLLVM_PARALLEL_LINK_JOBS=1
-        -DLLVM_ENABLE_CFI=ON
+    set -- \
+        -S "$bootstrap_root/src/llvm" \
+        -B "$stage2_root/build" \
+        -G "$generator" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$install_dir" \
+        -DCMAKE_C_COMPILER="$bootstrap_root/install/bin/clang" \
+        -DCMAKE_CXX_COMPILER="$bootstrap_root/install/bin/clang++" \
+        -DLLVM_ENABLE_PROJECTS="clang;lld" \
+        -DLLVM_TARGETS_TO_BUILD="X86" \
+        -DLLVM_INCLUDE_TESTS=OFF \
+        -DLLVM_INCLUDE_EXAMPLES=OFF \
+        -DLLVM_ENABLE_BINDINGS=OFF \
+        -DCLANG_VENDOR="LosOS" \
+        -DPACKAGE_VENDOR="LosOS" \
+        -DLLVM_ENABLE_LTO=Thin \
+        -DLLVM_PARALLEL_LINK_JOBS=1 \
+        -DLLVM_ENABLE_CFI=ON \
         -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld"
-    )
-    cmake "${CMAKE_ARGS[@]}"
+    cmake "$@"
     cmake --build "$stage2_root/build" -j`nproc`
     cmake --install "$stage2_root/build" --prefix "$install_dir"
     
@@ -351,15 +350,15 @@ llvm:
 # Build a custom kernel optimised for LosOS inside an isolated container.
 # Requires: Containerfile.kernel image (built automatically on first run).
 kernel: llvm _ensure-buildkit
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
     export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
 
     repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"
-    [[ "$cache_root" = /* ]] || cache_root="$repo_root/$cache_root"
+    case "$cache_root" in /*) ;; *) cache_root="$repo_root/$cache_root" ;; esac
     build_root="${KERNEL_BUILD_ROOT:-$cache_root/kernel}"
-    [[ "$build_root" = /* ]] || build_root="$repo_root/$build_root"
+    case "$build_root" in /*) ;; *) build_root="$repo_root/$build_root" ;; esac
 
     tag="{{ kernel_tag }}"
     archive="${build_root}/${tag}.tar.gz"
@@ -377,14 +376,18 @@ kernel: llvm _ensure-buildkit
     afdo_env=""
     propeller_env=""
     afdo_prof="${AUTOFDO_PROFILE:-}"
-    [[ -z "$afdo_prof" && -f "$cache_root/kernel.afdo" ]] && afdo_prof="$cache_root/kernel.afdo"
+    [ -z "$afdo_prof" ] && [ -f "$cache_root/kernel.afdo" ] && afdo_prof="$cache_root/kernel.afdo"
     propeller_prefix="${PROPELLER_PREFIX:-}"
-    [[ -z "$propeller_prefix" && -f "$cache_root/kernel-propeller.symorder" ]] \
+    [ -z "$propeller_prefix" ] && [ -f "$cache_root/kernel-propeller.symorder" ] \
         && propeller_prefix="$cache_root/kernel-propeller"
-    [[ -n "$afdo_prof" ]] \
-        && { echo "==> AutoFDO profile: $afdo_prof"; afdo_env="CLANG_AUTOFDO_PROFILE=/cache/kernel.afdo"; }
-    [[ -n "$propeller_prefix" ]] \
-        && { echo "==> Propeller prefix: $propeller_prefix"; propeller_env="CLANG_PROPELLER_PROFILE_PREFIX=/cache/kernel-propeller"; }
+    if [ -n "$afdo_prof" ]; then
+        echo "==> AutoFDO profile: $afdo_prof"
+        afdo_env="CLANG_AUTOFDO_PROFILE=/cache/kernel.afdo"
+    fi
+    if [ -n "$propeller_prefix" ]; then
+        echo "==> Propeller prefix: $propeller_prefix"
+        propeller_env="CLANG_PROPELLER_PROFILE_PREFIX=/cache/kernel-propeller"
+    fi
 
     mkdir -p "$cache_root/ccache-kernel"
 
@@ -398,8 +401,8 @@ kernel: llvm _ensure-buildkit
         -e KERNEL_TAG="$tag" \
         -e AFDO_ENV="$afdo_env" \
         -e PROPELLER_ENV="$propeller_env" \
-        losos-kernel-build bash -s <<'KERNELBUILD'
-    set -euo pipefail
+        losos-kernel-build sh <<'KERNELBUILD'
+    set -eu
     export CCACHE_DIR=/ccache
     export CCACHE_COMPILERCHECK=content
     export PATH="/llvm/bin:$PATH"
@@ -423,19 +426,19 @@ kernel: llvm _ensure-buildkit
         --set-str MODULE_SIG_KEY "/repo/sb-key.pem" \
         --set-str MODULE_SIG_CERT "/repo/sb-cert.pem"
     make olddefconfig LLVM=1
-    profile_args=()
-    [[ -n "$AFDO_ENV" ]] && profile_args+=("$AFDO_ENV")
-    [[ -n "$PROPELLER_ENV" ]] && profile_args+=("$PROPELLER_ENV")
     # LTO_CLANG_FULL requires LD_IS_LLD; mold won't satisfy that check.
     # Absolute compiler path so ccache's content-hash check is unambiguous.
+    # ${VAR:+$VAR} expands to KEY=VALUE (no spaces) or nothing — safe unquoted.
     make LLVM=1 LD=ld.lld \
         CC="ccache /llvm/bin/clang" \
         CXX="ccache /llvm/bin/clang++" \
         HOSTCC="ccache /llvm/bin/clang" \
         HOSTCXX="ccache /llvm/bin/clang++" \
-        "${profile_args[@]}" -j$(nproc)
+        ${AFDO_ENV:+$AFDO_ENV} \
+        ${PROPELLER_ENV:+$PROPELLER_ENV} \
+        -j$(nproc)
     echo "==> Signing kernel bzImage..."
-    if [[ -f /repo/sb-key.pem && -f /repo/sb-cert.pem ]]; then
+    if [ -f /repo/sb-key.pem ] && [ -f /repo/sb-cert.pem ]; then
         sbsign --key /repo/sb-key.pem --cert /repo/sb-cert.pem \
             --output arch/x86/boot/bzImage arch/x86/boot/bzImage
     else
@@ -449,22 +452,22 @@ kernel: llvm _ensure-buildkit
 # capture guest branch samples, converts them to an AFDO profile, then the
 # next 'just kernel' build picks it up automatically from the cache.
 kernel-profiles: kernel
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
 
     export PATH="`pwd`/llvm/bin:$PATH"
 
     repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"
-    [[ "$cache_root" = /* ]] || cache_root="$repo_root/$cache_root"
+    case "$cache_root" in /*) ;; *) cache_root="$repo_root/$cache_root" ;; esac
     build_root="${KERNEL_BUILD_ROOT:-$cache_root/kernel}"
-    [[ "$build_root" = /* ]] || build_root="$repo_root/$build_root"
+    case "$build_root" in /*) ;; *) build_root="$repo_root/$build_root" ;; esac
 
     tag="{{ kernel_tag }}"
     src_dir="${build_root}/linux-${tag#v}"
     vmlinux="$src_dir/vmlinux"
 
-    if [[ ! -f "{{ output }}" ]]; then
+    if [ ! -f "{{ output }}" ]; then
         echo "==> No ISO at {{ output }} yet — skipping profile collection (will run after first build)."
         exit 0
     fi
@@ -508,8 +511,8 @@ kernel-profiles: kernel
 # sb-key.pem / sb-cert.pem in the project root where isoman --secure-boot
 # picks them up automatically.  The full hierarchy lives in secure-boot/.
 setup-sbctl:
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
     export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
 
     SB_DIR="`pwd`/secure-boot"
@@ -582,8 +585,11 @@ build-prod-live: _dm-integrity _ensure-sb-keys _build-isoman kernel-profiles
 
 # Build with Secure Boot signing (auto-generates sb-key.pem / sb-cert.pem if absent)
 build-secure-boot: _dm-integrity _ensure-sb-keys _build-isoman kernel-profiles
-    @echo "==> Building with Secure Boot signing..."
-    kernel_arg=$([[ -n "{{ kernel }}" ]] && echo "--kernel {{ kernel }}" || echo "");
+    #!/bin/sh
+    set -eu
+    echo "==> Building with Secure Boot signing..."
+    kernel_arg=""
+    [ -n "{{ kernel }}" ] && kernel_arg="--kernel {{ kernel }}"
     "{{ isoman_bin }}" --build --output "{{ output }}" --secure-boot true $kernel_arg
 
 # Build initramfs then launch in QEMU
@@ -594,8 +600,8 @@ build-test: build test
 
 # Run testman integration tests in legacy BIOS mode (El Torito, no OVMF)
 test-bios: _ensure-nextest
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
 
     echo "==> Running testman integration tests (BIOS/El Torito mode)"
     echo "    ISO:         {{ output }}"
@@ -613,8 +619,8 @@ test-bios: _ensure-nextest
 
 # Run testman integration tests (builds non-prod encrypted disk image first)
 test: _ensure-nextest
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
 
     echo "==> Running testman integration tests"
     echo "    ISO:         {{ output }}"
@@ -633,68 +639,60 @@ test: _ensure-nextest
 
 # Launch OS ISO image in QEMU via UEFI (OVMF pflash + virtio drive)
 run:
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
 
     echo "==> Launching OS ISO image (UEFI)"
     echo "    Image:     {{ output }}"
     echo "    Memory:    {{ memory }}"
     echo "    CPUs:      {{ cpus }}"
-    [[ -n "{{ disk }}" ]] && echo "    Data disk: {{ disk }} (→ /dev/vdb)"
+    [ -n "{{ disk }}" ] && echo "    Data disk: {{ disk }} (→ /dev/vdb)"
     echo ""
-
-    kvm_flag=()
-    [[ "{{ kvm }}" -eq 1 ]] && kvm_flag=(-enable-kvm)
-
-    # Extra data disk (e.g. for persistent storage).  The OS image is /dev/vda;
-    # the optional data disk appears as /dev/vdb.
-    data_disk_args=()
-    [[ -n "{{ disk }}" ]] && data_disk_args=(-drive "file={{ disk }},format=raw,if=virtio")
 
     # OVMF_VARS must be writable; use a temp copy to avoid mutating the
     # system-wide file.
-    tmp_vars=$(mktemp --suffix=.fd)
+    tmp_vars=$(mktemp /tmp/ovmf-XXXXXX.fd)
     cp "{{ ovmf_vars }}" "$tmp_vars"
-    trap "rm -f $tmp_vars" EXIT
+    trap 'rm -f "$tmp_vars"' EXIT
 
-    exec qemu-system-x86_64 
-        -m "{{ memory }}" 
-        -smp "{{ cpus }}" 
-        -drive "if=pflash,format=raw,readonly=on,file={{ ovmf_code }}" 
-        -drive "if=pflash,format=raw,file=$tmp_vars" 
-        -drive "file={{ output }},format=raw,media=cdrom,readonly=on" 
-        -nographic 
-        -nic user 
-        -netdev user,id=n0 
-        -device virtio-net-pci,netdev=n0 
-        "${data_disk_args[@]}" 
-        "${kvm_flag[@]}"
+    set -- \
+        qemu-system-x86_64 \
+        -m "{{ memory }}" \
+        -smp "{{ cpus }}" \
+        -drive "if=pflash,format=raw,readonly=on,file={{ ovmf_code }}" \
+        -drive "if=pflash,format=raw,file=$tmp_vars" \
+        -drive "file={{ output }},format=raw,media=cdrom,readonly=on" \
+        -nographic \
+        -nic user \
+        -netdev user,id=n0 \
+        -device virtio-net-pci,netdev=n0
+    # Extra data disk (e.g. for persistent storage).  OS image is /dev/vda;
+    # the optional data disk appears as /dev/vdb.
+    [ -n "{{ disk }}" ] && set -- "$@" -drive "file={{ disk }},format=raw,if=virtio"
+    [ "{{ kvm }}" -eq 1 ] && set -- "$@" -enable-kvm
+    exec "$@"
 
 # Launch OS ISO image in QEMU via Legacy BIOS
 run-bios:
-    #!/usr/bin/env bash
-    set -euo pipefail
+    #!/bin/sh
+    set -eu
 
     echo "==> Launching OS ISO image (Legacy BIOS)"
     echo "    Image:     {{ output }}"
     echo "    Memory:    {{ memory }}"
     echo "    CPUs:      {{ cpus }}"
-    [[ -n "{{ disk }}" ]] && echo "    Data disk: {{ disk }} (→ /dev/vdb)"
+    [ -n "{{ disk }}" ] && echo "    Data disk: {{ disk }} (→ /dev/vdb)"
     echo ""
 
-    kvm_flag=()
-    [[ "{{ kvm }}" -eq 1 ]] && kvm_flag=(-enable-kvm)
-
-    data_disk_args=()
-    [[ -n "{{ disk }}" ]] && data_disk_args=(-drive "file={{ disk }},format=raw,if=virtio")
-
-    exec qemu-system-x86_64 
-        -m "{{ memory }}" 
-        -smp "{{ cpus }}" 
-        -drive "file={{ output }},format=raw,media=cdrom,readonly=on" 
-        -nographic 
-        -nic user 
-        -netdev user,id=n0 
-        -device virtio-net-pci,netdev=n0 
-        "${data_disk_args[@]}" 
-        "${kvm_flag[@]}"
+    set -- \
+        qemu-system-x86_64 \
+        -m "{{ memory }}" \
+        -smp "{{ cpus }}" \
+        -drive "file={{ output }},format=raw,media=cdrom,readonly=on" \
+        -nographic \
+        -nic user \
+        -netdev user,id=n0 \
+        -device virtio-net-pci,netdev=n0
+    [ -n "{{ disk }}" ] && set -- "$@" -drive "file={{ disk }},format=raw,if=virtio"
+    [ "{{ kvm }}" -eq 1 ] && set -- "$@" -enable-kvm
+    exec "$@"
