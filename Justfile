@@ -316,6 +316,7 @@ llvm:
         -DCMAKE_C_COMPILER=clang \
         -DCMAKE_CXX_COMPILER=clang++ \
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
+        -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
         -DLLVM_TARGETS_TO_BUILD="X86" \
         -DLLVM_INCLUDE_TESTS=OFF \
         -DLLVM_INCLUDE_EXAMPLES=OFF \
@@ -348,6 +349,8 @@ llvm:
         -DCMAKE_C_COMPILER="$bootstrap_root/install/bin/clang" \
         -DCMAKE_CXX_COMPILER="$bootstrap_root/install/bin/clang++" \
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
+        -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+        -DLLVM_ENABLE_LIBCXX=ON \
         -DLLVM_TARGETS_TO_BUILD="X86" \
         -DLLVM_INCLUDE_TESTS=OFF \
         -DLLVM_INCLUDE_EXAMPLES=OFF \
