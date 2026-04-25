@@ -90,7 +90,14 @@ _ensure-containerd-rootless: _ensure-nerdctl
     set -euo pipefail
     export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
     SOCK="/run/user/$(id -u)/containerd/containerd.sock"
-    [ -S "$SOCK" ] && exit 0
+    # Verify the socket is live, not just a stale file left by a dead process.
+    if [ -S "$SOCK" ]; then
+        if "{{ nerdctl_bin }}" --address "$SOCK" info >/dev/null 2>&1; then
+            exit 0
+        fi
+        echo "==> Stale containerd socket detected — removing and restarting..."
+        rm -f "$SOCK" "${SOCK}.ttrpc"
+    fi
 
     SETUP={{ nerdctl_bundle }}/bin/containerd-rootless-setuptool.sh
     ROOTLESS={{ nerdctl_bundle }}/bin/containerd-rootless.sh
@@ -283,11 +290,12 @@ llvm:
         -DLLVM_ENABLE_BINDINGS=OFF
         -DCLANG_VENDOR="LosOS"
         -DPACKAGE_VENDOR="LosOS"
-        -DLLVM_ENABLE_LTO=Full
+        -DLLVM_ENABLE_LTO=Thin
+        -DLLVM_PARALLEL_LINK_JOBS=1
         -DLLVM_ENABLE_CFI=ON
         -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld"
     )
-    cmake "${CMAKE_ARGS[@]}" 
+    cmake "${CMAKE_ARGS[@]}"
     cmake --build "$stage2_root/build" -j`nproc`
     cmake --install "$stage2_root/build" --prefix "$install_dir"
     
