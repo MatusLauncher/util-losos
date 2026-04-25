@@ -134,11 +134,12 @@ _ensure-containerd-rootless: _ensure-nerdctl
     echo "==> Running containerd-rootless-setuptool.sh install (LosOS-patched)..."
     "$PATCHED" install || echo "==> WARNING: setup script returned non-zero — will attempt manual start"
 
-    # Always configure krun as the default nerdctl runtime
+    # Configure nerdctl: krun runtime + CNI path pointing at the bundle
     mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/nerdctl"
-    printf 'default_runtime = "krun"\n' \
+    printf 'default_runtime = "krun"\ncni_path = "%s/libexec/cni"\n' \
+        "{{ nerdctl_bundle }}" \
         > "${XDG_CONFIG_HOME:-$HOME/.config}/nerdctl/nerdctl.toml"
-    echo "==> nerdctl: default_runtime = krun"
+    echo "==> nerdctl: default_runtime = krun, cni_path = {{ nerdctl_bundle }}/libexec/cni"
 
     # ── Wait for socket; fall back to a background manual start ───────────────
     for i in $(seq 10); do [ -S "$SOCK" ] && break; sleep 1; done
@@ -343,6 +344,7 @@ kernel: llvm _ensure-buildkit
     #!/usr/bin/env bash
     set -euo pipefail
     export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
+    export CNI_PATH="{{ nerdctl_bundle }}/libexec/cni"
 
     repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"

@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Use correct Alpine package name sbsigntool (not sbsigntools)
 - Prepend nerdctl bundle bin/ to PATH in kernel recipe
 - Start rootless buildkitd via nsenter into containerd user namespace
 - Detect stale rootless containerd socket before trusting it
