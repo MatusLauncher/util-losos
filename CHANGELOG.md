@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Build libc++ in bootstrap and use it for LLVM stage2
 - Move -fsanitize=cfi linker flags to *_RELEASE variants
 - Move -fsanitize=cfi to CMAKE_*_FLAGS_RELEASE to bypass CMake compiler check
 - Remove non-existent LLVM_ENABLE_CFI cmake variable from stage2 build

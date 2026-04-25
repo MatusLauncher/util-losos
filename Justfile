@@ -339,6 +339,9 @@ llvm:
     mkdir -p "$stage2_root/build"
     export CC="$bootstrap_root/install/bin/clang"
     export CXX="$bootstrap_root/install/bin/clang++"
+    # cmake try_compile tests inherit the process environment; expose bootstrap
+    # libc++.so so the -stdlib=libc++ linker step in check tests can succeed.
+    export LD_LIBRARY_PATH="$bootstrap_root/install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
     set -- \
         -S "$bootstrap_root/src/llvm" \
@@ -351,6 +354,8 @@ llvm:
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
         -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
         -DLLVM_ENABLE_LIBCXX=ON \
+        "-DCMAKE_INSTALL_RPATH=$install_dir/lib" \
+        -DCMAKE_BUILD_WITH_INSTALL_RPATH=OFF \
         -DLLVM_TARGETS_TO_BUILD="X86" \
         -DLLVM_INCLUDE_TESTS=OFF \
         -DLLVM_INCLUDE_EXAMPLES=OFF \
