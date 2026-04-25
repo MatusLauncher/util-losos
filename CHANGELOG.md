@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Prevent just parse failure when nerdctl is not on PATH
 - Resolve nerdctl_bin literal {{ }} interpolation failure in Just
 - Robust nerdctl URL detection and explicit error on API parse failure
 - Use CMAKE_C_COMPILER_LAUNCHER for ccache in LLVM bootstrap

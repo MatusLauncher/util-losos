@@ -283,7 +283,7 @@ llvm:
         -DPACKAGE_VENDOR="LosOS"
         -DLLVM_ENABLE_LTO=Full
         -DLLVM_ENABLE_CFI=ON
-        -DLLVM_USE_LINKER=mold
+        -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld"
     )
     cmake "${CMAKE_ARGS[@]}" 
     cmake --build "$stage2_root/build" -j`nproc`
