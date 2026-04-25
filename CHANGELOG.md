@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Remove --runtime=krun from kernel build container run
 - Correct nerdctl 2.x toml config — cni_path valid, default_runtime removed
 - Set CNI_PATH to bundle libexec/cni for nerdctl run
 - Use correct Alpine package name sbsigntool (not sbsigntools)

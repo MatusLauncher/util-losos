@@ -238,10 +238,46 @@ _ensure-sb-keys:
 
 # Pull all submodules to their latest remote commit and build the workspace
 dev:
-    @echo "==> Pulling submodules..."
+    #!/bin/sh
+    set -eu
+    echo "==> Pulling submodules..."
     git submodule update --remote --merge
-    @echo "==> Vendoring dependencies..."
+    echo "==> Vendoring dependencies..."
     cargo vendor
+    echo "==> Installing pre-commit hook..."
+    HOOK_BODY='#!/usr/bin/env bash
+# Pre-commit: just fmt, cargo fmt, cargo clippy, git-cliff — master branch only
+set -euo pipefail
+current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+[[ "$current_branch" != "master" ]] && exit 0
+if command -v just &>/dev/null && [[ -f "Justfile" ]]; then
+    just --fmt --unstable 2>/dev/null && git add Justfile && echo "==> Justfile formatted" || echo "WARNING: just --fmt failed"
+fi
+if command -v cargo &>/dev/null; then
+    cargo +nightly fmt && git add -u && echo "==> cargo fmt done"
+    cargo +nightly clippy --fix --allow-dirty --allow-staged -- -W clippy::all -W clippy::perf 2>/dev/null \
+        && git add -u && echo "==> cargo clippy done" || echo "WARNING: clippy issues — continuing"
+fi
+if command -v git-cliff &>/dev/null && [[ -f "cliff.toml" ]]; then
+    git-cliff --unreleased --strip all > CHANGELOG.md || { echo "ERROR: git-cliff failed"; exit 1; }
+    git add CHANGELOG.md && echo "==> CHANGELOG.md updated"
+fi
+echo "==> Pre-commit checks completed"'
+    tmpfile=$(mktemp)
+    printf '%s\n' "$HOOK_BODY" > "$tmpfile"
+    chmod +x "$tmpfile"
+    git_dir=$(git rev-parse --git-dir)
+    mkdir -p "$git_dir/hooks"
+    cp "$tmpfile" "$git_dir/hooks/pre-commit"
+    echo "    installed → $git_dir/hooks/pre-commit"
+    HOOK_TMP="$tmpfile" git submodule foreach --quiet '
+        git_dir=$(git rev-parse --git-dir)
+        mkdir -p "$git_dir/hooks"
+        cp "$HOOK_TMP" "$git_dir/hooks/pre-commit"
+        echo "    installed → $git_dir/hooks/pre-commit"
+    '
+    rm -f "$tmpfile"
+    echo "==> Pre-commit hooks installed"
 
 # Download and build the latest LLVM (clang + lld) from source.
 llvm:
