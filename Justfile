@@ -340,15 +340,49 @@ llvm:
     mkdir -p "$stage2_root/build"
     export CC="$bootstrap_root/install/bin/clang"
     export CXX="$bootstrap_root/install/bin/clang++"
+
+    # Verify the bootstrap compiler can link a trivial C program before invoking
+    # cmake — if this fails every cmake feature check will silently fail too.
+    printf 'int main(void){return 0;}' > /tmp/_losos_sanity.c
+    if ! "$bootstrap_root/install/bin/clang" /tmp/_losos_sanity.c -o /tmp/_losos_sanity 2>&1; then
+        echo "ERROR: bootstrap clang cannot link a trivial C program — check CRT / gcc toolchain" >&2
+        rm -f /tmp/_losos_sanity.c /tmp/_losos_sanity; exit 1
+    fi
+    # Also check -stdlib=libc++ to decide whether LLVM_ENABLE_LIBCXX is usable.
+    printf 'int main(){return 0;}' > /tmp/_losos_sanity.cpp
+    if "$bootstrap_root/install/bin/clang++" -stdlib=libc++ \
+            "-L$bootstrap_root/install/lib" /tmp/_losos_sanity.cpp \
+            -o /tmp/_losos_sanity 2>&1; then
+        llvm_enable_libcxx=ON
+        echo "==> bootstrap libc++ OK — will build stage2 with LLVM_ENABLE_LIBCXX=ON"
+    else
+        llvm_enable_libcxx=OFF
+        echo "==> bootstrap libc++ NOT accessible — stage2 will use host libstdc++ (LLVM_ENABLE_LIBCXX=OFF)"
+    fi
+    rm -f /tmp/_losos_sanity.c /tmp/_losos_sanity.cpp /tmp/_losos_sanity
+
     # compiler-rt builtins live under clang's resource directory; expose them so
     # cmake try_compile tests can resolve __atomic_* without falling back to libatomic.
-    compiler_rt_lib="$("$bootstrap_root/install/bin/clang" -print-resource-dir)/lib/linux"
+    # Modern LLVM uses a triple-based subdirectory (e.g. lib/x86_64-unknown-linux-gnu/)
+    # so search both naming conventions.
+    res_dir="$("$bootstrap_root/install/bin/clang" -print-resource-dir)"
+    compiler_rt_lib=""
+    for d in "$res_dir/lib/linux" "$res_dir/lib/x86_64-unknown-linux-gnu" "$res_dir/lib"; do
+        if [ -d "$d" ]; then compiler_rt_lib="$d"; break; fi
+    done
     # LIBRARY_PATH (link-time search) and LD_LIBRARY_PATH (runtime loading) let
     # cmake try_compile tests find bootstrap libc++.so when -stdlib=libc++ is
     # active.  CMAKE_EXE/SHARED_LINKER_FLAGS carries -L into cmake try_compile
     # sub-projects that reset the environment.
-    export LIBRARY_PATH="$compiler_rt_lib:$bootstrap_root/install/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
-    export LD_LIBRARY_PATH="$compiler_rt_lib:$bootstrap_root/install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    if [ -n "$compiler_rt_lib" ]; then
+        export LIBRARY_PATH="$compiler_rt_lib:$bootstrap_root/install/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+        export LD_LIBRARY_PATH="$compiler_rt_lib:$bootstrap_root/install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        extra_linker_flags="-L$compiler_rt_lib -L$bootstrap_root/install/lib"
+    else
+        export LIBRARY_PATH="$bootstrap_root/install/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+        export LD_LIBRARY_PATH="$bootstrap_root/install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        extra_linker_flags="-L$bootstrap_root/install/lib"
+    fi
 
     set -- \
         -S "$bootstrap_root/src/llvm" \
@@ -362,13 +396,14 @@ llvm:
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
         -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind;compiler-rt" \
         -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
-        -DLLVM_ENABLE_LIBCXX=ON \
+        "-DLLVM_ENABLE_LIBCXX=$llvm_enable_libcxx" \
+        -DCLANG_DEFAULT_STDLIB=libc++ \
         -DCLANG_DEFAULT_RTLIB=compiler-rt \
         -DCLANG_DEFAULT_UNWINDLIB=libunwind \
         "-DCMAKE_INSTALL_RPATH=$install_dir/lib" \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=OFF \
-        "-DCMAKE_EXE_LINKER_FLAGS=-L$compiler_rt_lib -L$bootstrap_root/install/lib" \
-        "-DCMAKE_SHARED_LINKER_FLAGS=-L$compiler_rt_lib -L$bootstrap_root/install/lib" \
+        "-DCMAKE_EXE_LINKER_FLAGS=$extra_linker_flags" \
+        "-DCMAKE_SHARED_LINKER_FLAGS=$extra_linker_flags" \
         -DLLVM_TARGETS_TO_BUILD="X86" \
         -DLLVM_INCLUDE_TESTS=OFF \
         -DLLVM_INCLUDE_EXAMPLES=OFF \
@@ -386,7 +421,11 @@ llvm:
         "-DCMAKE_EXE_LINKER_FLAGS_RELEASE=-flto=thin -fsanitize=cfi" \
         "-DCMAKE_SHARED_LINKER_FLAGS_RELEASE=-flto=thin -fsanitize=cfi" \
         "-DCMAKE_MODULE_LINKER_FLAGS_RELEASE=-flto=thin -fsanitize=cfi"
-    cmake "$@"
+    cmake "$@" || {
+        printf '\n==> Stage2 CMake configure failed.  CMakeError.log:\n'
+        cat "$stage2_root/build/CMakeFiles/CMakeError.log" 2>/dev/null || true
+        exit 1
+    }
     cmake --build "$stage2_root/build" -j`nproc`
     cmake --install "$stage2_root/build" --prefix "$install_dir"
 

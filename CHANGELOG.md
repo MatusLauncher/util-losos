@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Set CMAKE_TRY_COMPILE_CONFIGURATION=Debug for stage2
 - Build compiler-rt in bootstrap and expose it to stage2
 - Use LIBRARY_PATH and CMAKE_EXE_LINKER_FLAGS to expose bootstrap libc++
 - Expose bootstrap libc++ to cmake check-tests and set install rpath
