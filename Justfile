@@ -356,7 +356,6 @@ llvm:
         -DPACKAGE_VENDOR="LosOS" \
         -DLLVM_ENABLE_LTO=Thin \
         -DLLVM_PARALLEL_LINK_JOBS=1 \
-        -DLLVM_ENABLE_CFI=ON \
         -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld" \
         -DLLVM_ENABLE_LIBXML2=OFF
     cmake "$@"
