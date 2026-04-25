@@ -357,7 +357,12 @@ llvm:
         -DLLVM_ENABLE_LTO=Thin \
         -DLLVM_PARALLEL_LINK_JOBS=1 \
         -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld" \
-        -DLLVM_ENABLE_LIBXML2=OFF
+        -DLLVM_ENABLE_LIBXML2=OFF \
+        "-DCMAKE_C_FLAGS=-fsanitize=cfi -fvisibility=hidden -fvisibility-inlines-hidden" \
+        "-DCMAKE_CXX_FLAGS=-fsanitize=cfi -fvisibility=hidden -fvisibility-inlines-hidden" \
+        "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=cfi" \
+        "-DCMAKE_SHARED_LINKER_FLAGS=-fsanitize=cfi" \
+        "-DCMAKE_MODULE_LINKER_FLAGS=-fsanitize=cfi"
     cmake "$@"
     cmake --build "$stage2_root/build" -j`nproc`
     cmake --install "$stage2_root/build" --prefix "$install_dir"
@@ -461,6 +466,9 @@ kernel: llvm _ensure-buildkit
         CXX="ccache /llvm/bin/clang++" \
         HOSTCC="ccache /llvm/bin/clang" \
         HOSTCXX="ccache /llvm/bin/clang++" \
+        KCFLAGS="-fsanitize=cfi -fvisibility=hidden -fvisibility-inlines-hidden" \
+        HOSTCFLAGS="-fsanitize=cfi -fvisibility=hidden -fvisibility-inlines-hidden" \
+        HOSTCXXFLAGS="-fsanitize=cfi -fvisibility=hidden -fvisibility-inlines-hidden" \
         ${AFDO_ENV:+$AFDO_ENV} \
         ${PROPELLER_ENV:+$PROPELLER_ENV} \
         -j$(nproc)
