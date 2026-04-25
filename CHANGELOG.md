@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Prepend nerdctl bundle bin/ to PATH in kernel recipe
 - Start rootless buildkitd via nsenter into containerd user namespace
 - Detect stale rootless containerd socket before trusting it
 - Use bootstrap lld for Stage 2 LLVM LTO link instead of mold

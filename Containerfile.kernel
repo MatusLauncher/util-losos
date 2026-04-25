@@ -3,5 +3,5 @@ FROM docker.io/library/alpine:latest
 RUN apk add --no-cache \
         make perl python3 flex bison bc \
         openssl-dev elfutils-dev \
-        pahole sbsigntools \
+        pahole sbsigntool \
         ccache
