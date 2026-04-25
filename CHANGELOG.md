@@ -302,6 +302,7 @@
 
 ### Refactor
 
+- Rewrite all Justfile recipes in POSIX sh
 - Enable LTO, PGO, and wild linker for Stage 2 LLVM build
 - Strip bootenv to data_drive= only, remove stage2/luks/switch_root
 - Refactor CmdLineOptions::param_search to accept &str

@@ -34,6 +34,7 @@ build_cache := env("BUILD_CACHE", ".build-cache")
 # Persistent directory for the nerdctl full bundle (survives host reboots).
 nerdctl_bundle := pwd + "/" + build_cache + "/nerdctl-bin"
 # nerdctl binary: prefer system install, fall back to persistent bundle copy.
+[private]
 _nerdctl_system := `command -v nerdctl 2>/dev/null || true`
 nerdctl_bin := if _nerdctl_system != "" { _nerdctl_system } else { nerdctl_bundle + "/bin/nerdctl" }
 # Pre-built isoman binary (built inside Alpine by _build-isoman).
@@ -343,7 +344,7 @@ llvm:
     cmake "$@"
     cmake --build "$stage2_root/build" -j`nproc`
     cmake --install "$stage2_root/build" --prefix "$install_dir"
-    
+
     echo "==> Clean up build artifacts..."
     rm -rf "$bootstrap_root" "$stage2_root"
 
@@ -392,7 +393,7 @@ kernel: llvm _ensure-buildkit
     mkdir -p "$cache_root/ccache-kernel"
 
     echo "==> Building kernel ${tag} in container..."
-    "{{ nerdctl_bin }}" run --rm --runtime=krun -i \
+    "{{ nerdctl_bin }}" run --rm -i \
         -v "$repo_root/llvm:/llvm:ro" \
         -v "$build_root:/src" \
         -v "$cache_root:/cache" \
