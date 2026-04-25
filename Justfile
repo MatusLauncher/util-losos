@@ -341,6 +341,13 @@ llvm:
     export CC="$bootstrap_root/install/bin/clang"
     export CXX="$bootstrap_root/install/bin/clang++"
 
+    # Modern LLVM installs runtimes (libc++, compiler-rt, libunwind) into
+    # lib/<triple>/ rather than lib/.  Derive the triple-based runtime lib dir
+    # and use it everywhere we need to reach bootstrap shared libs.
+    triple="$("$bootstrap_root/install/bin/clang" -dumpmachine)"
+    bootstrap_rt_lib="$bootstrap_root/install/lib/$triple"
+    bootstrap_lib="$bootstrap_root/install/lib"
+
     # Verify the bootstrap compiler can link a trivial C program before invoking
     # cmake — if this fails every cmake feature check will silently fail too.
     printf 'int main(void){return 0;}' > /tmp/_losos_sanity.c
@@ -348,10 +355,10 @@ llvm:
         echo "ERROR: bootstrap clang cannot link a trivial C program — check CRT / gcc toolchain" >&2
         rm -f /tmp/_losos_sanity.c /tmp/_losos_sanity; exit 1
     fi
-    # Also check -stdlib=libc++ to decide whether LLVM_ENABLE_LIBCXX is usable.
+    # Check -stdlib=libc++ to decide whether LLVM_ENABLE_LIBCXX is usable.
     printf 'int main(){return 0;}' > /tmp/_losos_sanity.cpp
     if "$bootstrap_root/install/bin/clang++" -stdlib=libc++ \
-            "-L$bootstrap_root/install/lib" /tmp/_losos_sanity.cpp \
+            "-L$bootstrap_rt_lib" /tmp/_losos_sanity.cpp \
             -o /tmp/_losos_sanity 2>&1; then
         llvm_enable_libcxx=ON
         echo "==> bootstrap libc++ OK — will build stage2 with LLVM_ENABLE_LIBCXX=ON"
@@ -361,28 +368,24 @@ llvm:
     fi
     rm -f /tmp/_losos_sanity.c /tmp/_losos_sanity.cpp /tmp/_losos_sanity
 
-    # compiler-rt builtins live under clang's resource directory; expose them so
-    # cmake try_compile tests can resolve __atomic_* without falling back to libatomic.
-    # Modern LLVM uses a triple-based subdirectory (e.g. lib/x86_64-unknown-linux-gnu/)
-    # so search both naming conventions.
+    # compiler-rt builtins also live in the triple-based dir.
     res_dir="$("$bootstrap_root/install/bin/clang" -print-resource-dir)"
     compiler_rt_lib=""
-    for d in "$res_dir/lib/linux" "$res_dir/lib/x86_64-unknown-linux-gnu" "$res_dir/lib"; do
+    for d in "$res_dir/lib/$triple" "$res_dir/lib/linux" "$res_dir/lib"; do
         if [ -d "$d" ]; then compiler_rt_lib="$d"; break; fi
     done
-    # LIBRARY_PATH (link-time search) and LD_LIBRARY_PATH (runtime loading) let
-    # cmake try_compile tests find bootstrap libc++.so when -stdlib=libc++ is
-    # active.  CMAKE_EXE/SHARED_LINKER_FLAGS carries -L into cmake try_compile
-    # sub-projects that reset the environment.
+
+    # Build the combined library search path for both link-time (LIBRARY_PATH)
+    # and runtime loading (LD_LIBRARY_PATH / cmake BUILD_RPATH).
+    extra_lib_dirs="$bootstrap_rt_lib:$bootstrap_lib"
     if [ -n "$compiler_rt_lib" ]; then
-        export LIBRARY_PATH="$compiler_rt_lib:$bootstrap_root/install/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
-        export LD_LIBRARY_PATH="$compiler_rt_lib:$bootstrap_root/install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-        extra_linker_flags="-L$compiler_rt_lib -L$bootstrap_root/install/lib"
-    else
-        export LIBRARY_PATH="$bootstrap_root/install/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
-        export LD_LIBRARY_PATH="$bootstrap_root/install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-        extra_linker_flags="-L$bootstrap_root/install/lib"
+        extra_lib_dirs="$compiler_rt_lib:$extra_lib_dirs"
     fi
+    export LIBRARY_PATH="$extra_lib_dirs${LIBRARY_PATH:+:$LIBRARY_PATH}"
+    export LD_LIBRARY_PATH="$extra_lib_dirs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    # Convert colon-separated dirs to semicolon-separated for cmake list values.
+    extra_linker_flags="$(echo "$extra_lib_dirs" | tr ':' '\n' | sed 's/^/-L/' | tr '\n' ' ')"
+    cmake_build_rpath="$(echo "$extra_lib_dirs" | tr ':' ';')"
 
     set -- \
         -S "$bootstrap_root/src/llvm" \
@@ -400,7 +403,7 @@ llvm:
         -DCLANG_DEFAULT_RTLIB=compiler-rt \
         -DCLANG_DEFAULT_UNWINDLIB=libunwind \
         "-DCMAKE_INSTALL_RPATH=$install_dir/lib" \
-        "-DCMAKE_BUILD_RPATH=$bootstrap_root/install/lib" \
+        "-DCMAKE_BUILD_RPATH=$cmake_build_rpath" \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=OFF \
         "-DCMAKE_EXE_LINKER_FLAGS=$extra_linker_flags" \
         "-DCMAKE_SHARED_LINKER_FLAGS=$extra_linker_flags" \
