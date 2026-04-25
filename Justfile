@@ -316,7 +316,8 @@ llvm:
         -DCMAKE_C_COMPILER=clang \
         -DCMAKE_CXX_COMPILER=clang++ \
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
-        -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+        -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind;compiler-rt" \
+        -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
         -DLLVM_TARGETS_TO_BUILD="X86" \
         -DLLVM_INCLUDE_TESTS=OFF \
         -DLLVM_INCLUDE_EXAMPLES=OFF \
@@ -339,12 +340,15 @@ llvm:
     mkdir -p "$stage2_root/build"
     export CC="$bootstrap_root/install/bin/clang"
     export CXX="$bootstrap_root/install/bin/clang++"
+    # compiler-rt builtins live under clang's resource directory; expose them so
+    # cmake try_compile tests can resolve __atomic_* without falling back to libatomic.
+    compiler_rt_lib="$("$bootstrap_root/install/bin/clang" -print-resource-dir)/lib/linux"
     # LIBRARY_PATH (link-time search) and LD_LIBRARY_PATH (runtime loading) let
     # cmake try_compile tests find bootstrap libc++.so when -stdlib=libc++ is
     # active.  CMAKE_EXE/SHARED_LINKER_FLAGS carries -L into cmake try_compile
     # sub-projects that reset the environment.
-    export LIBRARY_PATH="$bootstrap_root/install/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
-    export LD_LIBRARY_PATH="$bootstrap_root/install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export LIBRARY_PATH="$compiler_rt_lib:$bootstrap_root/install/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+    export LD_LIBRARY_PATH="$compiler_rt_lib:$bootstrap_root/install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
     set -- \
         -S "$bootstrap_root/src/llvm" \
@@ -355,12 +359,15 @@ llvm:
         -DCMAKE_C_COMPILER="$bootstrap_root/install/bin/clang" \
         -DCMAKE_CXX_COMPILER="$bootstrap_root/install/bin/clang++" \
         -DLLVM_ENABLE_PROJECTS="clang;lld" \
-        -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind" \
+        -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind;compiler-rt" \
+        -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
         -DLLVM_ENABLE_LIBCXX=ON \
+        -DCLANG_DEFAULT_RTLIB=compiler-rt \
+        -DCLANG_DEFAULT_UNWINDLIB=libunwind \
         "-DCMAKE_INSTALL_RPATH=$install_dir/lib" \
         -DCMAKE_BUILD_WITH_INSTALL_RPATH=OFF \
-        "-DCMAKE_EXE_LINKER_FLAGS=-L$bootstrap_root/install/lib" \
-        "-DCMAKE_SHARED_LINKER_FLAGS=-L$bootstrap_root/install/lib" \
+        "-DCMAKE_EXE_LINKER_FLAGS=-L$compiler_rt_lib -L$bootstrap_root/install/lib" \
+        "-DCMAKE_SHARED_LINKER_FLAGS=-L$compiler_rt_lib -L$bootstrap_root/install/lib" \
         -DLLVM_TARGETS_TO_BUILD="X86" \
         -DLLVM_INCLUDE_TESTS=OFF \
         -DLLVM_INCLUDE_EXAMPLES=OFF \

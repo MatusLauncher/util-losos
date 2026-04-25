@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Use LIBRARY_PATH and CMAKE_EXE_LINKER_FLAGS to expose bootstrap libc++
 - Expose bootstrap libc++ to cmake check-tests and set install rpath
 - Build libc++ in bootstrap and use it for LLVM stage2
 - Move -fsanitize=cfi linker flags to *_RELEASE variants
