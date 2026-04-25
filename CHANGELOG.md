@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Set CNI_PATH to bundle libexec/cni for nerdctl run
 - Use correct Alpine package name sbsigntool (not sbsigntools)
 - Prepend nerdctl bundle bin/ to PATH in kernel recipe
 - Start rootless buildkitd via nsenter into containerd user namespace

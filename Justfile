@@ -90,22 +90,33 @@ _ensure-containerd-rootless: _ensure-nerdctl
     set -euo pipefail
     export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
     SOCK="/run/user/$(id -u)/containerd/containerd.sock"
+    ROOTLESSKIT_STATE="/run/user/$(id -u)/containerd-rootless"
+    SETUP="{{ nerdctl_bundle }}/bin/containerd-rootless-setuptool.sh"
+    ROOTLESS="{{ nerdctl_bundle }}/bin/containerd-rootless.sh"
+    [ -f "$SETUP" ] || { echo "ERROR: $SETUP missing — delete {{ nerdctl_bundle }}/ to redownload" >&2; exit 1; }
+
     # Verify the socket is live, not just a stale file left by a dead process.
     if [ -S "$SOCK" ]; then
         if "{{ nerdctl_bin }}" --address "$SOCK" info >/dev/null 2>&1; then
             exit 0
         fi
-        echo "==> Stale containerd socket detected — removing and restarting..."
+        echo "==> Stale containerd socket detected — cleaning up and restarting..."
         rm -f "$SOCK" "${SOCK}.ttrpc"
+        # The RootlessKit lock must also be removed; without this a new
+        # containerd-rootless.sh launch fails with "lock already held".
+        rm -f "$ROOTLESSKIT_STATE/lock"
     fi
 
-    SETUP={{ nerdctl_bundle }}/bin/containerd-rootless-setuptool.sh
-    ROOTLESS={{ nerdctl_bundle }}/bin/containerd-rootless.sh
-    [ -f "$SETUP" ] || { echo "ERROR: $SETUP missing — delete {{ nerdctl_bundle }}/ to redownload" >&2; exit 1; }
+    # ── Ensure systemd unit (if present) points at the current bundle path ──────
+    # The unit is skipped on first write but never updated in-place, so a
+    # stale unit pointing at a different bundle path will keep failing.
+    UNIT_FILE="$HOME/.config/systemd/user/containerd.service"
+    if [ -f "$UNIT_FILE" ] && ! grep -qF "$ROOTLESS" "$UNIT_FILE"; then
+        echo "==> Systemd unit has stale bundle path — reinstalling..."
+        "$SETUP" uninstall 2>/dev/null || true
+    fi
 
     # ── LosOS (actman): register containerd-rootless as an actman init service ─
-    # This runs on the host only when the host IS LosOS; on other distros it is
-    # a no-op.  It enables salmon-completeness: LosOS can rebuild itself.
     if [ -f /etc/isoman.json ] || [ -x /bin/updman ]; then
         echo "==> LosOS (actman) detected — writing /etc/init/start/containerd-rootless"
         mkdir -p /etc/init/start
@@ -115,9 +126,7 @@ _ensure-containerd-rootless: _ensure-nerdctl
     fi
 
     # ── Patch setup script: inject actman guard before the first systemd check ─
-    # awk inserts the LosOS branch once (the !injected guard prevents duplication)
-    # so the script returns 0 on actman without printing "Unknown init system".
-    PATCHED={{ nerdctl_bundle }}/bin/containerd-rootless-setuptool-losos.sh
+    PATCHED="{{ nerdctl_bundle }}/bin/containerd-rootless-setuptool-losos.sh"
     awk '
         /systemctl|\/run\/systemd|openrc/ && !injected {
             print "  # LosOS/actman — skip service-manager detection on actman systems"
@@ -134,26 +143,26 @@ _ensure-containerd-rootless: _ensure-nerdctl
     echo "==> Running containerd-rootless-setuptool.sh install (LosOS-patched)..."
     "$PATCHED" install || echo "==> WARNING: setup script returned non-zero — will attempt manual start"
 
-    # Configure nerdctl: krun runtime + CNI path pointing at the bundle
+    # Configure nerdctl: point at bundle CNI plugins (nerdctl 2.x dropped
+    # default_runtime from toml; runtime is set per-command via --runtime flag).
     mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/nerdctl"
-    printf 'default_runtime = "krun"\ncni_path = "%s/libexec/cni"\n' \
-        "{{ nerdctl_bundle }}" \
+    printf 'cni_path = "%s/libexec/cni"\n' "{{ nerdctl_bundle }}" \
         > "${XDG_CONFIG_HOME:-$HOME/.config}/nerdctl/nerdctl.toml"
-    echo "==> nerdctl: default_runtime = krun, cni_path = {{ nerdctl_bundle }}/libexec/cni"
+    echo "==> nerdctl: cni_path = {{ nerdctl_bundle }}/libexec/cni"
 
     # ── Wait for socket; fall back to a background manual start ───────────────
     for i in $(seq 10); do [ -S "$SOCK" ] && break; sleep 1; done
     [ -S "$SOCK" ] && { echo "==> rootless containerd is up ($SOCK)"; exit 0; }
 
     echo "==> Starting rootless containerd in the background..."
-    nohup "$ROOTLESS" >{{ nerdctl_bundle }}/containerd.log 2>&1 &
+    nohup "$ROOTLESS" >"{{ nerdctl_bundle }}/containerd.log" 2>&1 &
     disown
     for i in $(seq 20); do
         [ -S "$SOCK" ] && { echo "==> rootless containerd is up ($SOCK)"; exit 0; }
         sleep 1
     done
     echo "ERROR: containerd did not start within 20 s" >&2
-    tail -20 {{ nerdctl_bundle }}/containerd.log >&2
+    tail -20 "{{ nerdctl_bundle }}/containerd.log" >&2
     exit 1
 
 # Ensure rootless buildkitd is running (needed by nerdctl build).
@@ -196,6 +205,7 @@ _ensure-buildkit: _ensure-containerd-rootless
 _build-isoman: _ensure-buildkit
     #!/usr/bin/env bash
     set -euo pipefail
+    export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
     out="{{ isoman_bin }}"
     mkdir -p "$(dirname "$out")"
     if [ -x "$out" ]; then
@@ -344,7 +354,6 @@ kernel: llvm _ensure-buildkit
     #!/usr/bin/env bash
     set -euo pipefail
     export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
-    export CNI_PATH="{{ nerdctl_bundle }}/libexec/cni"
 
     repo_root="`pwd`"
     cache_root="${BUILD_CACHE:-{{ build_cache }}}"
@@ -501,6 +510,7 @@ kernel-profiles: kernel
 setup-sbctl:
     #!/usr/bin/env bash
     set -euo pipefail
+    export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
 
     SB_DIR="`pwd`/secure-boot"
     mkdir -p "$SB_DIR"
