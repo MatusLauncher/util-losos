@@ -192,6 +192,7 @@
 
 ### Miscellaneous
 
+- Update book submodule — add kernel/LLVM docs page
 - Update book submodule to include OCI runtime and CI cache docs
 - Update isoman + testman submodules; add profiling agent docs to AGENTS.md
 - Update isoman submodule
