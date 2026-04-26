@@ -31,6 +31,7 @@ kernel_tag := `git ls-remote --tags --refs https://github.com/torvalds/linux 'v*
 threads := `nproc`
 pwd := `pwd`
 build_cache := env("BUILD_CACHE", ".build-cache")
+toolchain_triple := env("TOOLCHAIN_TRIPLE", `uname -m` + "-losos-linux")
 # Persistent directory for the nerdctl full bundle (survives host reboots).
 nerdctl_bundle := pwd + "/" + build_cache + "/nerdctl-bin"
 # nerdctl binary: prefer system install, fall back to persistent bundle copy.
@@ -201,27 +202,46 @@ _ensure-buildkit: _ensure-containerd-rootless
     tail -20 "{{ nerdctl_bundle }}/buildkitd.log" >&2
     exit 1
 
-# Build the isoman binary inside a Rust:Alpine container — no host Rust toolchain needed.
+# Build the isoman binary inside a container — no host Rust toolchain needed.
+# Runtime priority: docker → podman → nerdctl (rootless containerd bootstrap).
 # The result is cached at {{ isoman_bin }}; delete it to force a rebuild.
-_build-isoman: _ensure-buildkit
+_build-isoman:
     #!/bin/sh
     set -eu
-    export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
     out="{{ isoman_bin }}"
     mkdir -p "$(dirname "$out")"
     if [ -x "$out" ]; then
         echo "==> isoman binary found at $out (delete to rebuild)"
         exit 0
     fi
-    echo "==> Building isoman inside Rust:Alpine container..."
-    "{{ nerdctl_bin }}" build \
+
+    # Detect available OCI runtime: prefer host docker/podman over nerdctl bootstrap.
+    CT=""
+    IMAGE_REF="losos-isoman-build"
+    for rt in docker podman; do
+        if command -v "$rt" >/dev/null 2>&1; then
+            CT="$rt"
+            break
+        fi
+    done
+
+    if [ -z "$CT" ]; then
+        echo "==> No docker/podman found — bootstrapping rootless nerdctl..."
+        just _ensure-buildkit
+        export PATH="{{ nerdctl_bundle }}/bin:${PATH}"
+        CT="{{ nerdctl_bin }}"
+        IMAGE_REF="localhost/losos-isoman-build:latest"
+    fi
+
+    echo "==> Building isoman inside container ($CT)..."
+    DOCKER_BUILDKIT=1 "$CT" build \
         --no-cache \
         -f Containerfile.isoman \
         -t losos-isoman-build \
         "{{ pwd }}"
-    CID=$("{{ nerdctl_bin }}" create losos-isoman-build)
-    "{{ nerdctl_bin }}" cp "$CID:/isoman" "$out"
-    "{{ nerdctl_bin }}" rm "$CID"
+    cid=$("$CT" create "$IMAGE_REF")
+    "$CT" cp "$cid:/isoman" "$out"
+    "$CT" rm "$cid"
     chmod +x "$out"
     echo "==> isoman binary at $out"
 
@@ -413,6 +433,7 @@ llvm:
         -DLLVM_ENABLE_BINDINGS=OFF \
         -DCLANG_VENDOR="LosOS" \
         -DPACKAGE_VENDOR="LosOS" \
+        "-DLLVM_DEFAULT_TARGET_TRIPLE={{ toolchain_triple }}" \
         -DLLVM_ENABLE_LTO=Thin \
         -DLLVM_PARALLEL_LINK_JOBS=1 \
         -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld" \

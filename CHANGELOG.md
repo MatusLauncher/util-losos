@@ -2,6 +2,7 @@
 
 ### Bug Fixes
 
+- Use zig+cargo-zigbuild for musl cross-compilation on Fedora
 - Correct Fedora musl package names for isoman build
 - Switch isoman build image from Alpine to Fedora
 - Use triple-based runtime lib dir for all bootstrap path references
