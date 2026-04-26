@@ -192,6 +192,7 @@
 
 ### Miscellaneous
 
+- Update deps
 - Update book submodule — add Security page
 - Update book submodule — add kernel/LLVM docs page
 - Update book submodule to include OCI runtime and CI cache docs
