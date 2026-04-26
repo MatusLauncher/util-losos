@@ -279,176 +279,33 @@ dev:
     '
     echo "==> Pre-commit hooks installed"
 
-# Download and build the latest LLVM (clang + lld) from source.
+# Download the latest pre-built LLVM (clang + lld) from the upstream GitHub release.
 llvm:
     #!/bin/sh
     set -eu
 
-    repo_root="`pwd`"
-    cache_root="${BUILD_CACHE:-{{ build_cache }}}"
-    case "$cache_root" in /*) ;; *) cache_root="$repo_root/$cache_root" ;; esac
-    bootstrap_root="${LLVM_BOOTSTRAP_ROOT:-$cache_root/llvm-bootstrap}"
-    stage2_root="${LLVM_STAGE2_ROOT:-$cache_root/llvm-stage2}"
-    case "$bootstrap_root" in /*) ;; *) bootstrap_root="$repo_root/$bootstrap_root" ;; esac
-    case "$stage2_root" in /*) ;; *) stage2_root="$repo_root/$stage2_root" ;; esac
-    install_dir="$repo_root/llvm"
-    generator="${GENERATOR:-}"
+    install_dir="$(pwd)/llvm"
 
     if [ -f "$install_dir/bin/clang" ]; then
-        echo "==> LLVM already built at $install_dir"
+        echo "==> LLVM already present at $install_dir"
         exit 0
     fi
 
-    echo "==> Checking dependencies..."
-    for cmd in curl tar cmake; do
-        if ! command -v "$cmd" >/dev/null 2>&1; then
-            echo "Error: $cmd is required but not installed."
-            exit 1
-        fi
-    done
+    echo "==> Resolving latest LLVM release..."
+    api=$(curl -fsSL https://api.github.com/repos/llvm/llvm-project/releases/latest)
+    url=$(printf '%s\n' "$api" \
+        | grep 'browser_download_url' \
+        | grep 'LLVM-.*-Linux-X64\.tar\.xz"' \
+        | grep -v '\.sig\|\.jsonl' \
+        | head -1 \
+        | cut -d '"' -f4)
 
-    if [ -z "$generator" ]; then
-        if command -v ninja >/dev/null 2>&1; then
-            generator="Ninja"
-        else
-            generator="Unix Makefiles"
-        fi
-    fi
-
-    echo "==> Downloading LLVM source"
-    rm -rf "$bootstrap_root" "$stage2_root"
-    mkdir -p "$(dirname "$bootstrap_root")" "$(dirname "$stage2_root")"
-    mkdir -p "$bootstrap_root"
-    # Fetch LLVM
-    URL=$(curl -s https://api.github.com/repos/llvm/llvm-project/releases/latest | grep tarball_url | head -n1 | cut -d '"' -f4)
-    curl -L "$URL" -o "$bootstrap_root/llvm.tar.gz"
-    mkdir -p "$bootstrap_root/src"
-    tar -xzf "$bootstrap_root/llvm.tar.gz" -C "$bootstrap_root/src" --strip-components=1
-    export CC="clang"
-    export CXX="clang++"
-    set -- \
-        -S "$bootstrap_root/src/llvm" \
-        -B "$bootstrap_root/build" \
-        -G "$generator" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$bootstrap_root/install" \
-        -DCMAKE_C_COMPILER=clang \
-        -DCMAKE_CXX_COMPILER=clang++ \
-        -DLLVM_ENABLE_PROJECTS="clang;lld" \
-        -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind;compiler-rt" \
-        -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
-        -DLLVM_TARGETS_TO_BUILD="X86" \
-        -DLLVM_INCLUDE_TESTS=OFF \
-        -DLLVM_INCLUDE_EXAMPLES=OFF \
-        -DLLVM_ENABLE_BINDINGS=OFF \
-        -DLLVM_USE_LINKER=mold
-    if command -v ccache >/dev/null 2>&1; then
-        set -- "$@" \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-    fi
-    cmake "$@"
-    cmake --build "$bootstrap_root/build" -j`nproc`
-    cmake --install "$bootstrap_root/build" --prefix "$bootstrap_root/install"
-    if [ ! -x "$bootstrap_root/install/bin/clang" ]; then
-        echo "Error: bootstrap clang not found at $bootstrap_root/install/bin/clang" >&2
-        exit 1
-    fi
-
-    echo "==> Building branded LosOS LLVM toolchain (Stage 2)..."
-    mkdir -p "$stage2_root/build"
-    export CC="$bootstrap_root/install/bin/clang"
-    export CXX="$bootstrap_root/install/bin/clang++"
-
-    # Modern LLVM installs runtimes (libc++, compiler-rt, libunwind) into
-    # lib/<triple>/ rather than lib/.  Derive the triple-based runtime lib dir
-    # and use it everywhere we need to reach bootstrap shared libs.
-    triple="$("$bootstrap_root/install/bin/clang" -dumpmachine)"
-    bootstrap_rt_lib="$bootstrap_root/install/lib/$triple"
-    bootstrap_lib="$bootstrap_root/install/lib"
-
-    # Verify the bootstrap compiler can link a trivial C program before invoking
-    # cmake — if this fails every cmake feature check will silently fail too.
-    printf 'int main(void){return 0;}' > /tmp/_losos_sanity.c
-    if ! "$bootstrap_root/install/bin/clang" /tmp/_losos_sanity.c -o /tmp/_losos_sanity 2>&1; then
-        echo "ERROR: bootstrap clang cannot link a trivial C program — check CRT / gcc toolchain" >&2
-        rm -f /tmp/_losos_sanity.c /tmp/_losos_sanity; exit 1
-    fi
-    # Check -stdlib=libc++ to decide whether LLVM_ENABLE_LIBCXX is usable.
-    printf 'int main(){return 0;}' > /tmp/_losos_sanity.cpp
-    if "$bootstrap_root/install/bin/clang++" -stdlib=libc++ \
-            "-L$bootstrap_rt_lib" /tmp/_losos_sanity.cpp \
-            -o /tmp/_losos_sanity 2>&1; then
-        llvm_enable_libcxx=ON
-        echo "==> bootstrap libc++ OK — will build stage2 with LLVM_ENABLE_LIBCXX=ON"
-    else
-        llvm_enable_libcxx=OFF
-        echo "==> bootstrap libc++ NOT accessible — stage2 will use host libstdc++ (LLVM_ENABLE_LIBCXX=OFF)"
-    fi
-    rm -f /tmp/_losos_sanity.c /tmp/_losos_sanity.cpp /tmp/_losos_sanity
-
-    # compiler-rt builtins also live in the triple-based dir.
-    res_dir="$("$bootstrap_root/install/bin/clang" -print-resource-dir)"
-    compiler_rt_lib=""
-    for d in "$res_dir/lib/$triple" "$res_dir/lib/linux" "$res_dir/lib"; do
-        if [ -d "$d" ]; then compiler_rt_lib="$d"; break; fi
-    done
-
-    # Build the combined library search path for both link-time (LIBRARY_PATH)
-    # and runtime loading (LD_LIBRARY_PATH / cmake BUILD_RPATH).
-    extra_lib_dirs="$bootstrap_rt_lib:$bootstrap_lib"
-    if [ -n "$compiler_rt_lib" ]; then
-        extra_lib_dirs="$compiler_rt_lib:$extra_lib_dirs"
-    fi
-    export LIBRARY_PATH="$extra_lib_dirs${LIBRARY_PATH:+:$LIBRARY_PATH}"
-    export LD_LIBRARY_PATH="$extra_lib_dirs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-    # Convert colon-separated dirs to semicolon-separated for cmake list values.
-    extra_linker_flags="$(echo "$extra_lib_dirs" | tr ':' '\n' | sed 's/^/-L/' | tr '\n' ' ')"
-    cmake_build_rpath="$(echo "$extra_lib_dirs" | tr ':' ';')"
-
-    set -- \
-        -S "$bootstrap_root/src/llvm" \
-        -B "$stage2_root/build" \
-        -G "$generator" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$install_dir" \
-        -DCMAKE_C_COMPILER="$bootstrap_root/install/bin/clang" \
-        -DCMAKE_CXX_COMPILER="$bootstrap_root/install/bin/clang++" \
-        -DLLVM_ENABLE_PROJECTS="clang;lld" \
-        -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;libunwind;compiler-rt" \
-        -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON \
-        "-DLLVM_ENABLE_LIBCXX=$llvm_enable_libcxx" \
-        -DCLANG_DEFAULT_STDLIB=libc++ \
-        -DCLANG_DEFAULT_RTLIB=compiler-rt \
-        -DCLANG_DEFAULT_UNWINDLIB=libunwind \
-        "-DCMAKE_INSTALL_RPATH=$install_dir/lib" \
-        "-DCMAKE_BUILD_RPATH=$cmake_build_rpath" \
-        -DCMAKE_BUILD_WITH_INSTALL_RPATH=OFF \
-        "-DCMAKE_EXE_LINKER_FLAGS=$extra_linker_flags" \
-        "-DCMAKE_SHARED_LINKER_FLAGS=$extra_linker_flags" \
-        -DLLVM_TARGETS_TO_BUILD="X86" \
-        -DLLVM_INCLUDE_TESTS=OFF \
-        -DLLVM_INCLUDE_EXAMPLES=OFF \
-        -DLLVM_ENABLE_BINDINGS=OFF \
-        -DCLANG_VENDOR="LosOS" \
-        -DPACKAGE_VENDOR="LosOS" \
-        "-DLLVM_DEFAULT_TARGET_TRIPLE={{ toolchain_triple }}" \
-        -DLLVM_ENABLE_LTO=Thin \
-        -DLLVM_PARALLEL_LINK_JOBS=1 \
-        -DLLVM_USE_LINKER="$bootstrap_root/install/bin/ld.lld" \
-        -DLLVM_ENABLE_LIBXML2=OFF \
-        "-DCMAKE_C_FLAGS=-fvisibility=hidden -fvisibility-inlines-hidden" \
-        "-DCMAKE_CXX_FLAGS=-fvisibility=hidden -fvisibility-inlines-hidden"
-    cmake "$@" || {
-        printf '\n==> Stage2 CMake configure failed.  Configure log (last 60 lines):\n'
-        tail -60 "$stage2_root/build/CMakeFiles/CMakeConfigureLog.yaml" 2>/dev/null || true
-        exit 1
-    }
-    cmake --build "$stage2_root/build" -j`nproc`
-    cmake --install "$stage2_root/build" --prefix "$install_dir"
-
-    echo "==> Clean up build artifacts..."
-    rm -rf "$bootstrap_root" "$stage2_root"
+    echo "==> Downloading $url"
+    curl -fL "$url" -o /tmp/llvm.tar.xz
+    mkdir -p "$install_dir"
+    tar -xJf /tmp/llvm.tar.xz -C "$install_dir" --strip-components=1
+    rm /tmp/llvm.tar.xz
+    echo "==> LLVM ready at $install_dir"
 
 # Build a custom kernel optimised for LosOS inside an isolated container.
 # Requires: Containerfile.kernel image (built automatically on first run).

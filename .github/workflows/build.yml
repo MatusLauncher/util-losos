@@ -19,9 +19,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # ccache for the host-side LLVM bootstrap build.
-  CCACHE_DIR: ${{ github.workspace }}/.ccache
-  CCACHE_COMPILERCHECK: content
 
 jobs:
   # ── Fast lint gate ──────────────────────────────────────────────────────────
@@ -71,7 +68,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build mold clang lld curl ca-certificates \
+            clang lld curl ca-certificates \
             ccache \
             podman \
             musl-tools \
@@ -98,14 +95,20 @@ jobs:
           key: cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: cargo-
 
-      # LLVM is keyed by upstream release tag so the cache is invalidated
-      # automatically when a new LLVM version ships.
+      # LLVM keyed by upstream release tag — invalidated automatically on new releases.
       - name: Resolve latest LLVM release tag
         id: llvm
         run: |
-          tag=$(curl -sf https://api.github.com/repos/llvm/llvm-project/releases/latest \
-            | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+          api=$(curl -fsSL https://api.github.com/repos/llvm/llvm-project/releases/latest)
+          tag=$(printf '%s\n' "$api" | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+          url=$(printf '%s\n' "$api" \
+            | grep 'browser_download_url' \
+            | grep 'LLVM-.*-Linux-X64\.tar\.xz"' \
+            | grep -v '\.sig\|\.jsonl' \
+            | head -1 \
+            | cut -d '"' -f4)
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Restore LLVM binary from cache
         id: llvm-cache
@@ -114,24 +117,12 @@ jobs:
           path: llvm
           key: llvm-${{ steps.llvm.outputs.tag }}-${{ runner.os }}-${{ runner.arch }}
 
-      # ccache for the LLVM C++ compilation objects (used when llvm binary cache misses).
-      - name: Restore LLVM ccache objects
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-llvm-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
-          restore-keys: ccache-llvm-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Configure ccache
-        run: ccache --max-size=5G
-
-      - name: Build LLVM
+      - name: Download LLVM
         if: steps.llvm-cache.outputs.cache-hit != 'true'
-        run: just llvm
-
-      - name: Show LLVM ccache stats
-        if: steps.llvm-cache.outputs.cache-hit != 'true'
-        run: ccache --show-stats
+        run: |
+          curl -fL "${{ steps.llvm.outputs.url }}" -o /tmp/llvm.tar.xz
+          mkdir -p llvm
+          tar -xJf /tmp/llvm.tar.xz -C llvm --strip-components=1
 
       # ccache for kernel C compilation objects inside the container.
       # The container mounts .build-cache/ccache-kernel at /ccache.
@@ -192,12 +183,8 @@ jobs:
             podman push "${image}:${{ github.ref_name }}"
           fi
 
-      # On version tags: publish kernel + LLVM toolchain as GitHub release assets.
-      # The ISO is distributed via the container registry (for updman), not here.
-      - name: Package LLVM toolchain
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: tar -czf llvm-toolchain-linux-x86_64.tar.gz llvm/
-
+      # On version tags: publish the kernel as a GitHub release asset.
+      # The OS image is distributed via the container registry (for updman).
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -205,5 +192,4 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" \
             --generate-notes \
-            vmlinuz \
-            llvm-toolchain-linux-x86_64.tar.gz
+            vmlinuz

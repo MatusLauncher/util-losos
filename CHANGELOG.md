@@ -192,6 +192,7 @@
 
 ### Miscellaneous
 
+- Update cluman submodule — SSH default transport for controller
 - Update book submodule — isoman CLI, actman/updman/security docs
 - Update book submodule — document sh disabled by default in security
 - Update isoman and book submodules — Limine editor lock
