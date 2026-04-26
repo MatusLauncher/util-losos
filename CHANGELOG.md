@@ -192,6 +192,7 @@
 
 ### Miscellaneous
 
+- Update gpuman and book submodules — OCI layer encryption
 - Update deps
 - Update book submodule — add Security page
 - Update book submodule — add kernel/LLVM docs page
