@@ -192,6 +192,7 @@
 
 ### Miscellaneous
 
+- Update book submodule — document sh disabled by default in security
 - Update isoman and book submodules — Limine editor lock
 - Update gpuman and book submodules — OCI layer encryption
 - Update deps
