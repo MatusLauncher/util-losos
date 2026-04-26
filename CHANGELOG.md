@@ -324,6 +324,7 @@
 
 ### Performance
 
+- Significantly reduce CI build time and fix 100% kernel ccache miss rate
 - Use mold as default linker for LLVM stage1 and stage2
 
 ### Refactor
