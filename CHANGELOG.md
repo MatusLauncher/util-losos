@@ -192,6 +192,7 @@
 
 ### Miscellaneous
 
+- Update isoman and book submodules — Limine editor lock
 - Update gpuman and book submodules — OCI layer encryption
 - Update deps
 - Update book submodule — add Security page
