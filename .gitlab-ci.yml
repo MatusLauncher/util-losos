@@ -127,6 +127,17 @@ build-iso:
       fallback_keys: ["ccache-kernel"]
       paths: [.build-cache/ccache-kernel/]
       policy: pull-push
+    # Kernel source tarballs — keyed by arch only so they survive kernel version
+    # bumps as a fallback (tarball name encodes the tag; stale ones are ignored).
+    - key: "kernel-tarballs-$CI_RUNNER_EXECUTABLE_ARCH"
+      paths: [.build-cache/tarballs/]
+      policy: pull-push
+    # Pre-built isoman binary — keyed on the files that affect its compilation.
+    - key:
+        files: [Containerfile.isoman, crates/isoman/Cargo.lock]
+        prefix: isoman-bin
+      paths: [.build-cache/isoman]
+      policy: pull-push
     # Cargo registry and installed binaries (just, isoman, etc.).
     - key:
         files: ["**/Cargo.lock"]

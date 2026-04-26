@@ -235,7 +235,6 @@ _build-isoman:
 
     echo "==> Building isoman inside container ($CT)..."
     DOCKER_BUILDKIT=1 "$CT" build \
-        --no-cache \
         -f Containerfile.isoman \
         -t losos-isoman-build \
         "{{ pwd }}"
@@ -465,17 +464,31 @@ kernel: llvm _ensure-buildkit
     case "$build_root" in /*) ;; *) build_root="$repo_root/$build_root" ;; esac
 
     tag="{{ kernel_tag }}"
-    archive="${build_root}/${tag}.tar.gz"
+    tarballs_dir="${cache_root}/tarballs"
+    archive="${tarballs_dir}/${tag}.tar.gz"
     src_dir="${build_root}/linux-${tag#v}"
 
     echo "==> Ensuring kernel build environment image..."
     "{{ nerdctl_bin }}" build -f Containerfile.kernel -t losos-kernel-build "$repo_root"
 
-    echo "==> Pulling kernel ${tag}"
-    rm -rf "$build_root"
-    mkdir -p "$build_root"
-    curl -fL "https://github.com/torvalds/linux/archive/refs/tags/${tag}.tar.gz" -o "$archive"
-    tar -xzf "$archive" -C "$build_root"
+    mkdir -p "$build_root" "$tarballs_dir"
+
+    # Download tarball only when missing; it lives outside build_root so it
+    # survives cross-version wipes and CI cache restores independently.
+    if [ ! -f "$archive" ]; then
+        echo "==> Downloading kernel ${tag}..."
+        curl -fL "https://github.com/torvalds/linux/archive/refs/tags/${tag}.tar.gz" -o "$archive"
+    fi
+
+    # Only re-extract when the source directory for this tag is absent.
+    # Preserving it enables incremental make builds for same-tag consecutive runs.
+    if [ ! -d "$src_dir" ]; then
+        echo "==> Extracting kernel source ${tag}..."
+        find "$build_root" -maxdepth 1 -type d -name "linux-*" -exec rm -rf {} + 2>/dev/null || true
+        tar -xzf "$archive" -C "$build_root"
+    else
+        echo "==> Kernel source ${tag} already present — skipping extraction"
+    fi
 
     afdo_env=""
     propeller_env=""
@@ -517,7 +530,22 @@ kernel: llvm _ensure-buildkit
         losos-kernel-build sh <<'KERNELBUILD'
     set -eu
     export CCACHE_DIR=/ccache
-    export CCACHE_COMPILERCHECK=content
+    # Use the compiler version string rather than binary content so the cache
+    # survives LLVM rebuilds that produce identical compiler behaviour.
+    # Binary-content hashing (the default) invalidates the entire kernel object
+    # cache whenever LLVM is rebuilt from source, causing 100% CI miss rate.
+    export CCACHE_COMPILERCHECK="string:$(/llvm/bin/clang --version | head -1)"
+    # pch_defines: ignore PCH hash mismatches from config-driven defines
+    # modules: allow caching of kernel module objects
+    # random_seed: ignore __attribute__((randomize_layout)) seed differences
+    export CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime,pch_defines,modules,random_seed
+    export SOURCE_DATE_EPOCH=0
+    export KBUILD_BUILD_TIMESTAMP="Thu Jan  1 00:00:00 UTC 1970"
+    # Fix non-deterministic compile.h: without these the container hostname and
+    # current user are embedded in include/generated/compile.h, invalidating
+    # every cached object that transitively includes it.
+    export KBUILD_BUILD_USER=losos
+    export KBUILD_BUILD_HOST=losos-build
     export PATH="/llvm/bin${PATH:+:$PATH}"
     export LD_LIBRARY_PATH="/llvm/lib:/llvm/lib/x86_64-unknown-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     export LIBRARY_PATH="/llvm/lib:/llvm/lib/x86_64-unknown-linux-gnu${LIBRARY_PATH:+:$LIBRARY_PATH}"

@@ -142,6 +142,25 @@ jobs:
           key: ccache-kernel-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
           restore-keys: ccache-kernel-${{ runner.os }}-${{ runner.arch }}-
 
+      # Kernel source tarballs — stored outside build_root so they survive
+      # cross-version wipes.  Keyed by arch; stale tarballs are small and
+      # harmless (the kernel recipe selects by tag name).
+      - name: Restore kernel source tarballs
+        uses: actions/cache@v4
+        with:
+          path: .build-cache/tarballs
+          key: kernel-tarballs-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          restore-keys: kernel-tarballs-${{ runner.os }}-${{ runner.arch }}-
+
+      # Pre-built isoman binary — keyed on the files that drive its build.
+      # Avoids a full Fedora dnf + Rust compile on every CI run.
+      - name: Restore isoman binary
+        uses: actions/cache@v4
+        with:
+          path: .build-cache/isoman
+          key: isoman-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Containerfile.isoman', 'crates/isoman/Cargo.lock') }}
+          restore-keys: isoman-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Build OS ISO (kernel → profile-collect → assembly)
         run: just build
 

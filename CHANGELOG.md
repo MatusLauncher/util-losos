@@ -98,6 +98,7 @@
 
 ### Features
 
+- Detect OCI runtime in _build-isoman; skip rootless nerdctl bootstrap when docker/podman present
 - Add explicit -flto=thin to CMAKE_*_FLAGS_RELEASE for LLVM stage2
 - Enable CFI and visibility hardening for LLVM stage2 and kernel builds
 - Install pre-commit hook in just dev; remove book hooks dir
